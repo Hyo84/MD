@@ -154,7 +154,7 @@ export class Game {
       r: stat.r, color: stat.color,
       attackCd: Math.random() * 0.3,
       isMerging: false, dead: false,
-      settled: false, age: 0,
+      settled: false, age: 0, engaged: false,
       flashT: 0, abilityT: 0,
       heroType,
       heroLife: heroType ? HERO_LIFESPAN : 0,
@@ -354,6 +354,13 @@ export class Game {
     return false;
   }
 
+  // 프레임당 1회 교전 여부 계산 (라인 속도 계산과 전진 로직이 공유)
+  _computeEngagement() {
+    for (const u of this.units) {
+      u.engaged = this.enemies.length > 0 && this._unitEngaged(u);
+    }
+  }
+
   _updateLine(dt) {
     if (this.enemies.length === 0) {
       this.netSpeed = 0;
@@ -365,7 +372,7 @@ export class Game {
     }
     let stopping = 0;
     for (const u of this.units) {
-      if (this._unitEngaged(u)) stopping += this._unitStat(u).stop;
+      if (u.engaged) stopping += this._unitStat(u).stop;
     }
     this.netSpeed = advance - stopping;
     this.lineY += this.netSpeed * dt;
@@ -381,27 +388,24 @@ export class Game {
     }
   }
 
-  // ---------- 아군 유닛: 착지 후 서서히 전진, 교전 거리에서 정지 ----------
+  // ---------- 아군 유닛: 착지 후 전진, 실제 교전 시(사거리 내 적) 정지 ----------
   _updateUnitAdvance(dt) {
-    const advTick = BALANCE.unitAdvanceSpeed / 60; // px/초 → px/틱
+    const advTick = BALANCE.unitAdvanceSpeed / 60; // px/초 → px/틱(기준 60fps)
     for (const u of this.units) {
       u.age += dt;
       // 발사 관성이 소진되면 정착 → 전진 시작
       if (!u.settled && (u.age > 2.5 || (u.age > 0.4 && u.body.speed < 2))) {
         u.settled = true;
       }
-      // 목표 정지선: 라인에서 사거리만큼 떨어진 지점 (최소 여유 거리 보장)
-      const stat = this._unitStat(u);
-      const holdY = this.lineY + Math.max(stat.range, 14 + u.r);
       const pos = u.body.position;
-
-      if (pos.y <= holdY + 2) {
-        // 교전 거리 도달: 위로의 이동 정지
+      // 정지 조건: 실제로 사거리 안에 적이 있거나, 라인 바로 앞 최소 여유 거리 도달
+      const minHoldY = this.lineY + 20 + u.r;
+      if (u.engaged || pos.y <= minHoldY) {
         if (u.body.velocity.y < 0) {
           Body.setVelocity(u.body, { x: u.body.velocity.x, y: 0 });
         }
       } else if (u.settled) {
-        // 라인을 향해 서서히 전진 (라인이 밀려 올라가면 따라감)
+        // 사거리에 닿는 적이 없으면 라인을 향해 계속 전진
         Body.setVelocity(u.body, { x: u.body.velocity.x * 0.9, y: -advTick });
       }
     }
@@ -419,7 +423,7 @@ export class Game {
 
     for (const u of this.units) {
       if (!u.settled) continue;
-      if (!engagedAlsoGather && this._unitEngaged(u)) continue;
+      if (!engagedAlsoGather && u.engaged) continue;
       const dx = boss.x - u.body.position.x;
       if (Math.abs(dx) < 24) continue; // 보스 열 근처면 정지
       const vx = Math.sign(dx) * maxVxTick;
@@ -613,9 +617,11 @@ export class Game {
   _update(dt) {
     this.launchCd = Math.max(0, this.launchCd - dt);
 
-    Engine.update(this.engine, 1000 / 60);
+    // 실제 경과 시간으로 물리 스텝 (60Hz가 아닌 모니터에서도 속도 일정)
+    Engine.update(this.engine, Math.min(dt * 1000, 33.33));
     this._processMerges();
     this._updateSpawning(dt);
+    this._computeEngagement();
     this._updateLine(dt);
     if (this.state !== 'playing') return;
     this._updateUnitAdvance(dt);
