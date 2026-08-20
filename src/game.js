@@ -8,6 +8,14 @@ import { Effects } from './effects.js';
 
 const { Engine, World, Bodies, Body, Events } = Matter;
 
+const RANGE_MODE_LABELS = ['끄기', '아군만', '전체'];
+
+function colorAlpha(hex, a) {
+  const n = parseInt(String(hex).replace('#', ''), 16);
+  if (Number.isNaN(n)) return `rgba(255,255,255,${a})`;
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
 // 웨이브라인 슬롯 배치
 const SLOT_COLS = 7;
 const SLOT_MARGIN = 40;
@@ -21,6 +29,8 @@ export class Game {
     this.ui = ui;
     this.state = 'start'; // start | playing | gameover
     this.mouse = null;
+    this.rangeMode = 1; // 0=끄기, 1=아군만, 2=전체 (재시작 후에도 유지)
+    this._rangeToggleRect = { x: 0, y: 0, w: 0, h: 0 };
 
     this._setupInput();
     this.ui.restartBtn.addEventListener('click', () => this.start());
@@ -106,8 +116,12 @@ export class Game {
     const clampAimX = (x) => Math.max(24, Math.min(CANVAS_W - 24, x));
 
     this.canvas.addEventListener('pointerdown', (e) => {
-      if (this.state !== 'playing') return;
       const p = toCanvas(e);
+      if (this._hitRangeToggle(p)) {
+        this.rangeMode = (this.rangeMode + 1) % RANGE_MODE_LABELS.length;
+        return;
+      }
+      if (this.state !== 'playing') return;
       if (p.y > 560) {
         this.dragging = true;
         this.aimX = clampAimX(p.x);
@@ -785,8 +799,8 @@ export class Game {
       this._drawHpBar(m.x, m.y - stat.r - 9, stat.r * 2, m.hp / m.maxHp, '#e74c3c');
     }
 
-    // 사거리 표시 (영웅은 항상, 다른 유닛은 마우스 오버 시)
-    this._drawRangeIndicators();
+    // 사거리 외곽선 (끄기 / 아군만 / 전체)
+    if (this.rangeMode !== 0) this._drawRangeIndicators();
 
     // 아군 유닛
     for (const u of this.units) {
@@ -896,30 +910,33 @@ export class Game {
 
   _drawRangeIndicators() {
     const ctx = this.ctx;
-    for (const u of this.units) {
-      const { x, y } = u.body.position;
-      const range = this._unitStat(u).range;
-      let show = false;
-      let alpha = 0.12;
-      if (u.heroType) {
-        show = true;
-        alpha = 0.15;
-      } else if (this.mouse && Math.hypot(this.mouse.x - x, this.mouse.y - y) < u.r + 6) {
-        show = true;
-        alpha = 0.22;
+    ctx.save();
+    ctx.lineWidth = 1.25;
+    ctx.setLineDash([]);
+    if (this.rangeMode >= 1) {
+      for (const u of this.units) {
+        const { x, y } = u.body.position;
+        ctx.strokeStyle = colorAlpha(u.color, 0.7);
+        ctx.beginPath();
+        ctx.arc(x, y, this._unitStat(u).range, 0, Math.PI * 2);
+        ctx.stroke();
       }
-      if (!show) continue;
-      ctx.save();
-      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha + 0.08})`;
-      ctx.fillStyle = `rgba(160, 200, 255, ${alpha * 0.35})`;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 8]);
-      ctx.beginPath();
-      ctx.arc(x, y, range, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
     }
+    if (this.rangeMode === 2) {
+      for (const m of this.enemies) {
+        const stat = MONSTERS[m.key];
+        ctx.strokeStyle = colorAlpha(stat.color, 0.65);
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, stat.r + BALANCE.enemyReach, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  _hitRangeToggle(p) {
+    const r = this._rangeToggleRect;
+    return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
   }
 
   _drawHpBar(x, y, w, ratio, color) {
@@ -969,6 +986,32 @@ export class Game {
       ctx.fillStyle = '#6fe08a';
       ctx.fillText(`라인 ▲ ${(-v).toFixed(1)}`, CANVAS_W / 2, 39);
     }
+
+    // 사거리 표시 토글 (끄기 → 아군만 → 전체)
+    const label = RANGE_MODE_LABELS[this.rangeMode];
+    const text = `사거리 ${label}`;
+    ctx.font = "11px 'Malgun Gothic', sans-serif";
+    const tw = ctx.measureText(text).width;
+    const padX = 8;
+    const bw = tw + padX * 2;
+    const bh = 18;
+    const bx = CANVAS_W - 10 - bw;
+    const by = 30;
+    this._rangeToggleRect = { x: bx - 4, y: by - 4, w: bw + 8, h: bh + 8 };
+
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.strokeStyle = 'rgba(200, 180, 140, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 4);
+    else ctx.rect(bx, by, bw, bh);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = this.rangeMode === 0 ? '#8a8070' : '#e8dcc0';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, bx + bw / 2, by + bh / 2 + 0.5);
+
     ctx.restore();
   }
 }
