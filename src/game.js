@@ -154,7 +154,7 @@ export class Game {
       r: stat.r, color: stat.color,
       attackCd: Math.random() * 0.3,
       isMerging: false, dead: false,
-      holding: false,
+      settled: false, age: 0,
       flashT: 0, abilityT: 0,
       heroType,
       heroLife: heroType ? HERO_LIFESPAN : 0,
@@ -250,7 +250,8 @@ export class Game {
       if (newTier === 10) {
         this._summonHero(mx, my);
       } else {
-        this._spawnUnit(newTier, mx, my);
+        // 합성 유닛은 발사 관성이 없으므로 즉시 전진 가능
+        this._spawnUnit(newTier, mx, my).settled = true;
         this.effects.burst(mx, my, UNITS[newTier - 1].color, 18, 4, 3.5);
         this.effects.floatText(mx, my - 30, UNITS[newTier - 1].name, '#fff', 15, 0.9);
       }
@@ -262,7 +263,7 @@ export class Game {
   _summonHero(x, y) {
     const types = Object.keys(HEROES);
     const type = types[Math.floor(Math.random() * types.length)];
-    this._spawnUnit(10, x, y, type);
+    this._spawnUnit(10, x, y, type).settled = true;
     this.effects.burst(x, y, '#FF4500', 40, 6, 5);
     this.effects.burst(x, y, '#FFD700', 30, 4.5, 4);
     this.effects.floatText(CANVAS_W / 2, 300, `영웅 소환! ${HEROES[type].name}`, '#FFD700', 28, 2.0);
@@ -379,21 +380,41 @@ export class Game {
     }
   }
 
-  // ---------- 아군 유닛: 라인 앞에서 정지 ----------
-  _updateUnitHolding() {
+  // ---------- 아군 유닛: 착지 후 서서히 전진, 교전 거리에서 정지 ----------
+  _updateUnitAdvance(dt) {
+    const advTick = BALANCE.unitAdvanceSpeed / 60; // px/초 → px/틱
     for (const u of this.units) {
-      const range = this._unitStat(u).range;
-      const gap = u.body.position.y - this.lineY;
-      // 사거리 안에 들어오면 전진 정지 (그 자리에서 교전)
-      if (gap <= range && u.body.velocity.y < 0) {
-        Body.setVelocity(u.body, { x: u.body.velocity.x, y: 0 });
-        u.holding = true;
+      u.age += dt;
+      // 발사 관성이 소진되면 정착 → 전진 시작
+      if (!u.settled && (u.age > 2.5 || (u.age > 0.4 && u.body.speed < 2))) {
+        u.settled = true;
       }
-      // 라인이 전진하면 유닛을 밀어냄 (라인 관통 방지)
+      // 목표 정지선: 라인에서 사거리만큼 떨어진 지점 (최소 여유 거리 보장)
+      const stat = this._unitStat(u);
+      const holdY = this.lineY + Math.max(stat.range, 14 + u.r);
+      const pos = u.body.position;
+
+      if (pos.y <= holdY + 2) {
+        // 교전 거리 도달: 위로의 이동 정지
+        if (u.body.velocity.y < 0) {
+          Body.setVelocity(u.body, { x: u.body.velocity.x, y: 0 });
+        }
+      } else if (u.settled) {
+        // 라인을 향해 서서히 전진 (라인이 밀려 올라가면 따라감)
+        Body.setVelocity(u.body, { x: u.body.velocity.x * 0.9, y: -advTick });
+      }
+    }
+  }
+
+  // ---------- 하드 불변식: 어떤 이유로든 아군이 라인을 넘지 못함 ----------
+  _enforceLineBoundary() {
+    for (const u of this.units) {
       const minY = this.lineY + 14 + u.r;
       if (u.body.position.y < minY) {
         Body.setPosition(u.body, { x: u.body.position.x, y: minY });
-        if (u.body.velocity.y < 0) Body.setVelocity(u.body, { x: u.body.velocity.x, y: 0 });
+        if (u.body.velocity.y < 0) {
+          Body.setVelocity(u.body, { x: u.body.velocity.x, y: 0 });
+        }
       }
     }
   }
@@ -576,10 +597,11 @@ export class Game {
     this._updateSpawning(dt);
     this._updateLine(dt);
     if (this.state !== 'playing') return;
-    this._updateUnitHolding();
+    this._updateUnitAdvance(dt);
     this._updateCombat(dt);
     this._updateEnemyTicks(dt);
     this._updateUnitAbilities(dt);
+    this._enforceLineBoundary();
     this.effects.update(dt);
 
     for (const u of this.units) {

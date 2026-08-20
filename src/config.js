@@ -12,6 +12,7 @@ export const BALANCE = {
   spawnInterval: 2.3,   // 적 스폰 기본 간격 (초, 웨이브에 따라 감소)
   launchCooldown: 0.6,  // 발사 쿨다운 (초)
   launchSpeed: 18,      // 발사 속도
+  unitAdvanceSpeed: 12, // 착지 후 아군 전진 속도 (px/초)
   attackCooldown: 0.8,  // 공격 틱 간격 (초)
   enemyReach: 50,       // 적 근접 공격 사거리 보정 (px)
 };
