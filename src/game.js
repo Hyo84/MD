@@ -440,14 +440,14 @@ export class Game {
         u.settled = true;
       }
       const pos = u.body.position;
-      // 정지 조건: 실제로 사거리 안에 적이 있거나, 라인 바로 앞 최소 여유 거리 도달
+      // 모든 유닛은 근접 파이터: 사거리와 무관하게 라인 바로 앞까지 전진
+      // (사거리는 공격 도달 거리로만 사용 — 전진 중에도 사거리 내 적을 공격)
       const minHoldY = this.lineY + 20 + u.r;
-      if (u.engaged || pos.y <= minHoldY) {
+      if (pos.y <= minHoldY) {
         if (u.body.velocity.y < 0) {
           Body.setVelocity(u.body, { x: u.body.velocity.x, y: 0 });
         }
       } else if (u.settled) {
-        // 사거리에 닿는 적이 없으면 라인을 향해 계속 전진
         Body.setVelocity(u.body, { x: u.body.velocity.x * 0.9, y: -advTick });
       }
     }
