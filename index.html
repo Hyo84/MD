@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>MD — KnightSlide</title>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game" width="450" height="800"></canvas>
+    <div id="startOverlay" class="overlay">
+      <h1>⚔ KnightSlide</h1>
+      <p class="sub">중세 슬라이드 &amp; 머지 디펜스</p>
+      <p class="tap">탭하여 시작</p>
+    </div>
+    <div id="gameoverOverlay" class="overlay hidden">
+      <h1>패배</h1>
+      <p id="finalScore" class="sub"></p>
+      <button id="restartBtn">다시 시작</button>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
