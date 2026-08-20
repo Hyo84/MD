@@ -64,7 +64,7 @@ export const MONSTERS = {
   orc:      { name: '오크',       icon: '오', color: '#6B8E23', outline: '#39510f', r: 20, hp: 180,   atk: 18,  speed: 1.5, score: 25 },
   skeleton: { name: '스켈레톤',   icon: '스', color: '#DCDCDC', outline: '#6e6e6e', r: 18, hp: 120,   atk: 14,  speed: 0,  score: 20 },
   troll:    { name: '동굴 트롤',  icon: '트', color: '#556B2F', outline: '#2c3a14', r: 28, hp: 1200,  atk: 80,  speed: 1,  score: 100, regen: 12 },
-  boss:     { name: '오크 워로드', icon: '보', color: '#B22222', outline: '#5c0e0e', r: 45, hp: 800,   atk: 30,  speed: 5, score: 500, isBoss: true },
+  boss:     { name: '오크 워로드', icon: '보', color: '#B22222', outline: '#5c0e0e', r: 45, hp: 2300,  atk: 85,  speed: 38, score: 500, isBoss: true },
 };
 
 export const FRICTION_AIR_UNIT = 0.03;
