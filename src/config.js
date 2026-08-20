@@ -17,7 +17,22 @@ export const BALANCE = {
   gatherSpeed: 40,      // 집결 시 최대 가로 이동 속도 (px/초)
   attackCooldown: 0.8,  // 공격 틱 간격 (초)
   enemyReach: 50,       // 적 근접 공격 사거리 보정 (px)
+
+  // 웨이브 난이도 곡선 (적 HP/ATK 배율, 스폰 시점에 적용)
+  gentleRate: 0.10,     // 완만 구간: 웨이브당 +10% (웨이브 10 ≈ 1.9배)
+  steepStartWave: 11,   // 가파른 구간 시작 웨이브
+  steepFactor: 1.3,     // 가파른 구간: 웨이브당 ×1.3 누적
 };
+
+// 웨이브별 적 스탯 배율: 1~(steepStart-1) 완만 선형, 이후 가파른 지수 증가
+export function waveMultiplier(wave) {
+  const gentleWaves = Math.min(wave, BALANCE.steepStartWave - 1);
+  let mult = 1 + (gentleWaves - 1) * BALANCE.gentleRate;
+  if (wave >= BALANCE.steepStartWave) {
+    mult *= Math.pow(BALANCE.steepFactor, wave - BALANCE.steepStartWave + 1);
+  }
+  return mult;
+}
 
 // 아군 유닛 (T1 ~ T10)
 // stop = 저지력(교전 중 라인 속도 감소량 px/초), range = 공격 사거리(px)
@@ -49,7 +64,7 @@ export const MONSTERS = {
   orc:      { name: '오크',       icon: '오', color: '#6B8E23', outline: '#39510f', r: 20, hp: 180,   atk: 18,  speed: 1.5, score: 25 },
   skeleton: { name: '스켈레톤',   icon: '스', color: '#DCDCDC', outline: '#6e6e6e', r: 18, hp: 120,   atk: 14,  speed: 0,  score: 20 },
   troll:    { name: '동굴 트롤',  icon: '트', color: '#556B2F', outline: '#2c3a14', r: 28, hp: 1200,  atk: 80,  speed: 1,  score: 100, regen: 12 },
-  boss:     { name: '오크 워로드', icon: '보', color: '#B22222', outline: '#5c0e0e', r: 45, hp: 12000, atk: 350, speed: 12, score: 500, isBoss: true },
+  boss:     { name: '오크 워로드', icon: '보', color: '#B22222', outline: '#5c0e0e', r: 45, hp: 6500,  atk: 250, speed: 10, score: 500, isBoss: true },
 };
 
 export const FRICTION_AIR_UNIT = 0.03;

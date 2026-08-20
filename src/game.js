@@ -2,7 +2,7 @@ import Matter from 'matter-js';
 import {
   CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y,
   BALANCE, UNITS, MONSTERS, HEROES, HERO_LIFESPAN,
-  FRICTION_AIR_UNIT, killsNeeded,
+  FRICTION_AIR_UNIT, killsNeeded, waveMultiplier,
 } from './config.js';
 import { Effects } from './effects.js';
 
@@ -212,10 +212,13 @@ export class Game {
       }
       this.occupiedSlots.add(`${row}:${col}`);
     }
+    // 웨이브 배율은 스폰 시점에 스냅샷 (HP는 배율 적용, ATK는 배율만 저장해 실시간 스탯 수정과 병행)
+    const mult = waveMultiplier(this.wave);
+    const hp = Math.round(stat.hp * mult);
     const m = {
       key, isBoss, row, col, x,
       y: this.lineY - row * SLOT_ROW_H,
-      hp: stat.hp, maxHp: stat.hp,
+      hp, maxHp: hp, waveMult: mult,
       attackCd: Math.random() * 0.4,
       stunT: 0, burn: null, flashT: 0, dead: false,
     };
@@ -554,7 +557,7 @@ export class Game {
       }
       if (!target) continue;
       m.attackCd = BALANCE.attackCooldown;
-      target.hp -= stat.atk;
+      target.hp -= stat.atk * m.waveMult;
       target.flashT = 0.12;
       this.effects.hitFlash(target.body.position.x, target.body.position.y, '#ff6b6b');
       if (target.hp <= 0) {
@@ -941,6 +944,9 @@ export class Game {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(`웨이브 ${this.wave}`, 12, 16);
+    ctx.font = "11px 'Malgun Gothic', sans-serif";
+    ctx.fillStyle = '#b0a284';
+    ctx.fillText(`난이도 ×${waveMultiplier(this.wave).toFixed(2)}`, 12, 39);
 
     ctx.textAlign = 'center';
     const need = killsNeeded(this.wave);

@@ -53,6 +53,9 @@ export function setupAdmin() {
     numberRow('집결 이동 속도 (px/s)', BALANCE, 'gatherSpeed', 5),
     numberRow('공격 틱 간격 (s)', BALANCE, 'attackCooldown', 0.1),
     numberRow('적 공격 사거리 보정', BALANCE, 'enemyReach', 5),
+    numberRow('완만 구간 증가율 (/웨이브)', BALANCE, 'gentleRate', 0.01),
+    numberRow('가파른 구간 시작 웨이브', BALANCE, 'steepStartWave', 1),
+    numberRow('가파른 구간 배율 (/웨이브)', BALANCE, 'steepFactor', 0.05),
   );
   panel.appendChild(g);
 
