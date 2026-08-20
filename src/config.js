@@ -10,7 +10,7 @@ export const LAUNCHER_Y = 700;
 export const BALANCE = {
   baseLineSpeed: 6,     // 웨이브라인 기본 전진 속도 (px/초)
   spawnInterval: 2.3,   // 적 스폰 기본 간격 (초, 웨이브에 따라 감소)
-  launchCooldown: 0.6,  // 발사 쿨다운 (초)
+  launchCooldown: 0.75, // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
   launchSpeed: 18,      // 발사 속도
   unitAdvanceSpeed: 30, // 착지 후 아군 전진 속도 (px/초)
   bossGatherStrength: 0.6, // 보스 집결 강도 (0=안함, 0.7 초과 시 교전 중인 유닛도 집결, 1=최대)
@@ -90,3 +90,213 @@ export const FRICTION_AIR_UNIT = 0.03;
 export function killsNeeded(wave) {
   return 10 + wave * 3;
 }
+
+// ---------- 메타 진행 (XP / 레벨 / 스킬) ----------
+// XP = 기존 점수 + 보스 처치 보너스(bossXpPerWave * 클리어한 웨이브).
+// 쓰레기 처치보다 웨이브 클리어/보스 킬이 유리하도록 보너스를 크게 둠.
+//
+// 레벨 곡선 목표:
+//   Lv2 ≈ 1웨이브 보스 직후, Lv5 ≈ 웨이브 5–7 무난한 런, Lv10은 장기 목표.
+// xpToNext[i] = 레벨 i → i+1 에 필요한 XP (1-indexed).
+export const PROGRESSION = {
+  bossXpPerWave: 200,     // 보스 처치 시 추가 XP = 이 값 × 클리어한 웨이브
+  launchCdFloor: 0.25,    // 발사 쿨다운 하드 하한 (초)
+  regenNearSlack: 48,     // 전열로 간주해 재생이 켜지는 추가 여유 (px)
+
+  // 방어벽: 라인이 마지노선에 닿으면 즉시 게임오버 대신 1회 충격.
+  // 충격 시 벽 HP −wallDmgPerHit, 라인을 wallKnockback px 위로 밀어냄 (LINE_START_Y 미만 불가).
+  // 그 충격으로 HP가 0이 되면 벽은 파괴되고 밀치기는 적용됨. 다음 접촉은 게임오버.
+  wallBaseHp: 3,
+  wallDmgPerHit: 1,
+  wallBaseKnockback: 70,  // px
+
+  // 궁수: 벽 위에 서서 사거리 안의 웨이브라인 적을 사격. 웨이브 솔로 불가.
+  // 탄약은 웨이브당 지급, 보스 처치(웨이브 증가) 및 런 시작 시 재충전. 소진 시 다음 웨이브까지 정지.
+  archerMax: 3,
+  archerBaseRange: 160,
+  archerBaseAtk: 7,
+  archerBaseAmmo: 10,
+  archerInterval: 1.05,   // 초/발
+};
+
+// 인덱스 = 현재 레벨. 값 = 다음 레벨까지 XP. 테이블 이후는 last + extraPerLevel*(level-lastIndex)
+export const XP_TO_NEXT = [
+  0,
+  800,    // 1→2
+  1300,   // 2→3
+  2000,   // 3→4
+  2800,   // 4→5
+  3800,   // 5→6
+  5200,   // 6→7
+  7000,   // 7→8
+  9200,   // 8→9
+  12000,  // 9→10
+];
+export const XP_AFTER_TABLE = 3000; // Lv10+ : 12000 + 3000*(level-9) 형태로 증가
+
+export function xpToNextLevel(level) {
+  const lv = Math.max(1, Math.floor(level));
+  if (lv < XP_TO_NEXT.length) return XP_TO_NEXT[lv];
+  return XP_TO_NEXT[XP_TO_NEXT.length - 1] + XP_AFTER_TABLE * (lv - (XP_TO_NEXT.length - 1));
+}
+
+export const SKILL_TREES = [
+  { id: 'combat', name: '전투' },
+  { id: 'frontline', name: '전열' },
+  { id: 'merge', name: '머지' },
+  { id: 'wall', name: '방어벽' },
+  { id: 'archer', name: '궁수' },
+];
+
+// cost = 랭크당 포인트. maxRank 1 은 온/오프 해금.
+// requires: 선행 스킬 id (해당 랭크 ≥ 1).
+export const SKILLS = [
+  {
+    id: 'launchCd',
+    name: '발사 쿨감',
+    tree: 'combat',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 1,
+    requires: null,
+    perRank: 0.08, // 초 감소
+  },
+  {
+    id: 'advance',
+    name: '진격 속도',
+    tree: 'combat',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 1,
+    requires: null,
+    perRank: 0.10, // +10%/랭크
+  },
+  {
+    id: 'regen',
+    name: '재생',
+    tree: 'combat',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 1,
+    requires: null,
+    perRank: 0.004, // 최대 HP의 %/초 (전투·전열에서만)
+  },
+  {
+    id: 'stopping',
+    name: '저지력 증가',
+    tree: 'frontline',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 1,
+    requires: null,
+    perRank: 0.08, // +8%/랭크
+  },
+  {
+    id: 'higherTier',
+    name: '상위 병사 확률',
+    tree: 'merge',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 3,
+    requires: null,
+    t2PerRank: 0.03,
+    t3StartRank: 3,
+    t3PerRank: 0.02, // 랭크 3부터 (rank - 2) * 이 값
+  },
+  {
+    id: 'mergeShock',
+    name: '머지 충격',
+    tree: 'merge',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 3,
+    requires: null,
+    dmgPerRank: 18,
+    radiusBase: 30,
+    radiusPerRank: 6,
+    knockbackPerRank: 6,
+    healPctPerRank: 0.04,
+  },
+  {
+    id: 'wall',
+    name: '방어벽 설치',
+    tree: 'wall',
+    maxRank: 1,
+    cost: 1,
+    unlockLevel: 3,
+    requires: null,
+  },
+  {
+    id: 'wallHp',
+    name: '방어벽 강화',
+    tree: 'wall',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 5,
+    requires: 'wall',
+    hpPerRank: 2,
+  },
+  {
+    id: 'wallKb',
+    name: '밀치기 거리',
+    tree: 'wall',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 5,
+    requires: 'wall',
+    kbPerRank: 22,
+  },
+  {
+    id: 'archer',
+    name: '궁수 해금',
+    tree: 'archer',
+    maxRank: 1,
+    cost: 1,
+    unlockLevel: 8,
+    requires: 'wall',
+  },
+  {
+    id: 'archerCount',
+    name: '궁수 수',
+    tree: 'archer',
+    maxRank: 4, // 실제 수는 min(해금 1 + 랭크, PROGRESSION.archerMax)
+    cost: 1,
+    unlockLevel: 8,
+    requires: 'archer',
+    extraPerRank: 1,
+  },
+  {
+    id: 'archerRange',
+    name: '궁수 사거리',
+    tree: 'archer',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 8,
+    requires: 'archer',
+    perRank: 36,
+  },
+  {
+    id: 'archerAtk',
+    name: '궁수 공격력',
+    tree: 'archer',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 8,
+    requires: 'archer',
+    perRank: 4,
+  },
+  {
+    id: 'archerAmmo',
+    name: '궁수 탄약',
+    tree: 'archer',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 8,
+    requires: 'archer',
+    perRank: 4, // 웨이브당 발수
+  },
+];
+
+export const SKILL_BY_ID = Object.fromEntries(SKILLS.map((s) => [s.id, s]));
+
+export const META_STORAGE_KEY = 'md.knightslide.meta.v1';

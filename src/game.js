@@ -1,11 +1,12 @@
 import Matter from 'matter-js';
 import {
   CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y,
-  BALANCE, UNITS, MONSTERS, HEROES, HERO_LIFESPAN,
-  FRICTION_AIR_UNIT, killsNeeded, waveMultiplier, effectiveMult,
-  LIVE_MULT_STEP, clampLiveMult,
+    BALANCE, UNITS, MONSTERS, HEROES, HERO_LIFESPAN,
+    FRICTION_AIR_UNIT, killsNeeded, waveMultiplier, effectiveMult,
+    LIVE_MULT_STEP, clampLiveMult, PROGRESSION,
 } from './config.js';
 import { Effects } from './effects.js';
+import { meta } from './meta.js';
 
 const { Engine, World, Bodies, Body, Events } = Matter;
 
@@ -33,13 +34,24 @@ export class Game {
     this.rangeMode = 1; // 0=끄기, 1=아군만, 2=전체 (재시작 후에도 유지)
     this.liveMult = 1;  // 실시간 난이도 배율 (재시작 후에도 유지)
     this.onLiveMultChange = null;
+    this.skillPanelOpen = false;
+    this._fx = meta.getEffects();
     this._rangeToggleRect = { x: 0, y: 0, w: 0, h: 0 };
     this._diffMinusRect = { x: 0, y: 0, w: 0, h: 0 };
     this._diffPlusRect = { x: 0, y: 0, w: 0, h: 0 };
 
     this._setupInput();
     this.ui.restartBtn.addEventListener('click', () => this.start());
-    this.ui.startOverlay.addEventListener('pointerdown', () => this.start());
+    this.ui.startOverlay.addEventListener('pointerdown', () => {
+      if (this.skillPanelOpen) return;
+      this.start();
+    });
+    this.onSkillsChanged = () => {
+      this._fx = meta.getEffects();
+      this._syncDefenseFromMeta(false);
+    };
+    this._refreshStartMeta();
+    meta.onChange(() => this._refreshStartMeta());
 
     this._reset();
     this._loop = this._loop.bind(this);
@@ -88,11 +100,101 @@ export class Game {
     this.nextTier = this._rollTier();
 
     this.effects = new Effects();
+    this.wall = null;
+    this.archers = [];
+    this.archerShots = [];
+    this._fx = meta.getEffects();
+    this._syncDefenseFromMeta(true);
 
     Events.on(this.engine, 'collisionStart', (ev) => this._onCollision(ev));
   }
 
+  _effects() {
+    return this._fx || meta.getEffects();
+  }
+
+  _refreshStartMeta() {
+    if (!this.ui.metaStatus) return;
+    this.ui.metaStatus.textContent =
+      `레벨 ${meta.level}  ·  XP ${meta.xp} / ${meta.xpNeeded}  ·  포인트 ${meta.skillPoints}`;
+  }
+
+  _syncDefenseFromMeta(fresh) {
+    const fx = this._effects();
+    if (!fx.hasWall) {
+      this.wall = null;
+      this.archers = [];
+      return;
+    }
+    if (fresh || !this.wall) {
+      this.wall = { hp: fx.wallMaxHp, maxHp: fx.wallMaxHp, broken: false };
+    } else if (!this.wall.broken) {
+      const delta = fx.wallMaxHp - this.wall.maxHp;
+      this.wall.maxHp = fx.wallMaxHp;
+      if (delta > 0) this.wall.hp = Math.min(this.wall.maxHp, this.wall.hp + delta);
+      else this.wall.hp = Math.min(this.wall.hp, this.wall.maxHp);
+    }
+
+    if (this.wall.broken || fx.archerCount <= 0) {
+      this.archers = [];
+      return;
+    }
+
+    const n = fx.archerCount;
+    if (this.archers.length > n) this.archers.length = n;
+    while (this.archers.length < n) {
+      this.archers.push({
+        ammo: fx.archerAmmo,
+        maxAmmo: fx.archerAmmo,
+        attackCd: 0.15 + Math.random() * 0.5,
+        flashT: 0,
+      });
+    }
+    for (let i = 0; i < this.archers.length; i++) {
+      const a = this.archers[i];
+      const count = this.archers.length;
+      a.x = count <= 1 ? CANVAS_W / 2 : 56 + i * ((CANVAS_W - 112) / (count - 1));
+      a.y = DEFEAT_Y - 16;
+      const prevMax = a.maxAmmo;
+      a.maxAmmo = fx.archerAmmo;
+      if (fresh) a.ammo = fx.archerAmmo;
+      else if (a.maxAmmo > prevMax) a.ammo = Math.min(a.maxAmmo, a.ammo + (a.maxAmmo - prevMax));
+      else a.ammo = Math.min(a.ammo, a.maxAmmo);
+    }
+  }
+
+  _refillArcherAmmo() {
+    const ammo = this._effects().archerAmmo;
+    for (const a of this.archers) {
+      a.maxAmmo = ammo;
+      a.ammo = ammo;
+    }
+  }
+
+  _grantScore(n) {
+    this.score += n;
+    this._addRunXp(n);
+  }
+
+  _addRunXp(n) {
+    const { levelsGained, newLevel } = meta.addXp(n);
+    if (levelsGained > 0 && this.effects) {
+      this.effects.floatText(CANVAS_W / 2, 210, `레벨 업! Lv.${newLevel}`, '#FFD700', 28, 2.0);
+    }
+  }
+
+  _unitStop(u) {
+    return this._unitStat(u).stop * this._effects().stopMult;
+  }
+
+  _launchCooldown() {
+    return this._effects().launchCooldown;
+  }
+
   start() {
+    const panel = document.getElementById('skillPanel');
+    if (panel) panel.classList.add('hidden');
+    this.skillPanelOpen = false;
     this._reset();
     this.state = 'playing';
     this.ui.startOverlay.classList.add('hidden');
@@ -101,12 +203,17 @@ export class Game {
 
   _gameOver() {
     this.state = 'gameover';
-    this.ui.finalScore.textContent = `점수: ${this.score} · 웨이브 ${this.wave}`;
+    this.ui.finalScore.textContent =
+      `점수: ${this.score} · 웨이브 ${this.wave} · 레벨 ${meta.level}`;
     this.ui.gameoverOverlay.classList.remove('hidden');
   }
 
   _rollTier() {
-    return Math.random() < 0.75 ? 1 : 2;
+    const fx = this._effects();
+    const r = Math.random();
+    if (fx.t3Chance > 0 && r < fx.t3Chance) return 3;
+    if (r < fx.t3Chance + 0.25 + fx.t2Bonus) return 2;
+    return 1;
   }
 
   // ---------- 입력: 가로 위치 선택 + 수직 발사 ----------
@@ -134,6 +241,7 @@ export class Game {
         this.adjustLiveMult(LIVE_MULT_STEP);
         return;
       }
+      if (this.skillPanelOpen) return;
       if (this.state !== 'playing') return;
       if (p.y > 560) {
         this.dragging = true;
@@ -149,7 +257,7 @@ export class Game {
     this.canvas.addEventListener('pointerup', (e) => {
       if (!this.dragging) return;
       this.dragging = false;
-      if (this.state !== 'playing' || this.launchCd > 0) return;
+      if (this.skillPanelOpen || this.state !== 'playing' || this.launchCd > 0) return;
       this.aimX = clampAimX(toCanvas(e).x);
       this._launchUnit();
     });
@@ -203,7 +311,7 @@ export class Game {
   _launchUnit() {
     const u = this._spawnUnit(this.currentTier, this.aimX, LAUNCHER_Y);
     Body.setVelocity(u.body, { x: 0, y: -BALANCE.launchSpeed });
-    this.launchCd = BALANCE.launchCooldown;
+    this.launchCd = this._launchCooldown();
     this.currentTier = this.nextTier;
     this.nextTier = this._rollTier();
   }
@@ -364,25 +472,49 @@ export class Game {
       this._removeUnit(b);
 
       if (newTier === 10) {
-        this._summonHero(mx, my);
+        const hero = this._summonHero(mx, my);
+        this._applyMergeShock(mx, my, hero);
       } else {
         // 합성 유닛은 발사 관성이 없으므로 즉시 전진 가능
-        this._spawnUnit(newTier, mx, my).settled = true;
+        const spawned = this._spawnUnit(newTier, mx, my);
+        spawned.settled = true;
         this.effects.burst(mx, my, UNITS[newTier - 1].color, 18, 4, 3.5);
         this.effects.floatText(mx, my - 30, UNITS[newTier - 1].name, '#fff', 15, 0.9);
+        this._applyMergeShock(mx, my, spawned);
       }
-      this.score += newTier * 5;
+      this._grantScore(newTier * 5);
     }
     this.mergeQueue.length = 0;
+  }
+
+  _applyMergeShock(x, y, unit) {
+    const shock = this._effects().mergeShock;
+    if (!shock) return;
+    this.effects.burst(x, y, '#ffcc66', 14, 3.6, 3);
+    for (const m of [...this.enemies]) {
+      if (m.dead) continue;
+      if (Math.hypot(m.x - x, m.y - y) <= shock.radius + MONSTERS[m.key].r) {
+        this._damageEnemy(m, shock.dmg);
+      }
+    }
+    if (shock.knockback > 0) {
+      this.lineY = Math.max(LINE_START_Y, this.lineY - shock.knockback);
+      for (const m of this.enemies) m.y = this.lineY - m.row * SLOT_ROW_H;
+    }
+    if (unit && !unit.dead && shock.healPct > 0) {
+      unit.hp = Math.min(unit.maxHp, unit.hp + unit.maxHp * shock.healPct);
+    }
   }
 
   _summonHero(x, y) {
     const types = Object.keys(HEROES);
     const type = types[Math.floor(Math.random() * types.length)];
-    this._spawnUnit(10, x, y, type).settled = true;
+    const hero = this._spawnUnit(10, x, y, type);
+    hero.settled = true;
     this.effects.burst(x, y, '#FF4500', 40, 6, 5);
     this.effects.burst(x, y, '#FFD700', 30, 4.5, 4);
     this.effects.floatText(CANVAS_W / 2, 300, `영웅 소환! ${HEROES[type].name}`, '#FFD700', 28, 2.0);
+    return hero;
   }
 
   // ---------- 웨이브 / 스폰 ----------
@@ -433,14 +565,18 @@ export class Game {
 
   _onEnemyKilled(m) {
     const stat = MONSTERS[m.key];
-    this.score += stat.score;
+    this._grantScore(stat.score);
     this.effects.burst(m.x, m.y, stat.color, 12, 3, 3);
     this.effects.floatText(m.x, m.y - 20, `+${stat.score}`, '#ffd', 13, 0.7);
     if (m.isBoss) {
+      const bonus = Math.round(PROGRESSION.bossXpPerWave * this.wave);
+      this._addRunXp(bonus);
+      this.effects.floatText(CANVAS_W / 2, 360, `보스 XP +${bonus}`, '#ffd27a', 18, 1.4);
       this.bossActive = false;
       this.bossPending = false;
       this.wave += 1;
       this.kills = 0;
+      this._refillArcherAmmo();
       this.effects.floatText(CANVAS_W / 2, 300, `웨이브 ${this.wave} 시작!`, '#7CFC00', 26, 2.0);
     } else {
       this.kills += 1;
@@ -489,7 +625,7 @@ export class Game {
     if (this.enemies.length === 0) {
       let stopping = 0;
       for (const u of this.units) {
-        if (this._unitCanPushEmptyLine(u)) stopping += this._unitStat(u).stop;
+        if (this._unitCanPushEmptyLine(u)) stopping += this._unitStop(u);
       }
       stopping *= BALANCE.emptyLinePushScale;
       this.netSpeed = -stopping;
@@ -506,15 +642,19 @@ export class Game {
     }
     let stopping = 0;
     for (const u of this.units) {
-      if (u.engaged) stopping += this._unitStat(u).stop;
+      if (u.engaged) stopping += this._unitStop(u);
     }
     this.netSpeed = advance - stopping;
     this.lineY += this.netSpeed * dt;
     if (this.lineY < LINE_START_Y) this.lineY = LINE_START_Y;
     if (this.lineY >= DEFEAT_Y) {
-      this.lineY = DEFEAT_Y;
-      this._gameOver();
-      return;
+      if (this._tryWallBlock()) {
+        // 밀치기 적용됨. 적 위치는 아래에서 갱신
+      } else {
+        this.lineY = DEFEAT_Y;
+        this._gameOver();
+        return;
+      }
     }
     // 적 위치를 라인에 맞춰 갱신 (뒤 열은 라인 위쪽으로 적층)
     for (const m of this.enemies) {
@@ -522,9 +662,28 @@ export class Game {
     }
   }
 
+  // 방어벽: 마지노선 접촉 시 1회 충격. HP가 0이 되면 그 충격의 밀치기는 적용되고 벽은 파괴.
+  // 파괴된 뒤 다음 접촉은 게임오버.
+  _tryWallBlock() {
+    if (!this.wall || this.wall.broken || this.wall.hp <= 0) return false;
+    const kb = this._effects().wallKnockback;
+    this.wall.hp -= PROGRESSION.wallDmgPerHit;
+    this.effects.lineFlash(DEFEAT_Y, '#c9e4ff');
+    this.effects.floatText(CANVAS_W / 2, DEFEAT_Y - 36, '방어벽!', '#c9e4ff', 18, 0.8);
+    if (this.wall.hp <= 0) {
+      this.wall.hp = 0;
+      this.wall.broken = true;
+      this.archers = [];
+      this.effects.burst(CANVAS_W / 2, DEFEAT_Y, '#8899aa', 28, 4, 4);
+      this.effects.floatText(CANVAS_W / 2, DEFEAT_Y - 58, '방어벽 파괴', '#ff8080', 20, 1.4);
+    }
+    this.lineY = Math.max(LINE_START_Y, DEFEAT_Y - kb);
+    return true;
+  }
+
   // ---------- 아군 유닛: 착지 후 전진, 실제 교전 시(사거리 내 적) 정지 ----------
   _updateUnitAdvance(dt) {
-    const advTick = BALANCE.unitAdvanceSpeed / 60; // px/초 → px/틱(기준 60fps)
+    const advTick = (BALANCE.unitAdvanceSpeed * this._effects().advanceMult) / 60; // px/초 → px/틱(기준 60fps)
     for (const u of this.units) {
       u.age += dt;
       // 발사 관성이 소진되면 정착 → 전진 시작
@@ -737,6 +896,54 @@ export class Game {
     }
   }
 
+  _unitNearFront(u) {
+    const holdY = this.lineY + 20 + u.r;
+    return u.body.position.y <= holdY + PROGRESSION.regenNearSlack;
+  }
+
+  _updateRegen(dt) {
+    const pct = this._effects().regenPct;
+    if (pct <= 0) return;
+    for (const u of this.units) {
+      if (u.dead || u.hp >= u.maxHp) continue;
+      if (!u.engaged && !this._unitNearFront(u)) continue;
+      u.hp = Math.min(u.maxHp, u.hp + u.maxHp * pct * dt);
+    }
+  }
+
+  _updateArchers(dt) {
+    for (const shot of this.archerShots) shot.life -= dt;
+    this.archerShots = this.archerShots.filter((s) => s.life > 0);
+    const fx = this._effects();
+    if (!this.wall || this.wall.broken || fx.archerCount <= 0) return;
+
+    for (const a of this.archers) {
+      a.flashT = Math.max(0, a.flashT - dt);
+      a.attackCd -= dt;
+      if (a.ammo <= 0 || a.attackCd > 0) continue;
+      let target = null;
+      let best = Infinity;
+      for (const m of this.enemies) {
+        if (m.dead) continue;
+        const d = Math.hypot(m.x - a.x, m.y - a.y);
+        if (d <= fx.archerRange && d < best) {
+          best = d;
+          target = m;
+        }
+      }
+      if (!target) continue;
+      a.attackCd = PROGRESSION.archerInterval;
+      a.ammo -= 1;
+      a.flashT = 0.1;
+      this._damageEnemy(target, fx.archerAtk);
+      this.archerShots.push({
+        x1: a.x, y1: a.y - 8,
+        x2: target.x, y2: target.y,
+        life: 0.12,
+      });
+    }
+  }
+
   // ---------- 메인 루프 ----------
   _loop(now) {
     const dt = Math.min((now - this._lastTime) / 1000, 0.05);
@@ -749,6 +956,7 @@ export class Game {
   }
 
   _update(dt) {
+    this._fx = meta.getEffects();
     this.launchCd = Math.max(0, this.launchCd - dt);
 
     // 실제 경과 시간으로 물리 스텝 (60Hz가 아닌 모니터에서도 속도 일정)
@@ -761,6 +969,8 @@ export class Game {
     this._updateUnitAdvance(dt);
     this._updateBossGather();
     this._updateCombat(dt);
+    this._updateRegen(dt);
+    this._updateArchers(dt);
     this._updateEnemyTicks(dt);
     this._updateUnitAbilities(dt);
     this._enforceLineBoundary();
@@ -773,6 +983,7 @@ export class Game {
 
   // ---------- 렌더링 ----------
   _draw() {
+    this._fx = meta.getEffects();
     const ctx = this.ctx;
 
     // 배경
@@ -816,7 +1027,7 @@ export class Game {
     ctx.fillStyle = 'rgba(120, 90, 40, 0.12)';
     ctx.fillRect(0, DEFEAT_Y, CANVAS_W, CANVAS_H - DEFEAT_Y);
 
-    // 마지노선 (빛나는 빨간 점선)
+    // 마지노선 (빛나는 빨간 점선) + 해금된 방어벽
     ctx.save();
     ctx.strokeStyle = '#ff3333';
     ctx.lineWidth = 3;
@@ -828,6 +1039,7 @@ export class Game {
     ctx.lineTo(CANVAS_W, DEFEAT_Y);
     ctx.stroke();
     ctx.restore();
+    this._drawWall();
 
     // 발사 가이드 (수직 점선)
     if (this.dragging && this.state === 'playing') {
@@ -930,12 +1142,15 @@ export class Game {
       }
     }
 
+    this._drawArchers();
+
     // 발사 대기 유닛 + 다음 유닛
     if (this.state === 'playing') {
       const stat = UNITS[this.currentTier - 1];
       const ready = this.launchCd <= 0;
+      const maxCd = Math.max(0.001, this._launchCooldown());
       ctx.save();
-      ctx.globalAlpha = ready ? 1 : 0.4;
+      ctx.globalAlpha = ready ? 1 : 0.38;
       ctx.fillStyle = stat.color;
       ctx.strokeStyle = 'rgba(255,255,255,0.5)';
       ctx.lineWidth = 2;
@@ -950,9 +1165,21 @@ export class Game {
       ctx.fillText(String(this.currentTier), this.aimX, LAUNCHER_Y + 1);
       ctx.restore();
 
+      // 발사 쿨다운 바 (플레이어용)
+      const barW = 44;
+      const barH = 5;
+      const bx = this.aimX - barW / 2;
+      const by = LAUNCHER_Y + stat.r + 8;
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(bx, by, barW, barH);
+      ctx.fillStyle = ready ? '#6fe08a' : '#e8c878';
+      ctx.fillRect(bx, by, barW * (ready ? 1 : 1 - this.launchCd / maxCd), barH);
+      ctx.restore();
+
       const nstat = UNITS[this.nextTier - 1];
       ctx.save();
-      ctx.globalAlpha = 0.85;
+      ctx.globalAlpha = ready ? 0.85 : 0.4;
       ctx.fillStyle = '#c9b48a';
       ctx.font = "13px 'Malgun Gothic', sans-serif";
       ctx.textAlign = 'center';
@@ -983,6 +1210,70 @@ export class Game {
     this._drawHud();
   }
 
+  _drawWall() {
+    if (!this.wall || this.wall.broken) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = 'rgba(70, 82, 96, 0.85)';
+    ctx.fillRect(0, DEFEAT_Y - 7, CANVAS_W, 14);
+    ctx.strokeStyle = '#c5d0dc';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#9ec0e8';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.moveTo(0, DEFEAT_Y);
+    ctx.lineTo(CANVAS_W, DEFEAT_Y);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    const ratio = this.wall.maxHp > 0 ? this.wall.hp / this.wall.maxHp : 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(40, DEFEAT_Y + 10, CANVAS_W - 80, 6);
+    ctx.fillStyle = ratio > 0.35 ? '#8ec8ff' : '#ff8866';
+    ctx.fillRect(40, DEFEAT_Y + 10, (CANVAS_W - 80) * ratio, 6);
+    ctx.fillStyle = '#dce8f4';
+    ctx.font = "11px 'Malgun Gothic', sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`방어벽 ${this.wall.hp} / ${this.wall.maxHp}`, CANVAS_W / 2, DEFEAT_Y + 18);
+    ctx.restore();
+  }
+
+  _drawArchers() {
+    const ctx = this.ctx;
+    for (const shot of this.archerShots) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, shot.life / 0.12);
+      ctx.strokeStyle = '#e8ff9a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(shot.x1, shot.y1);
+      ctx.lineTo(shot.x2, shot.y2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (!this.wall || this.wall.broken || this.archers.length === 0) return;
+    for (const a of this.archers) {
+      ctx.save();
+      ctx.fillStyle = a.flashT > 0 ? '#fff' : (a.ammo > 0 ? '#6b8f3c' : '#4a4a40');
+      ctx.strokeStyle = '#2a3a18';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#f0e6d2';
+      ctx.font = "bold 11px 'Malgun Gothic', sans-serif";
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('궁', a.x, a.y + 1);
+      ctx.fillStyle = a.ammo > 0 ? '#e8ff9a' : '#ff8080';
+      ctx.font = "10px 'Malgun Gothic', sans-serif";
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(`${a.ammo}/${a.maxAmmo}`, a.x, a.y - 13);
+      ctx.restore();
+    }
+  }
+
   _drawRangeIndicators() {
     const ctx = this.ctx;
     ctx.save();
@@ -995,6 +1286,15 @@ export class Game {
         ctx.beginPath();
         ctx.arc(x, y, this._unitStat(u).range, 0, Math.PI * 2);
         ctx.stroke();
+      }
+      if (this.wall && !this.wall.broken) {
+        const range = this._effects().archerRange;
+        for (const a of this.archers) {
+          ctx.strokeStyle = 'rgba(180, 210, 140, 0.45)';
+          ctx.beginPath();
+          ctx.arc(a.x, a.y, range, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
     }
     if (this.rangeMode === 2) {
@@ -1044,13 +1344,13 @@ export class Game {
   _drawHud() {
     const ctx = this.ctx;
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(0, 0, CANVAS_W, 52);
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.fillRect(0, 0, CANVAS_W, 70);
     ctx.fillStyle = '#f0e6d2';
     ctx.font = "bold 15px 'Malgun Gothic', sans-serif";
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`웨이브 ${this.wave}`, 12, 16);
+    ctx.fillText(`웨이브 ${this.wave}`, 12, 14);
 
     // 웨이브 배율 × 수동 배율 + 난이도 조절 버튼
     ctx.font = "11px 'Malgun Gothic', sans-serif";
@@ -1058,14 +1358,14 @@ export class Game {
     const waveLabel = `웨이브 ×${waveM.toFixed(2)}`;
     ctx.fillStyle = '#b0a284';
     ctx.textAlign = 'left';
-    ctx.fillText(waveLabel, 12, 39);
+    ctx.fillText(waveLabel, 12, 36);
     const liveLabel = `×${this.liveMult.toFixed(1)}`;
     const liveX = 12 + ctx.measureText(waveLabel).width + 5;
     ctx.fillStyle = '#ffd27a';
-    ctx.fillText(liveLabel, liveX, 39);
+    ctx.fillText(liveLabel, liveX, 36);
     const btnSize = 18;
     const btnGap = 4;
-    const btnY = 30;
+    const btnY = 27;
     const btnX = liveX + ctx.measureText(liveLabel).width + 7;
     ctx.font = "bold 14px sans-serif";
     this._drawHudChip(btnX, btnY, btnSize, btnSize, '−', 'rgba(0,0,0,0.45)', 'rgba(200, 180, 140, 0.55)');
@@ -1076,25 +1376,26 @@ export class Game {
     ctx.textAlign = 'center';
     const need = killsNeeded(this.wave);
     ctx.fillStyle = '#b0a284';
-    ctx.fillText(this.bossActive ? '보스 전투 중!' : `처치 ${this.kills} / ${need}`, CANVAS_W / 2, 16);
+    ctx.font = "11px 'Malgun Gothic', sans-serif";
+    ctx.fillText(this.bossActive ? '보스 전투 중!' : `처치 ${this.kills} / ${need}`, CANVAS_W / 2, 14);
 
     ctx.textAlign = 'right';
-    ctx.fillText(`점수 ${this.score}`, CANVAS_W - 12, 16);
+    ctx.fillText(`점수 ${this.score}`, CANVAS_W - 12, 14);
 
     // 라인 순 속도 (줄다리기 상태) — 좌측 난이도 버튼과 겹치지 않게 약간 우측
     ctx.textAlign = 'center';
-    ctx.font = "bold 14px 'Malgun Gothic', sans-serif";
+    ctx.font = "bold 13px 'Malgun Gothic', sans-serif";
     const lineHudX = 248;
     const v = this.netSpeed;
     if (Math.abs(v) < 0.05) {
       ctx.fillStyle = '#aaa';
-      ctx.fillText('라인 ─ 정지', lineHudX, 39);
+      ctx.fillText('라인 ─ 정지', lineHudX, 36);
     } else if (v > 0) {
       ctx.fillStyle = '#ff7060';
-      ctx.fillText(`라인 ▼ ${v.toFixed(1)}`, lineHudX, 39);
+      ctx.fillText(`라인 ▼ ${v.toFixed(1)}`, lineHudX, 36);
     } else {
       ctx.fillStyle = '#6fe08a';
-      ctx.fillText(`라인 ▲ ${(-v).toFixed(1)}`, lineHudX, 39);
+      ctx.fillText(`라인 ▲ ${(-v).toFixed(1)}`, lineHudX, 36);
     }
 
     // 사거리 표시 토글 (끄기 → 아군만 → 전체)
@@ -1106,13 +1407,39 @@ export class Game {
     const bw = tw + padX * 2;
     const bh = 18;
     const bx = CANVAS_W - 10 - bw;
-    const by = 30;
+    const by = 27;
     this._rangeToggleRect = { x: bx - 4, y: by - 4, w: bw + 8, h: bh + 8 };
     this._drawHudChip(bx, by, bw, bh, text, 'rgba(0,0,0,0.45)', 'rgba(200, 180, 140, 0.55)');
     ctx.fillStyle = this.rangeMode === 0 ? '#8a8070' : '#e8dcc0';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, bx + bw / 2, by + bh / 2 + 0.5);
+
+    // 레벨 / XP / 남은 포인트
+    const needXp = meta.xpNeeded;
+    const xpRatio = needXp > 0 ? Math.min(1, meta.xp / needXp) : 1;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#e8c878';
+    ctx.font = "bold 11px 'Malgun Gothic', sans-serif";
+    ctx.fillText(`레벨 ${meta.level}`, 12, 58);
+    const barX = 72;
+    const barW = 250;
+    const barH = 8;
+    const barY = 54;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.fillStyle = '#e8c878';
+    ctx.fillRect(barX, barY, barW * xpRatio, barH);
+    ctx.strokeStyle = 'rgba(200,180,140,0.45)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barW, barH);
+    ctx.fillStyle = '#c9b48a';
+    ctx.font = "10px 'Malgun Gothic', sans-serif";
+    ctx.fillText(`${meta.xp} / ${needXp}`, barX + barW + 8, 58);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = meta.skillPoints > 0 ? '#ffe08a' : '#9a8a6a';
+    ctx.font = "bold 11px 'Malgun Gothic', sans-serif";
+    ctx.fillText(`포인트 ${meta.skillPoints}`, CANVAS_W - 12, 58);
 
     ctx.restore();
   }

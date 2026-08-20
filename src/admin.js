@@ -1,5 +1,5 @@
 // 어드민 패널: config 객체 값을 실시간으로 수정 (A 키 또는 ⚙ 버튼)
-import { BALANCE, UNITS, MONSTERS, LIVE_MULT_MIN, LIVE_MULT_MAX, LIVE_MULT_STEP } from './config.js';
+import { BALANCE, UNITS, MONSTERS, LIVE_MULT_MIN, LIVE_MULT_MAX, LIVE_MULT_STEP, PROGRESSION, XP_TO_NEXT, SKILLS } from './config.js';
 
 function numberRow(label, obj, key, step = 1) {
   const row = document.createElement('label');
@@ -93,6 +93,45 @@ export function setupAdmin(game) {
     numberRow('빈 라인 전열 여유 (px)', BALANCE, 'emptyLinePushSlack', 1),
   );
   panel.appendChild(g);
+
+  const prog = section('메타 진행 / 방어');
+  const progNote = document.createElement('p');
+  progNote.className = 'admin-note';
+  progNote.textContent = '방어벽: 마지노선 접촉 시 HP를 잃고 라인을 밀어냄. HP 0이 되는 충격도 밀치기는 적용되며, 그 다음 접촉은 게임오버. 궁수 탄약은 웨이브 시작(보스 처치)에 재충전.';
+  prog.appendChild(progNote);
+  prog.append(
+    numberRow('보스 클리어 추가 XP/웨이브', PROGRESSION, 'bossXpPerWave', 10),
+    numberRow('발사 쿨 하한 (s)', PROGRESSION, 'launchCdFloor', 0.05),
+    numberRow('재생 전열 여유 (px)', PROGRESSION, 'regenNearSlack', 1),
+    numberRow('벽 기본 HP', PROGRESSION, 'wallBaseHp', 1),
+    numberRow('벽 접촉 피해', PROGRESSION, 'wallDmgPerHit', 1),
+    numberRow('벽 기본 밀치기 (px)', PROGRESSION, 'wallBaseKnockback', 5),
+    numberRow('궁수 최대 수', PROGRESSION, 'archerMax', 1),
+    numberRow('궁수 기본 사거리', PROGRESSION, 'archerBaseRange', 5),
+    numberRow('궁수 기본 공격력', PROGRESSION, 'archerBaseAtk', 1),
+    numberRow('궁수 기본 탄약/웨이브', PROGRESSION, 'archerBaseAmmo', 1),
+    numberRow('궁수 공격 간격 (s)', PROGRESSION, 'archerInterval', 0.05),
+  );
+  panel.appendChild(prog);
+
+  const xpSec = section('레벨 XP 곡선 (해당 레벨 → 다음)');
+  for (let lv = 1; lv < XP_TO_NEXT.length; lv++) {
+    xpSec.appendChild(numberRow(`Lv ${lv} → ${lv + 1}`, XP_TO_NEXT, lv, 50));
+  }
+  panel.appendChild(xpSec);
+
+  const skSec = section('스킬 수치 (랭크당)');
+  for (const skill of SKILLS) {
+    const h = document.createElement('h4');
+    h.textContent = `${skill.name} (해금 Lv${skill.unlockLevel}, 최대 ${skill.maxRank})`;
+    skSec.appendChild(h);
+    for (const key of Object.keys(skill)) {
+      if (!['perRank', 't2PerRank', 't3PerRank', 't3StartRank', 'dmgPerRank', 'radiusBase', 'radiusPerRank', 'knockbackPerRank', 'healPctPerRank', 'hpPerRank', 'kbPerRank', 'extraPerRank'].includes(key)) continue;
+      const step = Math.abs(skill[key]) < 1 ? 0.001 : 1;
+      skSec.appendChild(numberRow(key, skill, key, step));
+    }
+  }
+  panel.appendChild(skSec);
 
   // 적 스탯
   const es = section('적 스탯 (speed = 라인 가속 기여)');
