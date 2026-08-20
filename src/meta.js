@@ -2,6 +2,7 @@
 
 import {
   PROGRESSION, SKILLS, SKILL_BY_ID, xpToNextLevel, META_STORAGE_KEY, BALANCE,
+  rankUnlockLevel,
 } from './config.js';
 
 function emptyRanks() {
@@ -94,8 +95,9 @@ export class Meta {
     if (!skill) return { ok: false, reason: 'unknown' };
     const rank = this.rank(id);
     if (rank >= this.effectiveMaxRank(skill)) return { ok: false, reason: 'max' };
-    if (this.data.level < skill.unlockLevel) {
-      return { ok: false, reason: 'level', unlockLevel: skill.unlockLevel };
+    const unlockLevel = rankUnlockLevel(skill, rank + 1);
+    if (this.data.level < unlockLevel) {
+      return { ok: false, reason: 'level', unlockLevel };
     }
     if (skill.requires && this.rank(skill.requires) < 1) {
       return { ok: false, reason: 'requires', requires: skill.requires };

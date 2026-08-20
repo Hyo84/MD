@@ -123,8 +123,13 @@ export function setupAdmin(game) {
   const skSec = section('스킬 수치 (랭크당)');
   for (const skill of SKILLS) {
     const h = document.createElement('h4');
-    h.textContent = `${skill.name} (해금 Lv${skill.unlockLevel}, 최대 ${skill.maxRank})`;
+    const step = Number.isFinite(skill.rankLevelStep) ? skill.rankLevelStep : 1;
+    h.textContent = `${skill.name} (해금 Lv${skill.unlockLevel}, 랭크당 +${step}Lv, 최대 ${skill.maxRank})`;
     skSec.appendChild(h);
+    if (skill.maxRank > 1) {
+      if (!Number.isFinite(skill.rankLevelStep)) skill.rankLevelStep = 1;
+      skSec.appendChild(numberRow('rankLevelStep', skill, 'rankLevelStep', 1));
+    }
     for (const key of Object.keys(skill)) {
       if (!['perRank', 't2PerRank', 't3PerRank', 't3StartRank', 'dmgPerRank', 'radiusBase', 'radiusPerRank', 'knockbackPerRank', 'healPctPerRank', 'hpPerRank', 'kbPerRank', 'extraPerRank'].includes(key)) continue;
       const step = Math.abs(skill[key]) < 1 ? 0.001 : 1;

@@ -150,6 +150,8 @@ export const SKILL_TREES = [
 
 // cost = 랭크당 포인트. maxRank 1 은 온/오프 해금.
 // requires: 선행 스킬 id (해당 랭크 ≥ 1).
+// rankLevelStep: 랭크마다 필요한 플레이어 레벨 증가 (기본 1).
+//   랭크 N 해금 레벨 = unlockLevel + (N - 1) * rankLevelStep
 export const SKILLS = [
   {
     id: 'launchCd',
@@ -158,6 +160,7 @@ export const SKILLS = [
     maxRank: 5,
     cost: 1,
     unlockLevel: 1,
+    rankLevelStep: 2,
     requires: null,
     perRank: 0.08, // 초 감소
   },
@@ -243,6 +246,7 @@ export const SKILLS = [
     maxRank: 5,
     cost: 1,
     unlockLevel: 5,
+    rankLevelStep: 2,
     requires: 'wall',
     kbPerRank: 22,
   },
@@ -282,6 +286,7 @@ export const SKILLS = [
     maxRank: 5,
     cost: 1,
     unlockLevel: 8,
+    rankLevelStep: 2,
     requires: 'archer',
     perRank: 4,
   },
@@ -298,5 +303,11 @@ export const SKILLS = [
 ];
 
 export const SKILL_BY_ID = Object.fromEntries(SKILLS.map((s) => [s.id, s]));
+
+/** 랭크 N(1부터)을 사려면 필요한 플레이어 레벨. rankLevelStep 기본 1. */
+export function rankUnlockLevel(skill, rank) {
+  const step = Number.isFinite(skill.rankLevelStep) ? skill.rankLevelStep : 1;
+  return skill.unlockLevel + (rank - 1) * step;
+}
 
 export const META_STORAGE_KEY = 'md.knightslide.meta.v1';

@@ -1,6 +1,6 @@
 // 스킬 패널 (스킬 버튼 / K). 구매는 즉시 현재 런에 반영.
 
-import { SKILLS, SKILL_TREES, SKILL_BY_ID, BALANCE, PROGRESSION } from './config.js';
+import { SKILLS, SKILL_TREES, SKILL_BY_ID, BALANCE, PROGRESSION, rankUnlockLevel } from './config.js';
 
 function fmtPct(v) {
   return `${(v * 100).toFixed(v * 100 % 1 === 0 ? 0 : 1)}%`;
@@ -158,14 +158,15 @@ export function setupSkillsUi(game, meta) {
         const rank = meta.rank(skill.id);
         const check = meta.canBuy(skill.id);
         const lockedLevel = check.reason === 'level';
+        const maxRank = meta.effectiveMaxRank(skill);
+        const nextRankLv = rank < maxRank ? rankUnlockLevel(skill, rank + 1) : null;
         const row = document.createElement('div');
-        row.className = 'skill-row' + (lockedLevel ? ' locked' : '') + (rank > 0 ? ' owned' : '');
+        row.className = 'skill-row' + (lockedLevel && rank === 0 ? ' locked' : '') + (rank > 0 ? ' owned' : '');
 
         const body = document.createElement('div');
         body.className = 'skill-body';
         const name = document.createElement('div');
         name.className = 'skill-name';
-        const maxRank = meta.effectiveMaxRank(skill);
         const maxLabel = maxRank === 1 ? (rank >= 1 ? '해금' : '잠김') : `${rank} / ${maxRank}`;
         name.textContent = `${skill.name}  (${maxLabel})`;
         const desc = document.createElement('div');
@@ -173,8 +174,11 @@ export function setupSkillsUi(game, meta) {
         desc.textContent = effectLine(skill, rank);
         const sub = document.createElement('div');
         sub.className = 'skill-unlock';
-        sub.textContent = `해금 레벨 ${skill.unlockLevel}` +
-          (skill.requires ? ` · 선행: ${requireName(skill.requires)}` : '');
+        const bits = [];
+        if (rank === 0 && nextRankLv != null) bits.push(`해금 레벨 ${nextRankLv}`);
+        else if (nextRankLv != null) bits.push(`다음: Lv ${nextRankLv}`);
+        if (skill.requires) bits.push(`선행: ${requireName(skill.requires)}`);
+        sub.textContent = bits.join(' · ');
         body.append(name, desc, sub);
 
         const buy = document.createElement('button');
@@ -182,7 +186,7 @@ export function setupSkillsUi(game, meta) {
         buy.className = 'skill-buy';
         if (lockedLevel) {
           buy.disabled = true;
-          buy.textContent = `Lv ${skill.unlockLevel} 해금`;
+          buy.textContent = `Lv ${check.unlockLevel} 해금`;
         } else if (check.reason === 'requires') {
           buy.disabled = true;
           buy.textContent = `${requireName(skill.requires)} 필요`;
