@@ -1,22 +1,26 @@
 import Matter from 'matter-js';
 import {
-  CANVAS_W, CANVAS_H, DEFEAT_Y, LAUNCHER, SPAWN_Y,
-  UNITS, MONSTERS, HEROES, HERO_LIFESPAN,
-  ATTACK_COOLDOWN, LAUNCH_COOLDOWN,
-  FRICTION_AIR_UNIT, FRICTION_AIR_MONSTER,
-  MAX_LAUNCH_SPEED, LAUNCH_POWER, killsNeeded,
+  CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y,
+  BALANCE, UNITS, MONSTERS, HEROES, HERO_LIFESPAN,
+  FRICTION_AIR_UNIT, killsNeeded,
 } from './config.js';
 import { Effects } from './effects.js';
 
 const { Engine, World, Bodies, Body, Events } = Matter;
 
+// 웨이브라인 슬롯 배치
+const SLOT_COLS = 7;
+const SLOT_MARGIN = 40;
+const SLOT_ROW_H = 46;
+const slotX = (col) => SLOT_MARGIN + (col * (CANVAS_W - SLOT_MARGIN * 2)) / (SLOT_COLS - 1);
+
 export class Game {
   constructor(canvas, ui) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.ui = ui; // { startOverlay, gameoverOverlay, finalScore, restartBtn }
-    this.effects = new Effects();
+    this.ui = ui;
     this.state = 'start'; // start | playing | gameover
+    this.mouse = null;
 
     this._setupInput();
     this.ui.restartBtn.addEventListener('click', () => this.start());
@@ -37,8 +41,7 @@ export class Game {
     this.engine.gravity.x = 0;
     this.engine.gravity.y = 0;
 
-    // 벽: 좌 / 우 / 상 (+안전용 하단)
-    const wallOpts = { isStatic: true, restitution: 0.5, friction: 0.05 };
+    const wallOpts = { isStatic: true, restitution: 0.4, friction: 0.05 };
     World.add(this.engine.world, [
       Bodies.rectangle(-20, CANVAS_H / 2, 40, CANVAS_H * 2, wallOpts),
       Bodies.rectangle(CANVAS_W + 20, CANVAS_H / 2, 40, CANVAS_H * 2, wallOpts),
@@ -46,23 +49,28 @@ export class Game {
       Bodies.rectangle(CANVAS_W / 2, CANVAS_H + 20, CANVAS_W * 2, 40, wallOpts),
     ]);
 
-    this.units = [];       // 아군
-    this.monsters = [];    // 적군
+    this.units = [];                 // 아군 (Matter 바디)
+    this.enemies = [];               // 적 (라인 부착 엔티티, 물리 없음)
     this.unitByBodyId = new Map();
     this.mergeQueue = [];
+    this.occupiedSlots = new Set();  // "row:col"
+
+    this.lineY = LINE_START_Y;       // 웨이브라인 현재 위치
+    this.netSpeed = 0;               // HUD 표시용 순 속도 (+아래 / -위)
 
     this.wave = 1;
     this.kills = 0;
     this.score = 0;
-    this.spawnTimer = 1.2;
+    this.spawnTimer = 1.5;
     this.bossActive = false;
-    this.bossWarnT = 0;   // >0 이면 보스 경고 중
     this.bossPending = false;
+    this.bossWarnT = 0;
 
     this.launchCd = 0;
+    this.aimX = CANVAS_W / 2;
+    this.dragging = false;
     this.currentTier = this._rollTier();
     this.nextTier = this._rollTier();
-    this.drag = null; // { x, y } 현재 드래그 좌표
 
     this.effects = new Effects();
 
@@ -86,7 +94,7 @@ export class Game {
     return Math.random() < 0.75 ? 1 : 2;
   }
 
-  // ---------- 입력 ----------
+  // ---------- 입력: 가로 위치 선택 + 수직 발사 ----------
   _setupInput() {
     const toCanvas = (e) => {
       const rect = this.canvas.getBoundingClientRect();
@@ -95,44 +103,36 @@ export class Game {
         y: (e.clientY - rect.top) * (CANVAS_H / rect.height),
       };
     };
+    const clampAimX = (x) => Math.max(24, Math.min(CANVAS_W - 24, x));
 
     this.canvas.addEventListener('pointerdown', (e) => {
       if (this.state !== 'playing') return;
       const p = toCanvas(e);
-      if (p.y > 560 && this.launchCd <= 0) {
-        this.drag = p;
+      if (p.y > 560) {
+        this.dragging = true;
+        this.aimX = clampAimX(p.x);
         this.canvas.setPointerCapture(e.pointerId);
       }
     });
     this.canvas.addEventListener('pointermove', (e) => {
-      if (this.drag) this.drag = toCanvas(e);
-    });
-    const release = (e) => {
-      if (!this.drag) return;
       const p = toCanvas(e);
-      this.drag = null;
+      this.mouse = p;
+      if (this.dragging) this.aimX = clampAimX(p.x);
+    });
+    this.canvas.addEventListener('pointerup', (e) => {
+      if (!this.dragging) return;
+      this.dragging = false;
       if (this.state !== 'playing' || this.launchCd > 0) return;
-      // 슬링샷: 발사대 아래로 당겼을 때만 위로 발사
-      const dx = LAUNCHER.x - p.x;
-      const dy = LAUNCHER.y - p.y;
-      if (Math.hypot(dx, dy) < 15 || dy <= 0) return;
-      this._launchUnit(dx, dy);
-    };
-    this.canvas.addEventListener('pointerup', release);
-    this.canvas.addEventListener('pointercancel', () => { this.drag = null; });
+      this.aimX = clampAimX(toCanvas(e).x);
+      this._launchUnit();
+    });
+    this.canvas.addEventListener('pointercancel', () => { this.dragging = false; });
   }
 
-  _launchUnit(dx, dy) {
-    const norm = Math.hypot(dx, dy) || 1;
-    const speed = Math.min(norm * LAUNCH_POWER, MAX_LAUNCH_SPEED);
-
-    const u = this._spawnUnit(this.currentTier, LAUNCHER.x, LAUNCHER.y);
-    Body.setVelocity(u.body, {
-      x: (dx / norm) * speed,
-      y: -(dy / norm) * speed,
-    });
-
-    this.launchCd = LAUNCH_COOLDOWN;
+  _launchUnit() {
+    const u = this._spawnUnit(this.currentTier, this.aimX, LAUNCHER_Y);
+    Body.setVelocity(u.body, { x: 0, y: -BALANCE.launchSpeed });
+    this.launchCd = BALANCE.launchCooldown;
     this.currentTier = this.nextTier;
     this.nextTier = this._rollTier();
   }
@@ -142,7 +142,7 @@ export class Game {
     const stat = UNITS[tier - 1];
     const body = Bodies.circle(x, y, stat.r, {
       frictionAir: FRICTION_AIR_UNIT,
-      restitution: 0.35,
+      restitution: 0.3,
       friction: 0.05,
     });
     Body.setMass(body, stat.mass);
@@ -150,13 +150,12 @@ export class Game {
 
     const u = {
       body, tier,
-      hp: stat.hp, maxHp: stat.hp, atk: stat.atk,
+      hp: stat.hp, maxHp: stat.hp,
       r: stat.r, color: stat.color,
       attackCd: Math.random() * 0.3,
       isMerging: false, dead: false,
-      settled: false, age: 0,
-      flashT: 0,
-      abilityT: 0, // T7 힐 / T9 충격파 / 영웅 스킬 타이머
+      holding: false,
+      flashT: 0, abilityT: 0,
       heroType,
       heroLife: heroType ? HERO_LIFESPAN : 0,
       valkTick: 0,
@@ -166,27 +165,40 @@ export class Game {
     return u;
   }
 
-  _spawnMonster(key, x, y) {
-    const stat = MONSTERS[key];
-    const body = Bodies.circle(x, y, stat.r, {
-      frictionAir: stat.kbResist ? FRICTION_AIR_MONSTER * 3 : FRICTION_AIR_MONSTER,
-      restitution: 0.25,
-      friction: 0.05,
-    });
-    Body.setMass(body, stat.mass);
-    World.add(this.engine.world, body);
+  _findSlot() {
+    for (let row = 0; row < 30; row++) {
+      const free = [];
+      for (let col = 0; col < SLOT_COLS; col++) {
+        if (!this.occupiedSlots.has(`${row}:${col}`)) free.push(col);
+      }
+      if (free.length > 0) {
+        const col = free[Math.floor(Math.random() * free.length)];
+        return { row, col };
+      }
+    }
+    return { row: 0, col: 0 };
+  }
 
+  _spawnEnemy(key) {
+    const stat = MONSTERS[key];
+    const isBoss = !!stat.isBoss;
+    let row = 0, col = -1, x = CANVAS_W / 2;
+    if (!isBoss) {
+      const slot = this._findSlot();
+      row = slot.row;
+      col = slot.col;
+      this.occupiedSlots.add(`${row}:${col}`);
+      x = slotX(col) + (Math.random() * 14 - 7);
+    }
     const m = {
-      body, key,
-      name: stat.name, icon: stat.icon,
-      color: stat.color, outline: stat.outline,
-      hp: stat.hp, maxHp: stat.hp, atk: stat.atk,
-      r: stat.r, speed: stat.speed, score: stat.score,
-      regen: stat.regen || 0, isBoss: !!stat.isBoss,
+      key, isBoss, row, col, x,
+      y: this.lineY - row * SLOT_ROW_H,
+      hp: stat.hp, maxHp: stat.hp,
       attackCd: Math.random() * 0.4,
       stunT: 0, burn: null, flashT: 0, dead: false,
     };
-    this.monsters.push(m);
+    this.enemies.push(m);
+    this.effects.burst(m.x, m.y, stat.color, 8, 2.5, 2.5);
     return m;
   }
 
@@ -199,15 +211,15 @@ export class Game {
     if (i >= 0) this.units.splice(i, 1);
   }
 
-  _removeMonster(m) {
+  _removeEnemy(m) {
     if (m.dead) return;
     m.dead = true;
-    World.remove(this.engine.world, m.body);
-    const i = this.monsters.indexOf(m);
-    if (i >= 0) this.monsters.splice(i, 1);
+    if (!m.isBoss) this.occupiedSlots.delete(`${m.row}:${m.col}`);
+    const i = this.enemies.indexOf(m);
+    if (i >= 0) this.enemies.splice(i, 1);
   }
 
-  // ---------- 머지 ----------
+  // ---------- 머지 (아군 물리 충돌) ----------
   _onCollision(ev) {
     for (const pair of ev.pairs) {
       const a = this.unitByBodyId.get(pair.bodyA.id);
@@ -229,8 +241,8 @@ export class Game {
         continue;
       }
       const mx = (a.body.position.x + b.body.position.x) / 2;
-      // 패배선 바로 근처에서 합쳐질 때 억울한 즉사 방지를 위해 살짝 위로 보정
-      const my = Math.min((a.body.position.y + b.body.position.y) / 2, DEFEAT_Y - 30);
+      let my = (a.body.position.y + b.body.position.y) / 2;
+      my = Math.max(this.lineY + 40, Math.min(my, DEFEAT_Y - 30));
       const newTier = a.tier + 1;
       this._removeUnit(a);
       this._removeUnit(b);
@@ -238,8 +250,7 @@ export class Game {
       if (newTier === 10) {
         this._summonHero(mx, my);
       } else {
-        const u = this._spawnUnit(newTier, mx, my);
-        u.settled = true;
+        this._spawnUnit(newTier, mx, my);
         this.effects.burst(mx, my, UNITS[newTier - 1].color, 18, 4, 3.5);
         this.effects.floatText(mx, my - 30, UNITS[newTier - 1].name, '#fff', 15, 0.9);
       }
@@ -251,8 +262,7 @@ export class Game {
   _summonHero(x, y) {
     const types = Object.keys(HEROES);
     const type = types[Math.floor(Math.random() * types.length)];
-    const u = this._spawnUnit(10, x, y, type);
-    u.settled = true;
+    this._spawnUnit(10, x, y, type);
     this.effects.burst(x, y, '#FF4500', 40, 6, 5);
     this.effects.burst(x, y, '#FFD700', 30, 4.5, 4);
     this.effects.floatText(CANVAS_W / 2, 300, `영웅 소환! ${HEROES[type].name}`, '#FFD700', 28, 2.0);
@@ -281,10 +291,9 @@ export class Game {
     if (this.bossWarnT > 0) {
       this.bossWarnT -= dt;
       if (this.bossWarnT <= 0) {
-        const b = this._spawnMonster('boss', CANVAS_W / 2, SPAWN_Y);
-        Body.setVelocity(b.body, { x: 0, y: 2 });
+        this._spawnEnemy('boss');
         this.bossActive = true;
-        this.effects.burst(CANVAS_W / 2, SPAWN_Y, '#B22222', 30, 5, 5);
+        this.effects.burst(CANVAS_W / 2, this.lineY, '#B22222', 30, 5, 5);
       }
       return;
     }
@@ -298,20 +307,17 @@ export class Game {
 
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
-      const interval = Math.max(0.7, 2.3 - this.wave * 0.15) * (this.bossActive ? 1.8 : 1);
+      const interval = Math.max(0.7, BALANCE.spawnInterval - this.wave * 0.15) * (this.bossActive ? 1.8 : 1);
       this.spawnTimer = interval * (0.7 + Math.random() * 0.6);
-      const key = this._pickMonster();
-      const stat = MONSTERS[key];
-      const x = stat.r + 15 + Math.random() * (CANVAS_W - stat.r * 2 - 30);
-      const m = this._spawnMonster(key, x, SPAWN_Y);
-      Body.setVelocity(m.body, { x: 0, y: 1 });
+      this._spawnEnemy(this._pickMonster());
     }
   }
 
-  _onMonsterKilled(m) {
-    this.score += m.score;
-    this.effects.burst(m.body.position.x, m.body.position.y, m.color, 12, 3, 3);
-    this.effects.floatText(m.body.position.x, m.body.position.y - 20, `+${m.score}`, '#ffd', 13, 0.7);
+  _onEnemyKilled(m) {
+    const stat = MONSTERS[m.key];
+    this.score += stat.score;
+    this.effects.burst(m.x, m.y, stat.color, 12, 3, 3);
+    this.effects.floatText(m.x, m.y - 20, `+${stat.score}`, '#ffd', 13, 0.7);
     if (m.isBoss) {
       this.bossActive = false;
       this.bossPending = false;
@@ -321,78 +327,146 @@ export class Game {
     } else {
       this.kills += 1;
     }
-    this._removeMonster(m);
+    this._removeEnemy(m);
+  }
+
+  _damageEnemy(m, dmg) {
+    if (m.dead) return;
+    m.hp -= dmg;
+    m.flashT = 0.12;
+    if (m.hp <= 0) this._onEnemyKilled(m);
+  }
+
+  // ---------- 웨이브라인 이동 (줄다리기) ----------
+  _unitStat(u) {
+    return UNITS[u.tier - 1];
+  }
+
+  _unitEngaged(u) {
+    const range = this._unitStat(u).range;
+    const { x, y } = u.body.position;
+    for (const m of this.enemies) {
+      const er = MONSTERS[m.key].r;
+      if (Math.hypot(m.x - x, m.y - y) <= range + er) return true;
+    }
+    return false;
+  }
+
+  _updateLine(dt) {
+    if (this.enemies.length === 0) {
+      this.netSpeed = 0;
+      return;
+    }
+    let advance = BALANCE.baseLineSpeed;
+    for (const m of this.enemies) {
+      if (m.stunT <= 0) advance += MONSTERS[m.key].speed;
+    }
+    let stopping = 0;
+    for (const u of this.units) {
+      if (this._unitEngaged(u)) stopping += this._unitStat(u).stop;
+    }
+    this.netSpeed = advance - stopping;
+    this.lineY += this.netSpeed * dt;
+    if (this.lineY < LINE_START_Y) this.lineY = LINE_START_Y;
+    if (this.lineY >= DEFEAT_Y) {
+      this.lineY = DEFEAT_Y;
+      this._gameOver();
+      return;
+    }
+    // 적 위치를 라인에 맞춰 갱신 (뒤 열은 라인 위쪽으로 적층)
+    for (const m of this.enemies) {
+      m.y = this.lineY - m.row * SLOT_ROW_H;
+    }
+  }
+
+  // ---------- 아군 유닛: 라인 앞에서 정지 ----------
+  _updateUnitHolding() {
+    for (const u of this.units) {
+      const range = this._unitStat(u).range;
+      const gap = u.body.position.y - this.lineY;
+      // 사거리 안에 들어오면 전진 정지 (그 자리에서 교전)
+      if (gap <= range && u.body.velocity.y < 0) {
+        Body.setVelocity(u.body, { x: u.body.velocity.x, y: 0 });
+        u.holding = true;
+      }
+      // 라인이 전진하면 유닛을 밀어냄 (라인 관통 방지)
+      const minY = this.lineY + 14 + u.r;
+      if (u.body.position.y < minY) {
+        Body.setPosition(u.body, { x: u.body.position.x, y: minY });
+        if (u.body.velocity.y < 0) Body.setVelocity(u.body, { x: u.body.velocity.x, y: 0 });
+      }
+    }
   }
 
   // ---------- 전투 ----------
-  _dist(a, b) {
-    return Math.hypot(a.body.position.x - b.body.position.x, a.body.position.y - b.body.position.y);
-  }
-
-  _damageMonster(m, dmg, source) {
-    m.hp -= dmg;
-    m.flashT = 0.12;
-    if (m.hp <= 0) this._onMonsterKilled(m);
-  }
-
   _jeanneBuffed(u) {
     if (u.heroType) return false;
     for (const h of this.units) {
-      if (h.heroType === 'jeanne' && this._dist(u, h) < 140) return true;
+      if (h.heroType === 'jeanne') {
+        const d = Math.hypot(
+          u.body.position.x - h.body.position.x,
+          u.body.position.y - h.body.position.y,
+        );
+        if (d < 140) return true;
+      }
     }
     return false;
   }
 
   _updateCombat(dt) {
-    // 아군 공격
+    // 아군 → 적
     for (const u of [...this.units]) {
       if (u.dead) continue;
       u.attackCd -= dt;
       if (u.attackCd > 0) continue;
+      const stat = this._unitStat(u);
+      const { x, y } = u.body.position;
       let target = null, best = Infinity;
-      for (const m of this.monsters) {
-        const d = this._dist(u, m) - u.r - m.r;
-        if (d < 6 && d < best) { best = d; target = m; }
+      for (const m of this.enemies) {
+        const er = MONSTERS[m.key].r;
+        const d = Math.hypot(m.x - x, m.y - y) - er;
+        if (d <= stat.range && d < best) { best = d; target = m; }
       }
       if (!target) continue;
-      u.attackCd = ATTACK_COOLDOWN;
+      u.attackCd = BALANCE.attackCooldown;
 
-      let dmg = u.atk;
+      let dmg = stat.atk;
       if (this._jeanneBuffed(u)) dmg *= 1.5;
-      this.effects.hitFlash(target.body.position.x, target.body.position.y, '#fff');
+      this.effects.hitFlash(target.x, target.y, '#fff');
 
-      // 특수 능력
+      // 티어 특수 능력
       if (u.tier === 5) {
-        // 소범위 휩쓸기
-        for (const m2 of [...this.monsters]) {
-          if (m2 !== target && !m2.dead && this._dist(target, m2) < 60) {
-            this._damageMonster(m2, dmg * 0.5, u);
+        for (const m2 of [...this.enemies]) {
+          if (m2 !== target && !m2.dead && Math.hypot(m2.x - target.x, m2.y - target.y) < 60) {
+            this._damageEnemy(m2, dmg * 0.5);
           }
         }
       }
       if (u.tier === 6 && Math.random() < 0.10 && !target.dead) {
         target.stunT = Math.max(target.stunT, 0.5);
-        this.effects.floatText(target.body.position.x, target.body.position.y - 24, '기절!', '#87CEFA', 12, 0.5);
+        this.effects.floatText(target.x, target.y - 24, '기절!', '#87CEFA', 12, 0.5);
       }
       if (u.tier === 8 && !target.dead) {
-        target.burn = { dps: u.atk * 0.2, t: 3 };
+        target.burn = { dps: stat.atk * 0.2, t: 3 };
       }
-      if (!target.dead) this._damageMonster(target, dmg, u);
+      if (!target.dead) this._damageEnemy(target, dmg);
     }
 
-    // 몬스터 공격
-    for (const m of [...this.monsters]) {
+    // 적 → 아군
+    for (const m of [...this.enemies]) {
       if (m.dead || m.stunT > 0) continue;
       m.attackCd -= dt;
       if (m.attackCd > 0) continue;
+      const stat = MONSTERS[m.key];
+      const reach = stat.r + BALANCE.enemyReach;
       let target = null, best = Infinity;
       for (const u of this.units) {
-        const d = this._dist(m, u) - m.r - u.r;
-        if (d < 6 && d < best) { best = d; target = u; }
+        const d = Math.hypot(u.body.position.x - m.x, u.body.position.y - m.y) - u.r;
+        if (d <= reach && d < best) { best = d; target = u; }
       }
       if (!target) continue;
-      m.attackCd = ATTACK_COOLDOWN;
-      target.hp -= m.atk;
+      m.attackCd = BALANCE.attackCooldown;
+      target.hp -= stat.atk;
       target.flashT = 0.12;
       this.effects.hitFlash(target.body.position.x, target.body.position.y, '#ff6b6b');
       if (target.hp <= 0) {
@@ -402,38 +476,54 @@ export class Game {
     }
   }
 
+  _updateEnemyTicks(dt) {
+    for (const m of [...this.enemies]) {
+      if (m.dead) continue;
+      if (m.stunT > 0) m.stunT -= dt;
+      if (m.burn) {
+        m.burn.t -= dt;
+        this._damageEnemy(m, m.burn.dps * dt);
+        if (m.dead) continue;
+        if (m.burn && m.burn.t <= 0) m.burn = null;
+      }
+      const stat = MONSTERS[m.key];
+      if (stat.regen && m.hp < m.maxHp) {
+        m.hp = Math.min(m.maxHp, m.hp + stat.regen * dt);
+      }
+      m.flashT = Math.max(0, m.flashT - dt);
+    }
+  }
+
   _updateUnitAbilities(dt) {
     for (const u of [...this.units]) {
       if (u.dead) continue;
       u.abilityT += dt;
+      const stat = this._unitStat(u);
 
       // T7 성기사: 2초마다 주변 아군 회복
       if (u.tier === 7 && u.abilityT >= 2) {
         u.abilityT = 0;
         for (const a of this.units) {
           if (a.dead || a === u) continue;
-          if (this._dist(u, a) < 110 && a.hp < a.maxHp) {
+          const d = Math.hypot(
+            a.body.position.x - u.body.position.x,
+            a.body.position.y - u.body.position.y,
+          );
+          if (d < 110 && a.hp < a.maxHp) {
             a.hp = Math.min(a.maxHp, a.hp + a.maxHp * 0.04);
             this.effects.burst(a.body.position.x, a.body.position.y - a.r, '#7CFC00', 3, 1.5, 2);
           }
         }
       }
 
-      // T9 대원수: 4초마다 충격파
+      // T9 대원수: 4초마다 사거리 내 광역 충격파
       if (u.tier === 9 && u.abilityT >= 4) {
         u.abilityT = 0;
         this.effects.burst(u.body.position.x, u.body.position.y, '#9370DB', 24, 5.5, 3.5);
-        for (const m of [...this.monsters]) {
+        for (const m of [...this.enemies]) {
           if (m.dead) continue;
-          const d = this._dist(u, m);
-          if (d < 140) {
-            const dx = m.body.position.x - u.body.position.x;
-            const dy = m.body.position.y - u.body.position.y;
-            const n = Math.hypot(dx, dy) || 1;
-            const push = m.kbResist ? 3 : 8;
-            Body.setVelocity(m.body, { x: (dx / n) * push, y: (dy / n) * push });
-            this._damageMonster(m, u.atk * 0.3, u);
-          }
+          const d = Math.hypot(m.x - u.body.position.x, m.y - u.body.position.y);
+          if (d < stat.range) this._damageEnemy(m, stat.atk * 0.3);
         }
       }
 
@@ -445,62 +535,25 @@ export class Game {
           this._removeUnit(u);
           continue;
         }
-
         if (u.heroType === 'arthur' && u.abilityT >= 3) {
           u.abilityT = 0;
-          const y = u.body.position.y;
-          this.effects.lineFlash(y, '#9be7ff');
-          for (const m of [...this.monsters]) {
-            if (!m.dead) this._damageMonster(m, u.atk * 0.4, u);
+          this.effects.lineFlash(this.lineY, '#9be7ff');
+          for (const m of [...this.enemies]) {
+            if (!m.dead) this._damageEnemy(m, stat.atk * 0.4);
           }
         }
-
         if (u.heroType === 'valkyrie') {
           u.valkTick += dt;
-          const doDamage = u.valkTick >= 0.3;
-          if (doDamage) u.valkTick = 0;
-          for (const m of [...this.monsters]) {
-            if (m.dead) continue;
-            const d = this._dist(u, m);
-            if (d < 160) {
-              const dx = u.body.position.x - m.body.position.x;
-              const dy = u.body.position.y - m.body.position.y;
-              const n = Math.hypot(dx, dy) || 1;
-              Body.applyForce(m.body, m.body.position, {
-                x: (dx / n) * 0.0018 * m.body.mass,
-                y: (dy / n) * 0.0018 * m.body.mass,
-              });
-              if (doDamage) this._damageMonster(m, u.atk * 0.12, u);
+          if (u.valkTick >= 0.3) {
+            u.valkTick = 0;
+            for (const m of [...this.enemies]) {
+              if (m.dead) continue;
+              const d = Math.hypot(m.x - u.body.position.x, m.y - u.body.position.y);
+              if (d < stat.range) this._damageEnemy(m, stat.atk * 0.12);
             }
           }
         }
       }
-    }
-  }
-
-  _updateMonsters(dt) {
-    for (const m of [...this.monsters]) {
-      if (m.dead) continue;
-
-      if (m.stunT > 0) {
-        m.stunT -= dt;
-      } else if (m.body.velocity.y < m.speed) {
-        // 아래로 꾸준히 전진
-        Body.applyForce(m.body, m.body.position, { x: 0, y: 0.0016 * m.body.mass });
-      }
-
-      if (m.burn) {
-        m.burn.t -= dt;
-        this._damageMonster(m, m.burn.dps * dt, null);
-        if (m.dead) continue;
-        if (m.burn && m.burn.t <= 0) m.burn = null;
-      }
-
-      if (m.regen && m.hp < m.maxHp) {
-        m.hp = Math.min(m.maxHp, m.hp + m.regen * dt);
-      }
-
-      m.flashT = Math.max(0, m.flashT - dt);
     }
   }
 
@@ -521,28 +574,16 @@ export class Game {
     Engine.update(this.engine, 1000 / 60);
     this._processMerges();
     this._updateSpawning(dt);
-    this._updateMonsters(dt);
+    this._updateLine(dt);
+    if (this.state !== 'playing') return;
+    this._updateUnitHolding();
     this._updateCombat(dt);
+    this._updateEnemyTicks(dt);
     this._updateUnitAbilities(dt);
     this.effects.update(dt);
 
-    // 정착 판정 + 패배선 체크
-    for (const u of [...this.units]) {
-      u.age += dt;
+    for (const u of this.units) {
       u.flashT = Math.max(0, u.flashT - dt);
-      if (!u.settled && (u.age > 2.5 || (u.age > 0.4 && u.body.speed < 0.8))) {
-        u.settled = true;
-      }
-      if (u.settled && u.body.position.y > DEFEAT_Y) {
-        this._gameOver();
-        return;
-      }
-    }
-    for (const m of this.monsters) {
-      if (m.body.position.y > DEFEAT_Y) {
-        this._gameOver();
-        return;
-      }
     }
   }
 
@@ -558,18 +599,40 @@ export class Game {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // 석재 타일 느낌의 옅은 선
     ctx.strokeStyle = 'rgba(255,255,255,0.03)';
     ctx.lineWidth = 1;
     for (let y = 0; y < CANVAS_H; y += 80) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CANVAS_W, y); ctx.stroke();
     }
 
+    // 적 점령 영역 (라인 위쪽)
+    ctx.fillStyle = 'rgba(140, 30, 40, 0.10)';
+    ctx.fillRect(0, 0, CANVAS_W, this.lineY);
+
+    // 웨이브라인
+    ctx.save();
+    ctx.strokeStyle = '#c33a5a';
+    ctx.lineWidth = 4;
+    ctx.shadowColor = '#e0335a';
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.moveTo(0, this.lineY);
+    ctx.lineTo(CANVAS_W, this.lineY);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255, 160, 170, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.moveTo(0, this.lineY);
+    ctx.lineTo(CANVAS_W, this.lineY);
+    ctx.stroke();
+    ctx.restore();
+
     // 발사대 구역
     ctx.fillStyle = 'rgba(120, 90, 40, 0.12)';
     ctx.fillRect(0, DEFEAT_Y, CANVAS_W, CANVAS_H - DEFEAT_Y);
 
-    // 패배선 (빛나는 빨간 점선)
+    // 마지노선 (빛나는 빨간 점선)
     ctx.save();
     ctx.strokeStyle = '#ff3333';
     ctx.lineWidth = 3;
@@ -582,65 +645,53 @@ export class Game {
     ctx.stroke();
     ctx.restore();
 
-    // 조준선
-    if (this.drag && this.state === 'playing') {
-      const dx = LAUNCHER.x - this.drag.x;
-      const dy = LAUNCHER.y - this.drag.y;
-      if (dy > 0) {
-        const n = Math.hypot(dx, dy) || 1;
-        const len = Math.min(n * 2.2, 340);
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255, 235, 160, 0.85)';
-        ctx.lineWidth = 3;
-        ctx.setLineDash([6, 10]);
-        ctx.beginPath();
-        ctx.moveTo(LAUNCHER.x, LAUNCHER.y);
-        ctx.lineTo(LAUNCHER.x + (dx / n) * len, LAUNCHER.y - Math.abs(dy / n) * len);
-        ctx.stroke();
-        ctx.restore();
-        // 당김 표시선
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(LAUNCHER.x, LAUNCHER.y);
-        ctx.lineTo(this.drag.x, this.drag.y);
-        ctx.stroke();
-        ctx.restore();
-      }
+    // 발사 가이드 (수직 점선)
+    if (this.dragging && this.state === 'playing') {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 235, 160, 0.6)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 10]);
+      ctx.beginPath();
+      ctx.moveTo(this.aimX, LAUNCHER_Y - 20);
+      ctx.lineTo(this.aimX, this.lineY + 20);
+      ctx.stroke();
+      ctx.restore();
     }
 
-    // 몬스터
-    for (const m of this.monsters) {
-      const { x, y } = m.body.position;
+    // 적 (라인 부착)
+    for (const m of this.enemies) {
+      const stat = MONSTERS[m.key];
       ctx.save();
-      ctx.fillStyle = m.flashT > 0 ? '#ffffff' : m.color;
-      ctx.strokeStyle = m.outline;
+      ctx.fillStyle = m.flashT > 0 ? '#ffffff' : stat.color;
+      ctx.strokeStyle = stat.outline;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(x, y, m.r, 0, Math.PI * 2);
+      ctx.arc(m.x, m.y, stat.r, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       if (m.stunT > 0) {
         ctx.fillStyle = '#87CEFA';
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('✦', x, y - m.r - 14);
+        ctx.fillText('✦', m.x, m.y - stat.r - 14);
       }
       if (m.burn) {
         ctx.fillStyle = '#FF8C00';
         ctx.beginPath();
-        ctx.arc(x + m.r * 0.5, y - m.r * 0.5, 4, 0, Math.PI * 2);
+        ctx.arc(m.x + stat.r * 0.5, m.y - stat.r * 0.5, 4, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.fillStyle = m.key === 'skeleton' ? '#333' : '#fff';
-      ctx.font = `bold ${Math.max(11, m.r * 0.62)}px 'Malgun Gothic', sans-serif`;
+      ctx.font = `bold ${Math.max(11, stat.r * 0.62)}px 'Malgun Gothic', sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(m.icon, x, y + 1);
+      ctx.fillText(stat.icon, m.x, m.y + 1);
       ctx.restore();
-      this._drawHpBar(x, y - m.r - 9, m.r * 2, m.hp / m.maxHp, '#e74c3c');
+      this._drawHpBar(m.x, m.y - stat.r - 9, stat.r * 2, m.hp / m.maxHp, '#e74c3c');
     }
+
+    // 사거리 표시 (영웅은 항상, 다른 유닛은 마우스 오버 시)
+    this._drawRangeIndicators();
 
     // 아군 유닛
     for (const u of this.units) {
@@ -659,19 +710,18 @@ export class Game {
       ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.fillStyle = (u.tier === 7) ? '#5c4500' : '#fff';
-      ctx.font = `bold ${Math.max(12, u.r * 0.7)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (u.heroType) {
         ctx.font = `bold ${u.r * 0.5}px 'Malgun Gothic', sans-serif`;
         ctx.fillText(HEROES[u.heroType].name, x, y + 1);
       } else {
+        ctx.font = `bold ${Math.max(12, u.r * 0.7)}px sans-serif`;
         ctx.fillText(String(u.tier), x, y + 1);
       }
       ctx.restore();
       this._drawHpBar(x, y - u.r - 9, u.r * 2, u.hp / u.maxHp, '#2ecc71');
       if (u.heroType) {
-        // 남은 시간 링
         ctx.save();
         ctx.strokeStyle = 'rgba(255, 215, 0, 0.8)';
         ctx.lineWidth = 3;
@@ -696,7 +746,7 @@ export class Game {
       }
     }
 
-    // 발사 대기 유닛
+    // 발사 대기 유닛 + 다음 유닛
     if (this.state === 'playing') {
       const stat = UNITS[this.currentTier - 1];
       const ready = this.launchCd <= 0;
@@ -706,17 +756,16 @@ export class Game {
       ctx.strokeStyle = 'rgba(255,255,255,0.5)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(LAUNCHER.x, LAUNCHER.y, stat.r, 0, Math.PI * 2);
+      ctx.arc(this.aimX, LAUNCHER_Y, stat.r, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#fff';
       ctx.font = `bold ${stat.r * 0.7}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(this.currentTier), LAUNCHER.x, LAUNCHER.y + 1);
+      ctx.fillText(String(this.currentTier), this.aimX, LAUNCHER_Y + 1);
       ctx.restore();
 
-      // 다음 유닛 미리보기
       const nstat = UNITS[this.nextTier - 1];
       ctx.save();
       ctx.globalAlpha = 0.85;
@@ -738,10 +787,8 @@ export class Game {
       ctx.restore();
     }
 
-    // 이펙트
     this.effects.draw(ctx, CANVAS_W);
 
-    // 보스 경고 점멸
     if (this.bossWarnT > 0 && Math.floor(performance.now() / 200) % 2 === 0) {
       ctx.save();
       ctx.fillStyle = 'rgba(255, 40, 40, 0.10)';
@@ -749,8 +796,35 @@ export class Game {
       ctx.restore();
     }
 
-    // HUD
     this._drawHud();
+  }
+
+  _drawRangeIndicators() {
+    const ctx = this.ctx;
+    for (const u of this.units) {
+      const { x, y } = u.body.position;
+      const range = this._unitStat(u).range;
+      let show = false;
+      let alpha = 0.12;
+      if (u.heroType) {
+        show = true;
+        alpha = 0.15;
+      } else if (this.mouse && Math.hypot(this.mouse.x - x, this.mouse.y - y) < u.r + 6) {
+        show = true;
+        alpha = 0.22;
+      }
+      if (!show) continue;
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha + 0.08})`;
+      ctx.fillStyle = `rgba(160, 200, 255, ${alpha * 0.35})`;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 8]);
+      ctx.beginPath();
+      ctx.arc(x, y, range, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   _drawHpBar(x, y, w, ratio, color) {
@@ -769,19 +843,34 @@ export class Game {
     const ctx = this.ctx;
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(0, 0, CANVAS_W, 34);
+    ctx.fillRect(0, 0, CANVAS_W, 52);
     ctx.fillStyle = '#f0e6d2';
     ctx.font = "bold 15px 'Malgun Gothic', sans-serif";
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`웨이브 ${this.wave}`, 12, 18);
+    ctx.fillText(`웨이브 ${this.wave}`, 12, 16);
 
     ctx.textAlign = 'center';
     const need = killsNeeded(this.wave);
-    ctx.fillText(this.bossActive ? '보스 전투 중!' : `처치 ${this.kills} / ${need}`, CANVAS_W / 2, 18);
+    ctx.fillText(this.bossActive ? '보스 전투 중!' : `처치 ${this.kills} / ${need}`, CANVAS_W / 2, 16);
 
     ctx.textAlign = 'right';
-    ctx.fillText(`점수 ${this.score}`, CANVAS_W - 12, 18);
+    ctx.fillText(`점수 ${this.score}`, CANVAS_W - 12, 16);
+
+    // 라인 순 속도 (줄다리기 상태)
+    ctx.textAlign = 'center';
+    ctx.font = "bold 14px 'Malgun Gothic', sans-serif";
+    const v = this.netSpeed;
+    if (Math.abs(v) < 0.05) {
+      ctx.fillStyle = '#aaa';
+      ctx.fillText('라인 ─ 정지', CANVAS_W / 2, 39);
+    } else if (v > 0) {
+      ctx.fillStyle = '#ff7060';
+      ctx.fillText(`라인 ▼ ${v.toFixed(1)}`, CANVAS_W / 2, 39);
+    } else {
+      ctx.fillStyle = '#6fe08a';
+      ctx.fillText(`라인 ▲ ${(-v).toFixed(1)}`, CANVAS_W / 2, 39);
+    }
     ctx.restore();
   }
 }

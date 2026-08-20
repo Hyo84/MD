@@ -1,5 +1,6 @@
 import './style.css';
 import { Game } from './game.js';
+import { setupAdmin } from './admin.js';
 
 const canvas = document.getElementById('game');
 const ui = {
@@ -10,3 +11,4 @@ const ui = {
 };
 
 new Game(canvas, ui);
+setupAdmin();
