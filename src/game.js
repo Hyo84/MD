@@ -165,18 +165,30 @@ export class Game {
     return u;
   }
 
-  _findSlot() {
+  // 반지름 기반 스폰 위치 탐색: 기존 적(보스 포함)과 원이 겹치지 않는 빈 슬롯
+  _findSpawnSpot(radius, exclude = null) {
     for (let row = 0; row < 30; row++) {
-      const free = [];
+      const candidates = [];
       for (let col = 0; col < SLOT_COLS; col++) {
-        if (!this.occupiedSlots.has(`${row}:${col}`)) free.push(col);
+        if (this.occupiedSlots.has(`${row}:${col}`)) continue;
+        const x = slotX(col) + (Math.random() * 14 - 7);
+        const y = this.lineY - row * SLOT_ROW_H;
+        let overlaps = false;
+        for (const m of this.enemies) {
+          if (m === exclude) continue;
+          const mr = MONSTERS[m.key].r;
+          if (Math.hypot(m.x - x, m.y - y) < radius + mr + 2) {
+            overlaps = true;
+            break;
+          }
+        }
+        if (!overlaps) candidates.push({ row, col, x });
       }
-      if (free.length > 0) {
-        const col = free[Math.floor(Math.random() * free.length)];
-        return { row, col };
+      if (candidates.length > 0) {
+        return candidates[Math.floor(Math.random() * candidates.length)];
       }
     }
-    return { row: 0, col: 0 };
+    return null;
   }
 
   _spawnEnemy(key) {
@@ -184,11 +196,21 @@ export class Game {
     const isBoss = !!stat.isBoss;
     let row = 0, col = -1, x = CANVAS_W / 2;
     if (!isBoss) {
-      const slot = this._findSlot();
-      row = slot.row;
-      col = slot.col;
+      const spot = this._findSpawnSpot(stat.r);
+      if (spot) {
+        row = spot.row;
+        col = spot.col;
+        x = spot.x;
+      } else {
+        // 보드가 극단적으로 가득 찬 경우: 겹침을 무시하고 빈 슬롯 사용
+        for (let r2 = 0; r2 < 30 && col < 0; r2++) {
+          for (let c2 = 0; c2 < SLOT_COLS; c2++) {
+            if (!this.occupiedSlots.has(`${r2}:${c2}`)) { row = r2; col = c2; break; }
+          }
+        }
+        x = slotX(Math.max(0, col)) + (Math.random() * 14 - 7);
+      }
       this.occupiedSlots.add(`${row}:${col}`);
-      x = slotX(col) + (Math.random() * 14 - 7);
     }
     const m = {
       key, isBoss, row, col, x,
@@ -198,6 +220,26 @@ export class Game {
       stunT: 0, burn: null, flashT: 0, dead: false,
     };
     this.enemies.push(m);
+
+    // 보스 착지 시 이미 그 자리에 있던 적들을 겹치지 않는 슬롯으로 밀어냄
+    if (isBoss) {
+      for (const other of this.enemies) {
+        if (other === m) continue;
+        const or2 = MONSTERS[other.key].r;
+        if (Math.hypot(other.x - m.x, other.y - m.y) < stat.r + or2 + 2) {
+          this.occupiedSlots.delete(`${other.row}:${other.col}`);
+          const spot = this._findSpawnSpot(or2, other);
+          if (spot) {
+            other.row = spot.row;
+            other.col = spot.col;
+            other.x = spot.x;
+            other.y = this.lineY - spot.row * SLOT_ROW_H;
+          }
+          this.occupiedSlots.add(`${other.row}:${other.col}`);
+        }
+      }
+    }
+
     this.effects.burst(m.x, m.y, stat.color, 8, 2.5, 2.5);
     return m;
   }
