@@ -22,7 +22,20 @@ export const BALANCE = {
   gentleRate: 0.10,     // 완만 구간: 웨이브당 +10% (웨이브 10 ≈ 1.9배)
   steepStartWave: 11,   // 가파른 구간 시작 웨이브
   steepFactor: 1.3,     // 가파른 구간: 웨이브당 ×1.3 누적
+
+  // 적 없는 라인: 전열 아군 저지력으로 시작 위치까지 밀어올림
+  emptyLinePushScale: 1,  // 저지력 배율 (1 = 교전 저지력과 동일)
+  emptyLinePushSlack: 32, // 라인 홀드 위치에서 이 거리(px) 안이면 전열로 취급
 };
+
+export const LIVE_MULT_MIN = 0.5;
+export const LIVE_MULT_MAX = 5.0;
+export const LIVE_MULT_STEP = 0.1;
+
+export function clampLiveMult(v) {
+  const stepped = Math.round(v * 10) / 10;
+  return Math.max(LIVE_MULT_MIN, Math.min(LIVE_MULT_MAX, stepped));
+}
 
 // 웨이브별 적 스탯 배율: 1~(steepStart-1) 완만 선형, 이후 가파른 지수 증가
 export function waveMultiplier(wave) {
@@ -34,8 +47,13 @@ export function waveMultiplier(wave) {
   return mult;
 }
 
+// 실효 배율 = 웨이브 곡선 × 실시간 수동 배율
+export function effectiveMult(wave, liveMult = 1) {
+  return waveMultiplier(wave) * liveMult;
+}
+
 // 아군 유닛 (T1 ~ T10)
-// stop = 저지력(교전 중 라인 속도 감소량 px/초), range = 공격 사거리(px)
+// stop = 저지력(교전 중 라인 속도 감소, 적 없을 때 전열 푸시 속도 px/초), range = 공격 사거리(px)
 export const UNITS = [
   { tier: 1,  name: '민병대',       color: '#D2B48C', r: 16, hp: 50,    atk: 5,    mass: 1.0,  stop: 4,  range: 40 },
   { tier: 2,  name: '신병',         color: '#C2A679', r: 18, hp: 110,   atk: 12,   mass: 1.3,  stop: 6,  range: 50 },

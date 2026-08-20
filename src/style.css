@@ -188,3 +188,30 @@ canvas {
   border-radius: 4px;
   font-size: 13px;
 }
+
+#adminPanel .admin-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#adminPanel .admin-stepper input {
+  width: 56px;
+  text-align: center;
+}
+
+#adminPanel .admin-stepper button {
+  width: 28px;
+  height: 26px;
+  font-size: 16px;
+  line-height: 1;
+  color: #f0e6d2;
+  background: #3a2f1e;
+  border: 1px solid #7a5c2e;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#adminPanel .admin-stepper button:hover {
+  filter: brightness(1.25);
+}

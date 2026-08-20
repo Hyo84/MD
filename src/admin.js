@@ -1,5 +1,5 @@
 // 어드민 패널: config 객체 값을 실시간으로 수정 (A 키 또는 ⚙ 버튼)
-import { BALANCE, UNITS, MONSTERS } from './config.js';
+import { BALANCE, UNITS, MONSTERS, LIVE_MULT_MIN, LIVE_MULT_MAX, LIVE_MULT_STEP } from './config.js';
 
 function numberRow(label, obj, key, step = 1) {
   const row = document.createElement('label');
@@ -27,7 +27,7 @@ function section(title) {
   return el;
 }
 
-export function setupAdmin() {
+export function setupAdmin(game) {
   const panel = document.createElement('div');
   panel.id = 'adminPanel';
   panel.classList.add('hidden');
@@ -38,8 +38,41 @@ export function setupAdmin() {
 
   const note = document.createElement('p');
   note.className = 'admin-note';
-  note.textContent = '값은 즉시 적용됩니다. (HP는 새로 생성되는 개체부터)';
+  note.textContent = '값은 즉시 적용됩니다. 실시간 난이도는 살아있는 적 HP/ATK/라인 가속에도 바로 반영됩니다. (기본 HP 테이블은 신규 개체부터)';
   panel.appendChild(note);
+
+  const liveSec = section('실시간 난이도');
+  const liveRow = document.createElement('div');
+  liveRow.className = 'admin-row';
+  const liveSpan = document.createElement('span');
+  liveSpan.textContent = '수동 배율 (0.1 단위)';
+  const stepper = document.createElement('div');
+  stepper.className = 'admin-stepper';
+  const minus = document.createElement('button');
+  minus.type = 'button';
+  minus.textContent = '−';
+  const liveInput = document.createElement('input');
+  liveInput.type = 'number';
+  liveInput.step = String(LIVE_MULT_STEP);
+  liveInput.min = String(LIVE_MULT_MIN);
+  liveInput.max = String(LIVE_MULT_MAX);
+  liveInput.value = game.liveMult.toFixed(1);
+  const plus = document.createElement('button');
+  plus.type = 'button';
+  plus.textContent = '+';
+  const syncLive = () => { liveInput.value = game.liveMult.toFixed(1); };
+  minus.addEventListener('click', () => game.adjustLiveMult(-LIVE_MULT_STEP));
+  plus.addEventListener('click', () => game.adjustLiveMult(LIVE_MULT_STEP));
+  liveInput.addEventListener('change', () => {
+    const v = parseFloat(liveInput.value);
+    if (Number.isFinite(v)) game.setLiveMult(v);
+    syncLive();
+  });
+  game.onLiveMultChange = syncLive;
+  stepper.append(minus, liveInput, plus);
+  liveRow.append(liveSpan, stepper);
+  liveSec.appendChild(liveRow);
+  panel.appendChild(liveSec);
 
   // 전역 설정
   const g = section('전역 설정');
@@ -56,6 +89,8 @@ export function setupAdmin() {
     numberRow('완만 구간 증가율 (/웨이브)', BALANCE, 'gentleRate', 0.01),
     numberRow('가파른 구간 시작 웨이브', BALANCE, 'steepStartWave', 1),
     numberRow('가파른 구간 배율 (/웨이브)', BALANCE, 'steepFactor', 0.05),
+    numberRow('빈 라인 푸시 배율', BALANCE, 'emptyLinePushScale', 0.1),
+    numberRow('빈 라인 전열 여유 (px)', BALANCE, 'emptyLinePushSlack', 1),
   );
   panel.appendChild(g);
 

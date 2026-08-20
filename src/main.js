@@ -10,5 +10,5 @@ const ui = {
   restartBtn: document.getElementById('restartBtn'),
 };
 
-new Game(canvas, ui);
-setupAdmin();
+const game = new Game(canvas, ui);
+setupAdmin(game);

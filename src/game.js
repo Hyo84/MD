@@ -2,7 +2,8 @@ import Matter from 'matter-js';
 import {
   CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y,
   BALANCE, UNITS, MONSTERS, HEROES, HERO_LIFESPAN,
-  FRICTION_AIR_UNIT, killsNeeded, waveMultiplier,
+  FRICTION_AIR_UNIT, killsNeeded, waveMultiplier, effectiveMult,
+  LIVE_MULT_STEP, clampLiveMult,
 } from './config.js';
 import { Effects } from './effects.js';
 
@@ -30,7 +31,11 @@ export class Game {
     this.state = 'start'; // start | playing | gameover
     this.mouse = null;
     this.rangeMode = 1; // 0=끄기, 1=아군만, 2=전체 (재시작 후에도 유지)
+    this.liveMult = 1;  // 실시간 난이도 배율 (재시작 후에도 유지)
+    this.onLiveMultChange = null;
     this._rangeToggleRect = { x: 0, y: 0, w: 0, h: 0 };
+    this._diffMinusRect = { x: 0, y: 0, w: 0, h: 0 };
+    this._diffPlusRect = { x: 0, y: 0, w: 0, h: 0 };
 
     this._setupInput();
     this.ui.restartBtn.addEventListener('click', () => this.start());
@@ -117,8 +122,16 @@ export class Game {
 
     this.canvas.addEventListener('pointerdown', (e) => {
       const p = toCanvas(e);
-      if (this._hitRangeToggle(p)) {
+      if (this._hitRect(p, this._rangeToggleRect)) {
         this.rangeMode = (this.rangeMode + 1) % RANGE_MODE_LABELS.length;
+        return;
+      }
+      if (this._hitRect(p, this._diffMinusRect)) {
+        this.adjustLiveMult(-LIVE_MULT_STEP);
+        return;
+      }
+      if (this._hitRect(p, this._diffPlusRect)) {
+        this.adjustLiveMult(LIVE_MULT_STEP);
         return;
       }
       if (this.state !== 'playing') return;
@@ -141,6 +154,50 @@ export class Game {
       this._launchUnit();
     });
     this.canvas.addEventListener('pointercancel', () => { this.dragging = false; });
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', (e) => {
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+        if (e.key === '+' || e.key === '=' || e.key === ']' || e.code === 'NumpadAdd') {
+          this.adjustLiveMult(LIVE_MULT_STEP);
+          e.preventDefault();
+        } else if (e.key === '-' || e.key === '_' || e.key === '[' || e.code === 'NumpadSubtract') {
+          this.adjustLiveMult(-LIVE_MULT_STEP);
+          e.preventDefault();
+        }
+      });
+    }
+  }
+
+  setLiveMult(v) {
+    const next = clampLiveMult(v);
+    if (next === this.liveMult) return this.liveMult;
+    this._rescaleEnemiesForLiveMult(next);
+    this.liveMult = next;
+    if (this.state === 'playing' && this.effects) {
+      this.effects.floatText(CANVAS_W / 2, 72, `난이도 ×${next.toFixed(1)}`, '#ffd27a', 16, 0.7);
+    }
+    this.onLiveMultChange?.();
+    return this.liveMult;
+  }
+
+  adjustLiveMult(delta) {
+    return this.setLiveMult(this.liveMult + delta);
+  }
+
+  _rescaleEnemiesForLiveMult(next) {
+    for (const m of this.enemies) {
+      if (m.dead) continue;
+      const ratio = m.maxHp > 0 ? m.hp / m.maxHp : 1;
+      const maxHp = Math.max(1, Math.round(MONSTERS[m.key].hp * m.waveMult * next));
+      m.maxHp = maxHp;
+      m.hp = Math.max(1, Math.round(maxHp * ratio));
+      if (m.hp > m.maxHp) m.hp = m.maxHp;
+    }
+  }
+
+  _enemyAtk(m) {
+    return MONSTERS[m.key].atk * m.waveMult * this.liveMult;
   }
 
   _launchUnit() {
@@ -226,13 +283,13 @@ export class Game {
       }
       this.occupiedSlots.add(`${row}:${col}`);
     }
-    // 웨이브 배율은 스폰 시점에 스냅샷 (HP는 배율 적용, ATK는 배율만 저장해 실시간 스탯 수정과 병행)
-    const mult = waveMultiplier(this.wave);
-    const hp = Math.round(stat.hp * mult);
+    // 실효 배율 = 웨이브 곡선 × 실시간 수동 배율 (HP는 스냅샷, ATK/라인속도는 liveMult 즉시 반영)
+    const waveMult = waveMultiplier(this.wave);
+    const hp = Math.round(stat.hp * effectiveMult(this.wave, this.liveMult));
     const m = {
       key, isBoss, row, col, x,
       y: this.lineY - row * SLOT_ROW_H,
-      hp, maxHp: hp, waveMult: mult,
+      hp, maxHp: hp, waveMult,
       attackCd: Math.random() * 0.4,
       stunT: 0, burn: null, flashT: 0, dead: false,
     };
@@ -420,14 +477,32 @@ export class Game {
     }
   }
 
+  // 전열: 라인 홀드 위치(근접 클리어런스) 근처의 정착 유닛
+  _unitCanPushEmptyLine(u) {
+    if (u.dead || !u.settled) return false;
+    const holdY = this.lineY + 20 + u.r;
+    return u.body.position.y <= holdY + BALANCE.emptyLinePushSlack;
+  }
+
   _updateLine(dt) {
+    // 적이 없으면 전열 아군 저지력으로 시작 위치까지 밀어올림 (보스 대기 중에도 동일)
     if (this.enemies.length === 0) {
-      this.netSpeed = 0;
+      let stopping = 0;
+      for (const u of this.units) {
+        if (this._unitCanPushEmptyLine(u)) stopping += this._unitStat(u).stop;
+      }
+      stopping *= BALANCE.emptyLinePushScale;
+      this.netSpeed = -stopping;
+      this.lineY += this.netSpeed * dt;
+      if (this.lineY <= LINE_START_Y) {
+        this.lineY = LINE_START_Y;
+        this.netSpeed = 0;
+      }
       return;
     }
     let advance = BALANCE.baseLineSpeed;
     for (const m of this.enemies) {
-      if (m.stunT <= 0) advance += MONSTERS[m.key].speed;
+      if (m.stunT <= 0) advance += MONSTERS[m.key].speed * this.liveMult;
     }
     let stopping = 0;
     for (const u of this.units) {
@@ -571,7 +646,7 @@ export class Game {
       }
       if (!target) continue;
       m.attackCd = BALANCE.attackCooldown;
-      target.hp -= stat.atk * m.waveMult;
+      target.hp -= this._enemyAtk(m);
       target.flashT = 0.12;
       this.effects.hitFlash(target.body.position.x, target.body.position.y, '#ff6b6b');
       if (target.hp <= 0) {
@@ -934,8 +1009,7 @@ export class Game {
     ctx.restore();
   }
 
-  _hitRangeToggle(p) {
-    const r = this._rangeToggleRect;
+  _hitRect(p, r) {
     return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
   }
 
@@ -951,6 +1025,22 @@ export class Game {
     ctx.restore();
   }
 
+  _drawHudChip(bx, by, bw, bh, label, fill, stroke) {
+    const ctx = this.ctx;
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 4);
+    else ctx.rect(bx, by, bw, bh);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#e8dcc0';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, bx + bw / 2, by + bh / 2 + 0.5);
+  }
+
   _drawHud() {
     const ctx = this.ctx;
     ctx.save();
@@ -961,30 +1051,50 @@ export class Game {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(`웨이브 ${this.wave}`, 12, 16);
+
+    // 웨이브 배율 × 수동 배율 + 난이도 조절 버튼
     ctx.font = "11px 'Malgun Gothic', sans-serif";
+    const waveM = waveMultiplier(this.wave);
+    const waveLabel = `웨이브 ×${waveM.toFixed(2)}`;
     ctx.fillStyle = '#b0a284';
-    ctx.fillText(`난이도 ×${waveMultiplier(this.wave).toFixed(2)}`, 12, 39);
+    ctx.textAlign = 'left';
+    ctx.fillText(waveLabel, 12, 39);
+    const liveLabel = `×${this.liveMult.toFixed(1)}`;
+    const liveX = 12 + ctx.measureText(waveLabel).width + 5;
+    ctx.fillStyle = '#ffd27a';
+    ctx.fillText(liveLabel, liveX, 39);
+    const btnSize = 18;
+    const btnGap = 4;
+    const btnY = 30;
+    const btnX = liveX + ctx.measureText(liveLabel).width + 7;
+    ctx.font = "bold 14px sans-serif";
+    this._drawHudChip(btnX, btnY, btnSize, btnSize, '−', 'rgba(0,0,0,0.45)', 'rgba(200, 180, 140, 0.55)');
+    this._drawHudChip(btnX + btnSize + btnGap, btnY, btnSize, btnSize, '+', 'rgba(0,0,0,0.45)', 'rgba(200, 180, 140, 0.55)');
+    this._diffMinusRect = { x: btnX - 2, y: btnY - 2, w: btnSize + 2, h: btnSize + 4 };
+    this._diffPlusRect = { x: btnX + btnSize + btnGap, y: btnY - 2, w: btnSize + 2, h: btnSize + 4 };
 
     ctx.textAlign = 'center';
     const need = killsNeeded(this.wave);
+    ctx.fillStyle = '#b0a284';
     ctx.fillText(this.bossActive ? '보스 전투 중!' : `처치 ${this.kills} / ${need}`, CANVAS_W / 2, 16);
 
     ctx.textAlign = 'right';
     ctx.fillText(`점수 ${this.score}`, CANVAS_W - 12, 16);
 
-    // 라인 순 속도 (줄다리기 상태)
+    // 라인 순 속도 (줄다리기 상태) — 좌측 난이도 버튼과 겹치지 않게 약간 우측
     ctx.textAlign = 'center';
     ctx.font = "bold 14px 'Malgun Gothic', sans-serif";
+    const lineHudX = 248;
     const v = this.netSpeed;
     if (Math.abs(v) < 0.05) {
       ctx.fillStyle = '#aaa';
-      ctx.fillText('라인 ─ 정지', CANVAS_W / 2, 39);
+      ctx.fillText('라인 ─ 정지', lineHudX, 39);
     } else if (v > 0) {
       ctx.fillStyle = '#ff7060';
-      ctx.fillText(`라인 ▼ ${v.toFixed(1)}`, CANVAS_W / 2, 39);
+      ctx.fillText(`라인 ▼ ${v.toFixed(1)}`, lineHudX, 39);
     } else {
       ctx.fillStyle = '#6fe08a';
-      ctx.fillText(`라인 ▲ ${(-v).toFixed(1)}`, CANVAS_W / 2, 39);
+      ctx.fillText(`라인 ▲ ${(-v).toFixed(1)}`, lineHudX, 39);
     }
 
     // 사거리 표시 토글 (끄기 → 아군만 → 전체)
@@ -998,15 +1108,7 @@ export class Game {
     const bx = CANVAS_W - 10 - bw;
     const by = 30;
     this._rangeToggleRect = { x: bx - 4, y: by - 4, w: bw + 8, h: bh + 8 };
-
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.strokeStyle = 'rgba(200, 180, 140, 0.55)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 4);
-    else ctx.rect(bx, by, bw, bh);
-    ctx.fill();
-    ctx.stroke();
+    this._drawHudChip(bx, by, bw, bh, text, 'rgba(0,0,0,0.45)', 'rgba(200, 180, 140, 0.55)');
     ctx.fillStyle = this.rangeMode === 0 ? '#8a8070' : '#e8dcc0';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
