@@ -295,6 +295,7 @@ export class Game {
         this._spawnEnemy('boss');
         this.bossActive = true;
         this.effects.burst(CANVAS_W / 2, this.lineY, '#B22222', 30, 5, 5);
+        this.effects.floatText(CANVAS_W / 2, 330, '보스 출현! 병력 집결!', '#FF9040', 26, 2.0);
       }
       return;
     }
@@ -403,6 +404,26 @@ export class Game {
         // 라인을 향해 서서히 전진 (라인이 밀려 올라가면 따라감)
         Body.setVelocity(u.body, { x: u.body.velocity.x * 0.9, y: -advTick });
       }
+    }
+  }
+
+  // ---------- 보스 집결: 교전하지 않는 유닛이 보스 쪽으로 이동 ----------
+  _updateBossGather() {
+    const strength = Math.max(0, Math.min(1, BALANCE.bossGatherStrength));
+    if (strength <= 0) return;
+    const boss = this.enemies.find((m) => m.isBoss);
+    if (!boss) return;
+
+    const engagedAlsoGather = strength > 0.7;
+    const maxVxTick = (BALANCE.gatherSpeed * strength) / 60; // px/초 → px/틱
+
+    for (const u of this.units) {
+      if (!u.settled) continue;
+      if (!engagedAlsoGather && this._unitEngaged(u)) continue;
+      const dx = boss.x - u.body.position.x;
+      if (Math.abs(dx) < 24) continue; // 보스 열 근처면 정지
+      const vx = Math.sign(dx) * maxVxTick;
+      Body.setVelocity(u.body, { x: vx, y: u.body.velocity.y });
     }
   }
 
@@ -598,6 +619,7 @@ export class Game {
     this._updateLine(dt);
     if (this.state !== 'playing') return;
     this._updateUnitAdvance(dt);
+    this._updateBossGather();
     this._updateCombat(dt);
     this._updateEnemyTicks(dt);
     this._updateUnitAbilities(dt);

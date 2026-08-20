@@ -13,6 +13,8 @@ export const BALANCE = {
   launchCooldown: 0.6,  // 발사 쿨다운 (초)
   launchSpeed: 18,      // 발사 속도
   unitAdvanceSpeed: 12, // 착지 후 아군 전진 속도 (px/초)
+  bossGatherStrength: 0.6, // 보스 집결 강도 (0=안함, 0.7 초과 시 교전 중인 유닛도 집결, 1=최대)
+  gatherSpeed: 40,      // 집결 시 최대 가로 이동 속도 (px/초)
   attackCooldown: 0.8,  // 공격 틱 간격 (초)
   enemyReach: 50,       // 적 근접 공격 사거리 보정 (px)
 };

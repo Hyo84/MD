@@ -49,6 +49,8 @@ export function setupAdmin() {
     numberRow('발사 쿨다운 (s)', BALANCE, 'launchCooldown', 0.1),
     numberRow('발사 속도', BALANCE, 'launchSpeed', 1),
     numberRow('아군 전진 속도 (px/s)', BALANCE, 'unitAdvanceSpeed', 1),
+    numberRow('보스 집결 강도 (0~1)', BALANCE, 'bossGatherStrength', 0.1),
+    numberRow('집결 이동 속도 (px/s)', BALANCE, 'gatherSpeed', 5),
     numberRow('공격 틱 간격 (s)', BALANCE, 'attackCooldown', 0.1),
     numberRow('적 공격 사거리 보정', BALANCE, 'enemyReach', 5),
   );
