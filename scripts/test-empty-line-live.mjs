@@ -2,7 +2,7 @@
 global.requestAnimationFrame = () => {};
 
 import { Game } from '../src/game.js';
-import { CANVAS_W, LINE_START_Y, UNITS, MONSTERS, waveMultiplier, effectiveMult } from '../src/config.js';
+import { CANVAS_W, LINE_START_Y, UNITS, MONSTERS, BALANCE, waveMultiplier, effectiveMult } from '../src/config.js';
 
 const ctxStub = new Proxy({}, {
   get: (t, p) => {
@@ -95,6 +95,43 @@ function assert(cond, msg) {
   const m = game._spawnEnemy('orc');
   const expect = Math.round(MONSTERS.orc.hp * effectiveMult(5, 1.2));
   assert(m.maxHp === expect, `신규 스폰 실효 HP=${m.maxHp} (기대 ${expect})`);
+}
+
+function sim(game, seconds) {
+  const dt = 1 / 60;
+  const n = Math.round(seconds * 60);
+  for (let i = 0; i < n; i++) game._update(dt);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 300;
+  sim(game, 2);
+  assert(game.lineY <= 300, `적 0명: 2초 후 라인이 내려가면 안 됨 (lineY=${game.lineY})`);
+  assert(game.joinedEnemies().length === 0, '적 0명: joinedEnemies 비어 있음');
+}
+
+{
+  const game = makeGame();
+  game.lineY = 300;
+  const m = game._spawnEnemy('goblin');
+  assert(m.joining, `lineY=300 스폰은 합류 중이어야 함 (joining=${m.joining})`);
+  sim(game, 2);
+  assert(m.joining, `2초 합류 행군 후에도 아직 미착지 (y=${m.y.toFixed(1)} slot=${game._enemySlotY(m).toFixed(1)})`);
+  assert(game.joinedEnemies().length === 0, '합류 중만 있으면 joinedEnemies 비어 있음');
+  assert(game.lineY <= 300, `합류 중인 적만 있으면 라인이 내려가면 안 됨 (lineY=${game.lineY})`);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 300;
+  const m = game._spawnEnemy('goblin');
+  m.joining = false;
+  m.y = game._enemySlotY(m);
+  sim(game, 2);
+  const expect = 300 + (BALANCE.baseLineSpeed + MONSTERS.goblin.speed * game.liveMult) * 2;
+  assert(game.lineY > 300, `착지한 고블린은 라인을 내려야 함 (lineY=${game.lineY})`);
+  assert(Math.abs(game.lineY - expect) < 0.6, `착지 고블린 2초: lineY=${game.lineY.toFixed(2)} 기대 ${expect.toFixed(2)}`);
 }
 
 if (failed) {

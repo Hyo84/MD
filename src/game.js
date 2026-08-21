@@ -678,11 +678,16 @@ export class Game {
     return UNITS[u.tier - 1];
   }
 
-  _unitEngaged(u) {
+  // 라인에 착지한 적만. 합류 행군 중(joining)은 라인 속도/교전에 안 셈.
+  joinedEnemies() {
+    return this.enemies.filter((m) => !m.joining && !m.dead);
+  }
+
+  _unitEngaged(u, onLine) {
+    const joined = onLine || this.joinedEnemies();
     const range = this._unitStat(u).range;
     const { x, y } = u.body.position;
-    for (const m of this.enemies) {
-      if (m.joining) continue;
+    for (const m of joined) {
       const er = MONSTERS[m.key].r;
       if (Math.hypot(m.x - x, m.y - y) <= range + er) return true;
     }
@@ -691,8 +696,9 @@ export class Game {
 
   // 프레임당 1회 교전 여부 계산 (라인 속도 계산과 전진 로직이 공유)
   _computeEngagement() {
+    const joined = this.joinedEnemies();
     for (const u of this.units) {
-      u.engaged = this.enemies.length > 0 && this._unitEngaged(u);
+      u.engaged = joined.length > 0 && this._unitEngaged(u, joined);
     }
   }
 
@@ -711,8 +717,10 @@ export class Game {
       this._syncEnemyY(dt);
       return;
     }
-    // 적이 없으면 전열 아군 저지력으로 시작 위치까지 밀어올림 (보스 대기 중에도 동일)
-    if (this.enemies.length === 0) {
+    const joined = this.joinedEnemies();
+    // 착지한 적이 없으면 전진하지 않음. 전열 아군 저지력으로 시작 위치까지 밀어올림.
+    // 합류 중인 적만 있을 때도 동일 (joining은 라인 속도에 기여하지 않음).
+    if (joined.length === 0) {
       let stopping = 0;
       for (const u of this.units) {
         if (this._unitCanPushEmptyLine(u)) stopping += this._unitStop(u);
@@ -724,11 +732,11 @@ export class Game {
         this.lineY = LINE_START_Y;
         this.netSpeed = 0;
       }
+      this._syncEnemyY(dt);
       return;
     }
     let advance = BALANCE.baseLineSpeed;
-    for (const m of this.enemies) {
-      if (m.joining) continue;
+    for (const m of joined) {
       if (m.stunT <= 0) advance += MONSTERS[m.key].speed * this.liveMult;
     }
     let stopping = 0;
