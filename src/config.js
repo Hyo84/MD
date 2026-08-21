@@ -2,6 +2,11 @@
 
 export const CANVAS_W = 450;
 export const CANVAS_H = 800;
+// 전장 슬롯: 기본 5칸, 전장 확장 스킬로 최대 7칸. 칸이 적을수록 측면 벽을 안쪽으로 들인다.
+export const BASE_SLOT_COLS = 5;
+export const MAX_SLOT_COLS = 7;
+export const SLOT_INSET_PER_COL = 35; // 부족한 칸당 한쪽 extra inset (R0: 70px, R1: 35px, R2: 0)
+export const SLOT_EDGE_PAD = 40;      // 슬롯을 내면에서 한 칸 더 안쪽 (7칸일 때 기존 40)
 export const DEFEAT_Y = 660;      // 마지노선
 export const LINE_START_Y = 90;   // 웨이브라인 시작 위치(밀어낼 수 있는 상한)
 export const ENEMY_SPAWN_Y = LINE_START_Y; // 적/보스 합류 시작 Y (라인이 여기면 즉시 착지)
@@ -165,6 +170,29 @@ export function xpToNextLevel(level) {
   return XP_TO_NEXT[XP_TO_NEXT.length - 1] + XP_AFTER_TABLE * (lv - (XP_TO_NEXT.length - 1));
 }
 
+/** 전장 확장 랭크 → 슬롯 열 수 (5 / 6 / 7). */
+export function slotColsForRank(rank) {
+  const r = Math.max(0, Math.floor(Number(rank) || 0));
+  return Math.min(MAX_SLOT_COLS, BASE_SLOT_COLS + r);
+}
+
+/** 측면 벽 extra inset. 7칸=0, 5칸=70. */
+export function playfieldExtraInset(cols) {
+  const c = Math.max(BASE_SLOT_COLS, Math.min(MAX_SLOT_COLS, Math.floor(Number(cols) || BASE_SLOT_COLS)));
+  return (MAX_SLOT_COLS - c) * SLOT_INSET_PER_COL;
+}
+
+/** 첫/마지막 슬롯 X에 쓰는 마진 = 벽 inset + 슬롯 패딩. */
+export function playfieldMargin(cols) {
+  return playfieldExtraInset(cols) + SLOT_EDGE_PAD;
+}
+
+export function getSlotX(col, totalCols) {
+  if (totalCols <= 1) return CANVAS_W / 2;
+  const margin = playfieldMargin(totalCols);
+  return margin + col * ((CANVAS_W - margin * 2) / (totalCols - 1));
+}
+
 export const SKILL_TREES = [
   { id: 'combat', name: '전투' },
   { id: 'frontline', name: '전열' },
@@ -218,6 +246,17 @@ export const SKILLS = [
     unlockLevel: 1,
     requires: null,
     perRank: 0.08, // +8%/랭크
+  },
+  {
+    id: 'boardWidth',
+    name: '전장 확장',
+    desc: '전장 슬롯을 넓혀 병력 배치 공간과 사격 통로를 확보합니다. (기본 5칸 → 1랭크 6칸 → 2랭크 7칸)',
+    tree: 'frontline',
+    maxRank: 2,
+    cost: 1,
+    unlockLevel: 5,
+    rankLevelStep: 2,
+    requires: null,
   },
   {
     id: 'higherTier',

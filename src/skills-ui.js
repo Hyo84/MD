@@ -1,6 +1,6 @@
 // 스킬 패널 (스킬 버튼 / K). 구매는 즉시 현재 런에 반영.
 
-import { SKILLS, SKILL_TREES, SKILL_BY_ID, BALANCE, PROGRESSION, rankUnlockLevel, advanceSpeedForRank } from './config.js';
+import { SKILLS, SKILL_TREES, SKILL_BY_ID, BALANCE, PROGRESSION, rankUnlockLevel, advanceSpeedForRank, slotColsForRank } from './config.js';
 
 function fmtPct(v) {
   return `${(v * 100).toFixed(v * 100 % 1 === 0 ? 0 : 1)}%`;
@@ -28,6 +28,12 @@ function effectLine(skill, rank) {
     case 'stopping':
       return `저지력 +${fmtPct(rank * skill.perRank)}` +
         (rank < skill.maxRank ? ` → +${fmtPct((rank + 1) * skill.perRank)}` : '');
+    case 'boardWidth': {
+      const cols = (rk) => slotColsForRank(rk);
+      if (rank <= 0 && skill.desc) return skill.desc;
+      return `전장 ${cols(rank)}칸` +
+        (rank < skill.maxRank ? ` → ${cols(rank + 1)}칸` : '');
+    }
     case 'higherTier': {
       const t2 = (r) => r * skill.t2PerRank;
       const t3 = (r) => r >= skill.t3StartRank ? (r - (skill.t3StartRank - 1)) * skill.t3PerRank : 0;

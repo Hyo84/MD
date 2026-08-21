@@ -1,5 +1,5 @@
 // 어드민 패널: config 객체 값을 실시간으로 수정 (A 키 또는 ⚙ 버튼)
-import { BALANCE, UNITS, MONSTERS, LIVE_MULT_MIN, LIVE_MULT_MAX, LIVE_MULT_STEP, PROGRESSION, XP_TO_NEXT, SKILLS } from './config.js';
+import { BALANCE, UNITS, MONSTERS, LIVE_MULT_MIN, LIVE_MULT_MAX, LIVE_MULT_STEP, PROGRESSION, XP_TO_NEXT, SKILLS, BASE_SLOT_COLS, MAX_SLOT_COLS, SLOT_INSET_PER_COL } from './config.js';
 
 function numberRow(label, obj, key, step = 1) {
   const row = document.createElement('label');
@@ -115,6 +115,10 @@ export function setupAdmin(game) {
     numberRow('빈 라인 푸시 배율', BALANCE, 'emptyLinePushScale', 0.1),
     numberRow('빈 라인 전열 여유 (px)', BALANCE, 'emptyLinePushSlack', 1),
   );
+  const pfNote = document.createElement('p');
+  pfNote.className = 'admin-note';
+  pfNote.textContent = `전장 슬롯: 기본 ${BASE_SLOT_COLS}칸 · 최대 ${MAX_SLOT_COLS}칸 (전장 확장). 칸당 벽 inset ${SLOT_INSET_PER_COL}px (5칸=${(MAX_SLOT_COLS - BASE_SLOT_COLS) * SLOT_INSET_PER_COL}px, 7칸=0).`;
+  g.appendChild(pfNote);
   panel.appendChild(g);
 
   const prog = section('메타 진행 / 방어');

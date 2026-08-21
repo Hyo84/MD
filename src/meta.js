@@ -2,7 +2,7 @@
 
 import {
   PROGRESSION, SKILLS, SKILL_BY_ID, xpToNextLevel, META_STORAGE_KEY, BALANCE,
-  rankUnlockLevel, advanceSpeedForRank,
+  rankUnlockLevel, advanceSpeedForRank, slotColsForRank,
 } from './config.js';
 
 function emptyRanks() {
@@ -176,7 +176,12 @@ export class Meta {
       archerRange: PROGRESSION.archerBaseRange + r('archerRange') * SKILL_BY_ID.archerRange.perRank,
       archerAtk: PROGRESSION.archerBaseAtk + r('archerAtk') * SKILL_BY_ID.archerAtk.perRank,
       archerAmmo: PROGRESSION.archerBaseAmmo + r('archerAmmo') * SKILL_BY_ID.archerAmmo.perRank,
+      slotCols: slotColsForRank(r('boardWidth')),
     };
+  }
+
+  slotCols() {
+    return slotColsForRank(this.rank('boardWidth'));
   }
 }
 

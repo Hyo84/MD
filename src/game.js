@@ -7,6 +7,7 @@ import {
     LAUNCH_T2_BASE, CHARGE_STUTTER_TIME, MERGE_BLAST_RADIUS, MERGE_BLAST_FORCE,
     FRICTION_AIR_UNIT, killsNeeded, waveMultiplier, effectiveMult,
     LIVE_MULT_STEP, clampLiveMult, PROGRESSION,
+    BASE_SLOT_COLS, MAX_SLOT_COLS, getSlotX, playfieldExtraInset,
 } from './config.js';
 import { Effects } from './effects.js';
 import { meta } from './meta.js';
@@ -38,11 +39,9 @@ function colorAlpha(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
-// 웨이브라인 슬롯 배치
-const SLOT_COLS = 7;
-const SLOT_MARGIN = 40;
+// 웨이브라인 슬롯 배치 (열 수는 전장 확장 스킬)
 const SLOT_ROW_H = 46;
-const slotX = (col) => SLOT_MARGIN + (col * (CANVAS_W - SLOT_MARGIN * 2)) / (SLOT_COLS - 1);
+const SIDE_WALL_THICKNESS = 40;
 
 export class Game {
   constructor(canvas, ui) {
@@ -66,8 +65,10 @@ export class Game {
       if (this.skillPanelOpen) return;
       this.start();
     });
+    this.slotCols = this._fx.slotCols || BASE_SLOT_COLS;
     this.onSkillsChanged = () => {
       this._fx = meta.getEffects();
+      this._syncPlayfieldFromMeta();
       this._syncDefenseFromMeta(false);
     };
     this._refreshStartMeta();
@@ -89,9 +90,9 @@ export class Game {
     this.engine.gravity.y = 0;
 
     const wallOpts = { isStatic: true, restitution: 0.4, friction: 0.05 };
+    this._wallL = null;
+    this._wallR = null;
     World.add(this.engine.world, [
-      Bodies.rectangle(-20, CANVAS_H / 2, 40, CANVAS_H * 2, wallOpts),
-      Bodies.rectangle(CANVAS_W + 20, CANVAS_H / 2, 40, CANVAS_H * 2, wallOpts),
       Bodies.rectangle(CANVAS_W / 2, -20, CANVAS_W * 2, 40, wallOpts),
       Bodies.rectangle(CANVAS_W / 2, CANVAS_H + 20, CANVAS_W * 2, 40, wallOpts),
     ]);
@@ -130,6 +131,7 @@ export class Game {
     this.archers = [];
     this.archerShots = [];
     this._fx = meta.getEffects();
+    this._syncPlayfieldFromMeta();
     this._syncDefenseFromMeta(true);
 
     Events.on(this.engine, 'collisionStart', (ev) => this._onCollision(ev));
@@ -176,10 +178,12 @@ export class Game {
         flashT: 0,
       });
     }
+    const { left, right } = this._playfieldInner();
+    const span = right - left;
     for (let i = 0; i < this.archers.length; i++) {
       const a = this.archers[i];
       const count = this.archers.length;
-      a.x = count <= 1 ? CANVAS_W / 2 : 56 + i * ((CANVAS_W - 112) / (count - 1));
+      a.x = count <= 1 ? (left + right) / 2 : left + 56 + i * ((span - 112) / (count - 1));
       a.y = DEFEAT_Y - 16;
       const prevMax = a.maxAmmo;
       a.maxAmmo = fx.archerAmmo;
@@ -194,6 +198,91 @@ export class Game {
     for (const a of this.archers) {
       a.maxAmmo = ammo;
       a.ammo = ammo;
+    }
+  }
+
+  _playfieldInner() {
+    const extra = playfieldExtraInset(this.slotCols || BASE_SLOT_COLS);
+    return { left: extra, right: CANVAS_W - extra };
+  }
+
+  _slotX(col) {
+    return getSlotX(col, this.slotCols || BASE_SLOT_COLS);
+  }
+
+  _clampAimX(x) {
+    const { left, right } = this._playfieldInner();
+    return Math.max(left + 24, Math.min(right - 24, x));
+  }
+
+  _friendlyXRange(r) {
+    const { left, right } = this._playfieldInner();
+    return { minX: left + r + 4, maxX: right - r - 4 };
+  }
+
+  _rebuildSideWalls() {
+    if (!this.engine) return;
+    const extra = playfieldExtraInset(this.slotCols || BASE_SLOT_COLS);
+    const wallOpts = { isStatic: true, restitution: 0.4, friction: 0.05 };
+    const w = extra + SIDE_WALL_THICKNESS;
+    if (this._wallL) World.remove(this.engine.world, this._wallL);
+    if (this._wallR) World.remove(this.engine.world, this._wallR);
+    this._wallL = Bodies.rectangle(extra - w / 2, CANVAS_H / 2, w, CANVAS_H * 2, wallOpts);
+    this._wallR = Bodies.rectangle(CANVAS_W - extra + w / 2, CANVAS_H / 2, w, CANVAS_H * 2, wallOpts);
+    World.add(this.engine.world, [this._wallL, this._wallR]);
+  }
+
+  _nudgeUnitsIntoPlayfield() {
+    if (!this.units) return;
+    for (const u of this.units) {
+      if (u.dead) continue;
+      const { minX, maxX } = this._friendlyXRange(u.r);
+      const x = u.body.position.x;
+      if (x < minX || x > maxX) {
+        Body.setPosition(u.body, { x: Math.max(minX, Math.min(maxX, x)), y: u.body.position.y });
+        const vx = u.body.velocity.x;
+        Body.setVelocity(u.body, {
+          x: (x < minX && vx < 0) || (x > maxX && vx > 0) ? 0 : vx,
+          y: u.body.velocity.y,
+        });
+      }
+    }
+  }
+
+  _relocateOverflowSlots(cols) {
+    if (!this.enemies || !this.occupiedSlots) return;
+    for (const m of this.enemies) {
+      if (m.dead || m.isBoss) continue;
+      if (m.col >= cols) this.occupiedSlots.delete(`${m.row}:${m.col}`);
+    }
+    for (const m of this.enemies) {
+      if (m.dead || m.isBoss) continue;
+      if (m.col >= 0 && m.col < cols) continue;
+      const spot = this._findSpawnSpot(MONSTERS[m.key].r, m);
+      if (spot) {
+        m.row = spot.row;
+        m.col = spot.col;
+        m.x = spot.x;
+        if (!m.joining) m.y = this.lineY - spot.row * SLOT_ROW_H;
+        this.occupiedSlots.add(`${m.row}:${m.col}`);
+      } else {
+        m.col = -1;
+      }
+    }
+  }
+
+  _syncPlayfieldFromMeta() {
+    const prev = this.slotCols;
+    const next = Math.max(
+      BASE_SLOT_COLS,
+      Math.min(MAX_SLOT_COLS, this._effects().slotCols || BASE_SLOT_COLS),
+    );
+    this.slotCols = next;
+    this._rebuildSideWalls();
+    this.aimX = this._clampAimX(Number.isFinite(this.aimX) ? this.aimX : CANVAS_W / 2);
+    if (Number.isFinite(prev) && next < prev) {
+      this._relocateOverflowSlots(next);
+      this._nudgeUnitsIntoPlayfield();
     }
   }
 
@@ -251,7 +340,6 @@ export class Game {
         y: (e.clientY - rect.top) * (CANVAS_H / rect.height),
       };
     };
-    const clampAimX = (x) => Math.max(24, Math.min(CANVAS_W - 24, x));
 
     this.canvas.addEventListener('pointerdown', (e) => {
       const p = toCanvas(e);
@@ -270,7 +358,7 @@ export class Game {
       if (this.skillPanelOpen) return;
       if (this.state !== 'playing') return;
       this.dragging = true;
-      this.aimX = clampAimX(p.x);
+      this.aimX = this._clampAimX(p.x);
       this.canvas.setPointerCapture(e.pointerId);
     });
     this.canvas.addEventListener('pointermove', (e) => {
@@ -282,12 +370,12 @@ export class Game {
         if (this._hitRect(p, this._diffMinusRect)) return;
         if (this._hitRect(p, this._diffPlusRect)) return;
       }
-      this.aimX = clampAimX(p.x);
+      this.aimX = this._clampAimX(p.x);
     });
     this.canvas.addEventListener('pointerup', (e) => {
       if (!this.dragging) return;
       this.dragging = false;
-      this.aimX = clampAimX(toCanvas(e).x);
+      this.aimX = this._clampAimX(toCanvas(e).x);
       if (this.skillPanelOpen || this.state !== 'playing' || this.launchCd > 0) return;
       this._launchUnit();
     });
@@ -380,11 +468,12 @@ export class Game {
 
   // 반지름 기반 스폰 위치 탐색: 기존 적(보스 포함)과 원이 겹치지 않는 빈 슬롯
   _findSpawnSpot(radius, exclude = null) {
+    const cols = this.slotCols || BASE_SLOT_COLS;
     for (let row = 0; row < 30; row++) {
       const candidates = [];
-      for (let col = 0; col < SLOT_COLS; col++) {
+      for (let col = 0; col < cols; col++) {
         if (this.occupiedSlots.has(`${row}:${col}`)) continue;
-        const x = slotX(col) + (Math.random() * 14 - 7);
+        const x = this._slotX(col) + (Math.random() * 14 - 7);
         const y = this.lineY - row * SLOT_ROW_H;
         let overlaps = false;
         for (const m of this.enemies) {
@@ -418,11 +507,11 @@ export class Game {
       } else {
         // 보드가 극단적으로 가득 찬 경우: 겹침을 무시하고 빈 슬롯 사용
         for (let r2 = 0; r2 < 30 && col < 0; r2++) {
-          for (let c2 = 0; c2 < SLOT_COLS; c2++) {
+          for (let c2 = 0; c2 < (this.slotCols || BASE_SLOT_COLS); c2++) {
             if (!this.occupiedSlots.has(`${r2}:${c2}`)) { row = r2; col = c2; break; }
           }
         }
-        x = slotX(Math.max(0, col)) + (Math.random() * 14 - 7);
+        x = this._slotX(Math.max(0, col)) + (Math.random() * 14 - 7);
       }
       this.occupiedSlots.add(`${row}:${col}`);
     }
@@ -487,8 +576,7 @@ export class Game {
   _clampFriendlyPos(x, y, r) {
     const minY = this.lineY + 14 + r;
     const maxY = Math.max(minY, DEFEAT_Y - 30);
-    const minX = r + 4;
-    const maxX = CANVAS_W - r - 4;
+    const { minX, maxX } = this._friendlyXRange(r);
     return {
       x: Math.max(minX, Math.min(x, maxX)),
       y: Math.max(minY, Math.min(y, maxY)),
@@ -855,8 +943,7 @@ export class Game {
   _enforceLineBoundary() {
     for (const u of this.units) {
       const minY = this.lineY + 14 + u.r;
-      const minX = u.r + 4;
-      const maxX = CANVAS_W - u.r - 4;
+      const { minX, maxX } = this._friendlyXRange(u.r);
       let x = u.body.position.x;
       let y = u.body.position.y;
       let vx = u.body.velocity.x;
@@ -1150,8 +1237,7 @@ export class Game {
 
   _clampBlastVelocity(u, vx, vy) {
     const minY = this.lineY + 14 + u.r;
-    const minX = u.r + 4;
-    const maxX = CANVAS_W - u.r - 4;
+    const { minX, maxX } = this._friendlyXRange(u.r);
     const maxY = CANVAS_H - u.r - 4;
     const { x, y } = u.body.position;
     if (vy < 0) {
@@ -1210,6 +1296,7 @@ export class Game {
 
   _update(dt) {
     this._fx = meta.getEffects();
+    if (this.slotCols !== this._fx.slotCols) this._syncPlayfieldFromMeta();
     this.launchCd = Math.max(0, this.launchCd - dt);
 
     // Matter 속도는 스텝당 px. 이번 엔진 스텝과 같은 stepMs로 px/초를 변환한다.
@@ -1262,9 +1349,12 @@ export class Game {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CANVAS_W, y); ctx.stroke();
     }
 
+    const { left: innerL, right: innerR } = this._playfieldInner();
+    const innerW = innerR - innerL;
+
     // 적 점령 영역 (라인 위쪽)
     ctx.fillStyle = 'rgba(140, 30, 40, 0.10)';
-    ctx.fillRect(0, 0, CANVAS_W, this.lineY);
+    ctx.fillRect(innerL, 0, innerW, this.lineY);
 
     // 웨이브라인
     ctx.save();
@@ -1273,21 +1363,21 @@ export class Game {
     ctx.shadowColor = '#e0335a';
     ctx.shadowBlur = 14;
     ctx.beginPath();
-    ctx.moveTo(0, this.lineY);
-    ctx.lineTo(CANVAS_W, this.lineY);
+    ctx.moveTo(innerL, this.lineY);
+    ctx.lineTo(innerR, this.lineY);
     ctx.stroke();
     ctx.strokeStyle = 'rgba(255, 160, 170, 0.5)';
     ctx.lineWidth = 1.5;
     ctx.shadowBlur = 0;
     ctx.beginPath();
-    ctx.moveTo(0, this.lineY);
-    ctx.lineTo(CANVAS_W, this.lineY);
+    ctx.moveTo(innerL, this.lineY);
+    ctx.lineTo(innerR, this.lineY);
     ctx.stroke();
     ctx.restore();
 
     // 발사대 구역
     ctx.fillStyle = 'rgba(120, 90, 40, 0.12)';
-    ctx.fillRect(0, DEFEAT_Y, CANVAS_W, CANVAS_H - DEFEAT_Y);
+    ctx.fillRect(innerL, DEFEAT_Y, innerW, CANVAS_H - DEFEAT_Y);
 
     // 마지노선 (빛나는 빨간 점선) + 해금된 방어벽
     ctx.save();
@@ -1297,11 +1387,12 @@ export class Game {
     ctx.shadowColor = '#ff2222';
     ctx.shadowBlur = 12 + Math.sin(performance.now() / 300) * 5;
     ctx.beginPath();
-    ctx.moveTo(0, DEFEAT_Y);
-    ctx.lineTo(CANVAS_W, DEFEAT_Y);
+    ctx.moveTo(innerL, DEFEAT_Y);
+    ctx.lineTo(innerR, DEFEAT_Y);
     ctx.stroke();
     ctx.restore();
     this._drawWall();
+    this._drawSideWalls();
 
     // 발사 가이드 (수직 점선)
     if (this.dragging && this.state === 'playing') {
@@ -1452,23 +1543,24 @@ export class Game {
       ctx.restore();
 
       const nstat = UNITS[this.nextTier - 1];
+      const nextX = innerR - 55;
       ctx.save();
       ctx.globalAlpha = ready ? 0.85 : 0.4;
       ctx.fillStyle = '#c9b48a';
       ctx.font = "13px 'Malgun Gothic', sans-serif";
       ctx.textAlign = 'center';
-      ctx.fillText('다음', CANVAS_W - 55, CANVAS_H - 62);
+      ctx.fillText('다음', nextX, CANVAS_H - 62);
       ctx.fillStyle = nstat.color;
       ctx.strokeStyle = 'rgba(255,255,255,0.35)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(CANVAS_W - 55, CANVAS_H - 35, 14, 0, Math.PI * 2);
+      ctx.arc(nextX, CANVAS_H - 35, 14, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 13px sans-serif';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(this.nextTier), CANVAS_W - 55, CANVAS_H - 34);
+      ctx.fillText(String(this.nextTier), nextX, CANVAS_H - 34);
       ctx.restore();
     }
 
@@ -1494,31 +1586,56 @@ export class Game {
     }
   }
 
+  _drawSideWalls() {
+    const { left, right } = this._playfieldInner();
+    if (left <= 0 && right >= CANVAS_W) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = '#14100c';
+    ctx.fillRect(0, 0, left, CANVAS_H);
+    ctx.fillRect(right, 0, CANVAS_W - right, CANVAS_H);
+    ctx.fillStyle = 'rgba(62, 52, 42, 0.95)';
+    ctx.fillRect(Math.max(0, left - 8), 0, 8, CANVAS_H);
+    ctx.fillRect(right, 0, 8, CANVAS_H);
+    ctx.strokeStyle = 'rgba(160, 140, 110, 0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(left, 0);
+    ctx.lineTo(left, CANVAS_H);
+    ctx.moveTo(right, 0);
+    ctx.lineTo(right, CANVAS_H);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   _drawWall() {
     if (!this.wall || this.wall.broken) return;
     const ctx = this.ctx;
+    const { left, right } = this._playfieldInner();
+    const w = right - left;
     ctx.save();
     ctx.fillStyle = 'rgba(70, 82, 96, 0.85)';
-    ctx.fillRect(0, DEFEAT_Y - 7, CANVAS_W, 14);
+    ctx.fillRect(left, DEFEAT_Y - 7, w, 14);
     ctx.strokeStyle = '#c5d0dc';
     ctx.lineWidth = 2;
     ctx.shadowColor = '#9ec0e8';
     ctx.shadowBlur = 10;
     ctx.beginPath();
-    ctx.moveTo(0, DEFEAT_Y);
-    ctx.lineTo(CANVAS_W, DEFEAT_Y);
+    ctx.moveTo(left, DEFEAT_Y);
+    ctx.lineTo(right, DEFEAT_Y);
     ctx.stroke();
     ctx.shadowBlur = 0;
     const ratio = this.wall.maxHp > 0 ? this.wall.hp / this.wall.maxHp : 0;
+    const barPad = Math.max(16, Math.min(40, w * 0.09));
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(40, DEFEAT_Y + 10, CANVAS_W - 80, 6);
+    ctx.fillRect(left + barPad, DEFEAT_Y + 10, w - barPad * 2, 6);
     ctx.fillStyle = ratio > 0.35 ? '#8ec8ff' : '#ff8866';
-    ctx.fillRect(40, DEFEAT_Y + 10, (CANVAS_W - 80) * ratio, 6);
+    ctx.fillRect(left + barPad, DEFEAT_Y + 10, (w - barPad * 2) * ratio, 6);
     ctx.fillStyle = '#dce8f4';
     ctx.font = "11px 'Malgun Gothic', sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(`방어벽 ${this.wall.hp} / ${this.wall.maxHp}`, CANVAS_W / 2, DEFEAT_Y + 18);
+    ctx.fillText(`방어벽 ${this.wall.hp} / ${this.wall.maxHp}`, (left + right) / 2, DEFEAT_Y + 18);
     ctx.restore();
   }
 
