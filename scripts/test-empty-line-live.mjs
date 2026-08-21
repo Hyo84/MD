@@ -134,6 +134,82 @@ function sim(game, seconds) {
   assert(Math.abs(game.lineY - expect) < 0.6, `착지 고블린 2초: lineY=${game.lineY.toFixed(2)} 기대 ${expect.toFixed(2)}`);
 }
 
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const m = game._spawnEnemy('goblin');
+  m.row = 0;
+  m.y = 90;
+  m.joining = true;
+  assert(m.y === 90, `합류 시작 y=90 (실제 ${m.y})`);
+  const dt = 1 / 60;
+  const startLine = game.lineY;
+  let pushedEarly = false;
+  let countedWhileJoining = false;
+  for (let i = 0; i < 20 * 60; i++) {
+    game._update(dt);
+    if (!m.joining && m.y + 2 >= game._enemySlotY(m)) break;
+    if (game.lineY > startLine + 0.01) pushedEarly = true;
+    if (game.joinedEnemies().length > 0) countedWhileJoining = true;
+  }
+  assert(!pushedEarly, `슬롯 도달 전에 라인이 밀리면 안 됨 (lineY=${game.lineY.toFixed(2)} y=${m.y.toFixed(1)})`);
+  assert(!countedWhileJoining, '합류 중 joinedEnemies는 비어 있어야 함');
+  assert(!m.joining, `착지해야 함 (joining=${m.joining} y=${m.y.toFixed(1)} slot=${game._enemySlotY(m).toFixed(1)})`);
+  assert(m.y + 2 >= 400 - 8, `착지 y가 라인 근처여야 함 (y=${m.y.toFixed(1)} lineY=${game.lineY.toFixed(1)})`);
+  const joinedLine = game.lineY;
+  sim(game, 1);
+  const goblinPush = BALANCE.baseLineSpeed + MONSTERS.goblin.speed * game.liveMult;
+  const expectJoin = joinedLine + goblinPush * 1;
+  assert(Math.abs(game.lineY - expectJoin) < 0.8, `착지 후 고블린 속도 lineY=${game.lineY.toFixed(2)} 기대 ${expectJoin.toFixed(2)}`);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const front = game._spawnEnemy('troll');
+  front.joining = false;
+  front.y = game._enemySlotY(front);
+  const joiner = game._spawnEnemy('troll');
+  assert(joiner.joining, `겹침 시 둘째는 합류 행군 (joining=${joiner.joining})`);
+  if (Math.hypot(front.x - joiner.x, game._enemySlotY(front) - game._enemySlotY(joiner)) < MONSTERS.troll.r * 2 + 2) {
+    assert(joiner.row > front.row, `착지한 적과 겹치면 뒷열 스택 (front=${front.row} joiner=${joiner.row})`);
+  }
+  const onlyFront = BALANCE.baseLineSpeed + MONSTERS.troll.speed * game.liveMult;
+  const t0 = game.lineY;
+  const dt = 1 / 60;
+  let extraPush = false;
+  for (let i = 0; i < 120; i++) {
+    if (!joiner.joining) break;
+    game._update(dt);
+    if (!joiner.joining) break;
+    const elapsed = (i + 1) / 60;
+    if (game.lineY > t0 + onlyFront * elapsed + 0.8) extraPush = true;
+  }
+  assert(!extraPush, `합류 중인 둘째가 라인 가속에 더해지면 안 됨 (lineY=${game.lineY.toFixed(2)})`);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const boss = game._spawnEnemy('boss');
+  assert(boss.joining, `보스도 합류 중이어야 함 (joining=${boss.joining})`);
+  assert(boss.y <= 90 + 0.01, `보스는 상단에서 행군 (y=${boss.y})`);
+  const dt = 1 / 60;
+  const startLine = game.lineY;
+  let bossPushedEarly = false;
+  let bossCountedEarly = false;
+  for (let i = 0; i < 20 * 60; i++) {
+    game._update(dt);
+    if (!boss.joining) break;
+    if (game.lineY > startLine + 0.01) bossPushedEarly = true;
+    if (game.joinedEnemies().some((en) => en === boss)) bossCountedEarly = true;
+  }
+  assert(!bossPushedEarly, `보스 착지 전 라인 증가 (lineY=${game.lineY.toFixed(2)} y=${boss.y.toFixed(1)})`);
+  assert(!bossCountedEarly, '합류 중 보스는 joinedEnemies에 없어야 함');
+  assert(!boss.joining, `보스가 착지해야 함 (y=${boss.y.toFixed(1)} lineY=${game.lineY.toFixed(1)})`);
+  assert(Math.abs(boss.y - game.lineY) < 3, `보스는 라인 위에 착지 (y=${boss.y.toFixed(1)} lineY=${game.lineY.toFixed(1)})`);
+}
+
 if (failed) {
   console.error(`\n${failed} assertion(s) failed`);
   process.exit(1);

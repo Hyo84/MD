@@ -42,6 +42,8 @@ function colorAlpha(hex, a) {
 // 웨이브라인 슬롯 배치 (열 수는 전장 확장 스킬)
 const SLOT_ROW_H = 46;
 const SIDE_WALL_THICKNESS = 40;
+const JOIN_ARRIVE_EPS = 2;      // 슬롯 Y에 이 거리(px) 안에 들어야 착지
+const JOIN_CATCHUP_BONUS = 20;  // 라인이 내려가는 동안 합류 속도 하한 여유
 
 export class Game {
   constructor(canvas, ui) {
@@ -263,7 +265,7 @@ export class Game {
         m.row = spot.row;
         m.col = spot.col;
         m.x = spot.x;
-        if (!m.joining) m.y = this.lineY - spot.row * SLOT_ROW_H;
+        if (!m.joining) m.y = this._enemySlotY(m);
         this.occupiedSlots.add(`${m.row}:${m.col}`);
       } else {
         m.col = -1;
@@ -466,26 +468,34 @@ export class Game {
     return u;
   }
 
+  // 착지 예정/착지 위치. 합류 행군 중은 예약 슬롯, 착지한 적은 실제 중심.
+  _enemyReserveY(m) {
+    return m.joining ? this._enemySlotY(m) : m.y;
+  }
+
+  _slotOverlapsOthers(x, y, radius, exclude = null, joinedOnly = false) {
+    for (const m of this.enemies) {
+      if (m === exclude || m.dead) continue;
+      if (joinedOnly && (m.joining || !this._enemyOccupiesLine(m))) continue;
+      const mr = MONSTERS[m.key].r;
+      const my = joinedOnly ? m.y : this._enemyReserveY(m);
+      if (Math.hypot(m.x - x, my - y) < radius + mr + 2) return true;
+    }
+    return false;
+  }
+
   // 반지름 기반 스폰 위치 탐색: 기존 적(보스 포함)과 원이 겹치지 않는 빈 슬롯
-  _findSpawnSpot(radius, exclude = null) {
+  // 앞열이 겹치면 더 뒷열(스택)로 간다. 겹치는 앞열에 멈춰 밀지 않음.
+  _findSpawnSpot(radius, exclude = null, minRow = 0) {
     const cols = this.slotCols || BASE_SLOT_COLS;
-    for (let row = 0; row < 30; row++) {
+    for (let row = Math.max(0, minRow); row < 30; row++) {
       const candidates = [];
       for (let col = 0; col < cols; col++) {
         if (this.occupiedSlots.has(`${row}:${col}`)) continue;
         const x = this._slotX(col) + (Math.random() * 14 - 7);
         const y = this.lineY - row * SLOT_ROW_H;
-        let overlaps = false;
-        for (const m of this.enemies) {
-          if (m === exclude) continue;
-          const mr = MONSTERS[m.key].r;
-          const my = this.lineY - m.row * SLOT_ROW_H;
-          if (Math.hypot(m.x - x, my - y) < radius + mr + 2) {
-            overlaps = true;
-            break;
-          }
-        }
-        if (!overlaps) candidates.push({ row, col, x });
+        if (this._slotOverlapsOthers(x, y, radius, exclude)) continue;
+        candidates.push({ row, col, x });
       }
       if (candidates.length > 0) {
         return candidates[Math.floor(Math.random() * candidates.length)];
@@ -505,22 +515,36 @@ export class Game {
         col = spot.col;
         x = spot.x;
       } else {
-        // 보드가 극단적으로 가득 찬 경우: 겹침을 무시하고 빈 슬롯 사용
+        // 앞열이 꽉 찼으면 뒷열 빈 칸. 착지한 적과 겹치면 그 열은 쓰지 않음.
         for (let r2 = 0; r2 < 30 && col < 0; r2++) {
           for (let c2 = 0; c2 < (this.slotCols || BASE_SLOT_COLS); c2++) {
-            if (!this.occupiedSlots.has(`${r2}:${c2}`)) { row = r2; col = c2; break; }
+            if (this.occupiedSlots.has(`${r2}:${c2}`)) continue;
+            const tx = this._slotX(c2) + (Math.random() * 14 - 7);
+            const ty = this.lineY - r2 * SLOT_ROW_H;
+            if (this._slotOverlapsOthers(tx, ty, stat.r, null, true)) continue;
+            row = r2;
+            col = c2;
+            x = tx;
+            break;
           }
         }
-        x = this._slotX(Math.max(0, col)) + (Math.random() * 14 - 7);
+        if (col < 0) {
+          row = 0;
+          col = 0;
+          x = this._slotX(0) + (Math.random() * 14 - 7);
+        }
       }
       this.occupiedSlots.add(`${row}:${col}`);
+    } else {
+      x = this._bossLineX(stat.r);
     }
     // 실효 배율 = 웨이브 곡선 × 실시간 수동 배율 (HP는 스냅샷, ATK/라인속도는 liveMult 즉시 반영)
     const waveMult = waveMultiplier(this.wave);
     const hp = Math.round(stat.hp * effectiveMult(this.wave, this.liveMult));
     const slotY = this.lineY - row * SLOT_ROW_H;
-    const spawnY = ENEMY_SPAWN_Y - row * SLOT_ROW_H;
-    const joining = spawnY < slotY;
+    // 항상 화면 상단(합류 시작 Y)에서 내려온다. 뒷열이라고 위에서 즉시 착지하지 않음.
+    const spawnY = ENEMY_SPAWN_Y;
+    const joining = spawnY < slotY - JOIN_ARRIVE_EPS;
     const m = {
       key, isBoss, row, col, x,
       y: joining ? spawnY : slotY,
@@ -531,29 +555,69 @@ export class Game {
     };
     this.enemies.push(m);
 
-    // 보스 착지 슬롯과 겹치는 적을 미리 밀어냄 (합류 중 비주얼은 겹쳐도 됨)
-    if (isBoss) {
-      const bossSlotY = this.lineY;
-      for (const other of this.enemies) {
-        if (other === m) continue;
-        const or2 = MONSTERS[other.key].r;
-        const otherSlotY = this.lineY - other.row * SLOT_ROW_H;
-        if (Math.hypot(other.x - m.x, otherSlotY - bossSlotY) < stat.r + or2 + 2) {
-          this.occupiedSlots.delete(`${other.row}:${other.col}`);
-          const spot = this._findSpawnSpot(or2, other);
-          if (spot) {
-            other.row = spot.row;
-            other.col = spot.col;
-            other.x = spot.x;
-            if (!other.joining) other.y = this.lineY - spot.row * SLOT_ROW_H;
-          }
-          this.occupiedSlots.add(`${other.row}:${other.col}`);
-        }
-      }
-    }
+    if (isBoss) this._displaceOverlapping(m);
 
     this.effects.burst(m.x, m.y, stat.color, 8, 2.5, 2.5);
     return m;
+  }
+
+  // 보스는 라인(row 0)에 착지. 중앙이 막히면 빈 x, 아니면 밀어내고 중앙 유지.
+  _bossLineX(radius) {
+    const center = CANVAS_W / 2;
+    if (!this._slotOverlapsOthers(center, this.lineY, radius, null, true)) return center;
+    const cols = this.slotCols || BASE_SLOT_COLS;
+    const free = [];
+    for (let col = 0; col < cols; col++) {
+      const x = this._slotX(col);
+      if (!this._slotOverlapsOthers(x, this.lineY, radius, null, true)) free.push(x);
+    }
+    if (free.length > 0) return free[Math.floor(free.length / 2)];
+    return center;
+  }
+
+  _displaceOverlapping(anchor) {
+    const ar = MONSTERS[anchor.key].r;
+    const ay = this._enemySlotY(anchor);
+    for (const other of this.enemies) {
+      if (other === anchor || other.dead || other.isBoss) continue;
+      const or2 = MONSTERS[other.key].r;
+      const oy = this._enemyReserveY(other);
+      if (Math.hypot(other.x - anchor.x, oy - ay) < ar + or2 + 2) {
+        this.occupiedSlots.delete(`${other.row}:${other.col}`);
+        const minRow = Math.max(other.row + 1, 1);
+        const spot = this._findSpawnSpot(or2, other, minRow);
+        if (spot) {
+          other.row = spot.row;
+          other.col = spot.col;
+          other.x = spot.x;
+          if (!other.joining) other.y = this._enemySlotY(other);
+        }
+        this.occupiedSlots.add(`${other.row}:${other.col}`);
+      }
+    }
+  }
+
+  // 목표 슬롯이 착지한 적과 겹치면 더 뒷열로 재배치하고 계속 행군.
+  _ensureJoinSlotClear(m) {
+    if (!m || m.dead || !m.joining) return;
+    const stat = MONSTERS[m.key];
+    if (m.isBoss) {
+      if (this._slotOverlapsOthers(m.x, this.lineY, stat.r, m, true)) {
+        m.x = this._bossLineX(stat.r);
+        this._displaceOverlapping(m);
+      }
+      return;
+    }
+    const slotY = this._enemySlotY(m);
+    if (!this._slotOverlapsOthers(m.x, slotY, stat.r, m, true)) return;
+    this.occupiedSlots.delete(`${m.row}:${m.col}`);
+    const spot = this._findSpawnSpot(stat.r, m, m.row + 1);
+    if (spot) {
+      m.row = spot.row;
+      m.col = spot.col;
+      m.x = spot.x;
+    }
+    this.occupiedSlots.add(`${m.row}:${m.col}`);
   }
 
   _removeUnit(u) {
@@ -766,9 +830,14 @@ export class Game {
     return UNITS[u.tier - 1];
   }
 
-  // 라인에 착지한 적만. 합류 행군 중(joining)은 라인 속도/교전에 안 셈.
+  // 라인에 착지한 적만. 합류 행군 중(joining)이거나 슬롯 Y에 아직 안 닿은 적은 제외.
+  _enemyOccupiesLine(m) {
+    if (!m || m.dead || m.joining) return false;
+    return m.y + JOIN_ARRIVE_EPS >= this._enemySlotY(m);
+  }
+
   joinedEnemies() {
-    return this.enemies.filter((m) => !m.joining && !m.dead);
+    return this.enemies.filter((m) => this._enemyOccupiesLine(m));
   }
 
   _unitEngaged(u, onLine) {
@@ -847,19 +916,29 @@ export class Game {
   }
 
   _enemySlotY(m) {
-    return this.lineY - m.row * SLOT_ROW_H;
+    return this.lineY - (Number(m.row) || 0) * SLOT_ROW_H;
   }
 
   // 합류 중: 슬롯을 향해 내려감. 착지 후: 라인에 고정.
   _syncEnemyY(dt) {
-    const join = Number.isFinite(BALANCE.enemyJoinSpeed) ? Math.max(0, BALANCE.enemyJoinSpeed) : 80;
+    const baseJoin = Number.isFinite(BALANCE.enemyJoinSpeed) ? Math.max(0, BALANCE.enemyJoinSpeed) : 80;
+    const descent = Math.max(0, this.netSpeed || 0);
+    const join = Math.max(baseJoin, descent + JOIN_CATCHUP_BONUS);
+    const step = dt || 0;
+    // 한 프레임 라인 이동보다 훨씬 위에 있으면 joining이 일찍 꺼진 구멍으로 보고 다시 행군.
+    const rejoinSlack = Math.max(12, descent * step + 8);
     for (const m of this.enemies) {
+      if (m.dead) continue;
       const slotY = this._enemySlotY(m);
+      if (!m.joining && m.y < slotY - rejoinSlack) m.joining = true;
       if (m.joining) {
-        m.y += join * (dt || 0);
-        if (m.y >= slotY) {
-          m.y = slotY;
+        this._ensureJoinSlotClear(m);
+        const destY = this._enemySlotY(m);
+        m.y += join * step;
+        if (m.y + JOIN_ARRIVE_EPS >= destY) {
+          m.y = destY;
           m.joining = false;
+          if (m.isBoss) this._displaceOverlapping(m);
         }
       } else {
         m.y = slotY;
@@ -995,6 +1074,7 @@ export class Game {
       const { x, y } = u.body.position;
       let target = null, best = Infinity;
       for (const m of this.enemies) {
+        if (m.dead || m.joining || !this._enemyOccupiesLine(m)) continue;
         const er = MONSTERS[m.key].r;
         const d = Math.hypot(m.x - x, m.y - y) - er;
         if (d <= stat.range && d < best) { best = d; target = m; }
@@ -1010,7 +1090,8 @@ export class Game {
       const sp = stat.special;
       if (u.tier === 5 && sp) {
         for (const m2 of [...this.enemies]) {
-          if (m2 !== target && !m2.dead && Math.hypot(m2.x - target.x, m2.y - target.y) < sp.cleaveRadius) {
+          if (m2 === target || m2.dead || m2.joining || !this._enemyOccupiesLine(m2)) continue;
+          if (Math.hypot(m2.x - target.x, m2.y - target.y) < sp.cleaveRadius) {
             this._damageEnemy(m2, dmg * sp.cleaveMult, u);
           }
         }
@@ -1028,7 +1109,7 @@ export class Game {
 
     // 적 → 아군
     for (const m of [...this.enemies]) {
-      if (m.dead || m.joining || m.stunT > 0) continue;
+      if (m.dead || m.joining || m.stunT > 0 || !this._enemyOccupiesLine(m)) continue;
       m.attackCd -= dt;
       if (m.attackCd > 0) continue;
       const stat = MONSTERS[m.key];
@@ -1221,7 +1302,7 @@ export class Game {
       const { x, y } = u.body.position;
       let hit = false;
       for (const m of this.enemies) {
-        if (m.dead || m.joining) continue;
+        if (m.dead || m.joining || !this._enemyOccupiesLine(m)) continue;
         if (Math.hypot(m.x - x, m.y - y) <= u.r + MONSTERS[m.key].r) {
           hit = true;
           break;
