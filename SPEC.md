@@ -48,9 +48,9 @@
 |----|--------|-----------|
 | `baseLineSpeed` | **6** | 웨이브라인 기본 전진 px/초 |
 | `spawnInterval` | **2.3** | 적 스폰 기본 간격(초). 웨이브에 따라 감소 |
-| `launchCooldown` | **0.75** | 발사 쿨다운(초). 스킬로 감소, 하한 `PROGRESSION.launchCdFloor` |
+| `launchCooldown` | **1.15** | 발사 쿨다운(초). 스킬로 감소, 하한 `PROGRESSION.launchCdFloor` |
 | `launchSpeed` | **1080** | 발사 속도 px/초. `vel.y = -(launchSpeed * stepMs / 1000)` (`stepMs = min(dt*1000, 33.33)`) |
-| `unitAdvanceSpeed` | **30** | 착지 후 아군 전진 px/초. `vel.y = -(unitAdvanceSpeed * advanceMult * stepMs / 1000)` |
+| `unitAdvanceSpeed` | **18** | 착지 후 아군 전진 px/초. `vel.y = -(unitAdvanceSpeed * advanceMult * stepMs / 1000)` |
 | `bossGatherStrength` | **0.6** | 보스 집결 강도 0~1. **0.7 초과**여야 교전 중 유닛도 집결. 기본 0.6이므로 교전 유닛은 집결하지 않음 |
 | `gatherSpeed` | **40** | 집결 최대 가로 이동 px/초. `maxVxTick = gatherSpeed * strength * stepMs / 1000` |
 | `attackCooldown` | **0.8** | 아군·적 기본 공격 틱 간격(초) |
@@ -104,7 +104,7 @@
 - **조준**: 포인터 `y > 560`에서 다운해야 드래그 시작. X만 사용. `aimX = clamp(x, 24, CANVAS_W-24)` = **[24, 426]**.
 - **발사**: 포인터 업 시 `state==='playing'`, 스킬 패널 닫힘, `launchCd<=0`이면 `_launchUnit()`.
 - 스폰 위치 `(aimX, LAUNCHER_Y=700)`, 속도 `{x:0, y: -velFromPxPerSec(launchSpeed, stepMs)}` → **수직 위 직선**. 각도/슬링샷 당김 없음.
-- 쿨다운: `launchCd = effects.launchCooldown` (기본 `max(0.25, 0.75 - rank(launchCd)*0.08)`).
+- 쿨다운: `launchCd = effects.launchCooldown` (기본 `max(0.25, 1.15 - rank(launchCd)*0.16)`).
 - **현재/다음 티어**: 시작 시 둘 다 `_rollTier()`. 발사 후 `currentTier = nextTier`, `nextTier = _rollTier()`.
 - HUD 프리뷰: 우측 하단 `(CANVAS_W-55, CANVAS_H-35)` = (395, 765), 반지름 14, 라벨 「다음」.
 - 대기 유닛은 쿨 중 알파 0.38, 쿨 바 44×5.
@@ -593,16 +593,16 @@ rankLevelStep 기본 1 (필드 없으면 1)
 
 - 트리 전투, maxRank **5**, cost 1, unlockLevel **1**, rankLevelStep **2**, requires null
 - 해금: R1 Lv1, R2 Lv3, R3 Lv5, R4 Lv7, R5 Lv9
-- `perRank = 0.08` 초 감소
-- `launchCooldown = max(0.25, 0.75 - rank*0.08)`
+- `perRank = 0.16` 초 감소
+- `launchCooldown = max(0.25, 1.15 - rank*0.16)`
 
 | Rank | 레벨 | 쿨(초) |
 |------|------|--------|
-| 0 | — | 0.75 |
-| 1 | 1 | 0.67 |
-| 2 | 3 | 0.59 |
-| 3 | 5 | 0.51 |
-| 4 | 7 | 0.43 |
+| 0 | — | 1.15 |
+| 1 | 1 | 0.99 |
+| 2 | 3 | 0.83 |
+| 3 | 5 | 0.67 |
+| 4 | 7 | 0.51 |
 | 5 | 9 | 0.35 |
 
 하한 0.25에 기본 테이블만으로는 도달하지 않음(어드민이 `launchCooldown`/`launchCdFloor`/`perRank`를 바꿔야 함).
@@ -610,8 +610,8 @@ rankLevelStep 기본 1 (필드 없으면 1)
 ### 10.2 `advance` — 진격 속도
 
 - maxRank 5, unlock Lv1, step 1 → R1–5 = Lv1–5
-- `perRank = 0.10` → `advanceMult = 1 + rank*0.10`
-- R1 +10% … R5 +50% (전진 1.1× ~ 1.5×)
+- `perRank = 0.22` → `advanceMult = 1 + rank*0.22`
+- R1 +22% ≈ 22 px/초 … R5 +110% ≈ 37.8 px/초 (전진 1.22× ~ 2.10×)
 
 ### 10.3 `regen` — 재생
 

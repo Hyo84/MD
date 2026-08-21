@@ -10,9 +10,9 @@ export const LAUNCHER_Y = 700;
 export const BALANCE = {
   baseLineSpeed: 6,     // 웨이브라인 기본 전진 속도 (px/초)
   spawnInterval: 2.3,   // 적 스폰 기본 간격 (초, 웨이브에 따라 감소)
-  launchCooldown: 0.75, // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
+  launchCooldown: 1.15, // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
   launchSpeed: 1080,    // 발사 속도 (px/초). 구 값 18은 60fps 틱 속도(= 18×60)
-  unitAdvanceSpeed: 30, // 착지 후 아군 전진 속도 (px/초)
+  unitAdvanceSpeed: 18, // 착지 후 아군 전진 속도 (px/초)
   bossGatherStrength: 0.6, // 보스 집결 강도 (0=안함, 0.7 초과 시 교전 중인 유닛도 집결, 1=최대)
   gatherSpeed: 40,      // 집결 시 최대 가로 이동 속도 (px/초)
   attackCooldown: 0.8,  // 공격 틱 간격 (초)
@@ -183,7 +183,7 @@ export const SKILLS = [
     unlockLevel: 1,
     rankLevelStep: 2,
     requires: null,
-    perRank: 0.08, // 초 감소
+    perRank: 0.16, // 초 감소
   },
   {
     id: 'advance',
@@ -193,7 +193,7 @@ export const SKILLS = [
     cost: 1,
     unlockLevel: 1,
     requires: null,
-    perRank: 0.10, // +10%/랭크
+    perRank: 0.22, // +22%/랭크
   },
   {
     id: 'regen',
