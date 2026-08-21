@@ -272,7 +272,13 @@ export class Game {
     this.canvas.addEventListener('pointermove', (e) => {
       const p = toCanvas(e);
       this.mouse = p;
-      if (this.dragging) this.aimX = clampAimX(p.x);
+      if (this.skillPanelOpen || this.state !== 'playing') return;
+      if (!this.dragging) {
+        if (this._hitRect(p, this._rangeToggleRect)) return;
+        if (this._hitRect(p, this._diffMinusRect)) return;
+        if (this._hitRect(p, this._diffPlusRect)) return;
+      }
+      this.aimX = clampAimX(p.x);
     });
     this.canvas.addEventListener('pointerup', (e) => {
       if (!this.dragging) return;
