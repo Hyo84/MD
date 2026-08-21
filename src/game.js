@@ -1,7 +1,10 @@
 import Matter from 'matter-js';
 import {
   CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y,
-    BALANCE, UNITS, MONSTERS, HEROES, HERO_LIFESPAN,
+    BALANCE, UNITS, MONSTERS, HEROES,
+    HERO_MISSION_DAMAGE, HERO_MISSION_KILLS, HERO_ASCENSION_ATK_MULT, HERO_ASCENSION_SLOWMO,
+    HERO_ASCENSION_REPLACEMENT_TIER, HERO_ASCENSION_BONUS_SCORE,
+    LAUNCH_T2_BASE, CHARGE_STUTTER_TIME, MERGE_BLAST_RADIUS, MERGE_BLAST_FORCE,
     FRICTION_AIR_UNIT, killsNeeded, waveMultiplier, effectiveMult,
     LIVE_MULT_STEP, clampLiveMult, PROGRESSION,
 } from './config.js';
@@ -11,6 +14,17 @@ import { meta } from './meta.js';
 const { Engine, World, Bodies, Body, Events } = Matter;
 
 const RANGE_MODE_LABELS = ['끄기', '아군만', '전체'];
+const ENGINE_DT_CAP_MS = 33.33;
+const SLOWMO_SCALE = 0.25;
+
+function engineStepMs(dt) {
+  return Math.min(dt * 1000, ENGINE_DT_CAP_MS);
+}
+
+/** Matter 속도는 엔진 스텝당 px. px/초를 이번 스텝 변위로 변환. */
+function velFromPxPerSec(pxPerSec, stepMs) {
+  return pxPerSec * stepMs / 1000;
+}
 
 function colorAlpha(hex, a) {
   const n = parseInt(String(hex).replace('#', ''), 16);
@@ -80,10 +94,16 @@ export class Game {
     this.enemies = [];               // 적 (라인 부착 엔티티, 물리 없음)
     this.unitByBodyId = new Map();
     this.mergeQueue = [];
+    this.mergeBlastQueue = [];
     this.occupiedSlots = new Set();  // "row:col"
 
     this.lineY = LINE_START_Y;       // 웨이브라인 현재 위치
     this.netSpeed = 0;               // HUD 표시용 순 속도 (+아래 / -위)
+    this.chargeStutterT = 0;
+    this.slowMoT = 0;
+    this.ascendFlashT = 0;
+    this.shakeT = 0;
+    this._stepMs = 1000 / 60;
 
     this.wave = 1;
     this.kills = 0;
@@ -212,7 +232,7 @@ export class Game {
     const fx = this._effects();
     const r = Math.random();
     if (fx.t3Chance > 0 && r < fx.t3Chance) return 3;
-    if (r < fx.t3Chance + 0.25 + fx.t2Bonus) return 2;
+    if (r < fx.t3Chance + LAUNCH_T2_BASE + fx.t2Bonus) return 2;
     return 1;
   }
 
@@ -310,7 +330,8 @@ export class Game {
 
   _launchUnit() {
     const u = this._spawnUnit(this.currentTier, this.aimX, LAUNCHER_Y);
-    Body.setVelocity(u.body, { x: 0, y: -BALANCE.launchSpeed });
+    const stepMs = this._stepMs || (1000 / 60);
+    Body.setVelocity(u.body, { x: 0, y: -velFromPxPerSec(BALANCE.launchSpeed, stepMs) });
     this.launchCd = this._launchCooldown();
     this.currentTier = this.nextTier;
     this.nextTier = this._rollTier();
@@ -336,7 +357,10 @@ export class Game {
       settled: false, age: 0, engaged: false,
       flashT: 0, abilityT: 0,
       heroType,
-      heroLife: heroType ? HERO_LIFESPAN : 0,
+      missionDamage: 0,
+      targetDamage: heroType ? HERO_MISSION_DAMAGE : 0,
+      targetKills: heroType ? HERO_MISSION_KILLS : 0,
+      firstHit: false,
       valkTick: 0,
     };
     this.units.push(u);
@@ -474,6 +498,7 @@ export class Game {
       if (newTier === 10) {
         const hero = this._summonHero(mx, my);
         this._applyMergeShock(mx, my, hero);
+        this.mergeBlastQueue.push({ x: mx, y: my, exclude: hero });
       } else {
         // 합성 유닛은 발사 관성이 없으므로 즉시 전진 가능
         const spawned = this._spawnUnit(newTier, mx, my);
@@ -481,6 +506,7 @@ export class Game {
         this.effects.burst(mx, my, UNITS[newTier - 1].color, 18, 4, 3.5);
         this.effects.floatText(mx, my - 30, UNITS[newTier - 1].name, '#fff', 15, 0.9);
         this._applyMergeShock(mx, my, spawned);
+        this.mergeBlastQueue.push({ x: mx, y: my, exclude: spawned });
       }
       this._grantScore(newTier * 5);
     }
@@ -584,11 +610,16 @@ export class Game {
     this._removeEnemy(m);
   }
 
-  _damageEnemy(m, dmg) {
-    if (m.dead) return;
+  _damageEnemy(m, dmg, source = null) {
+    if (m.dead) return 0;
+    const dealt = Math.min(Math.max(0, dmg), m.hp);
     m.hp -= dmg;
     m.flashT = 0.12;
+    if (source && source.heroType && !source.dead) {
+      source.missionDamage = (source.missionDamage || 0) + dealt;
+    }
     if (m.hp <= 0) this._onEnemyKilled(m);
+    return dealt;
   }
 
   // ---------- 웨이브라인 이동 (줄다리기) ----------
@@ -621,6 +652,13 @@ export class Game {
   }
 
   _updateLine(dt) {
+    this.chargeStutterT = Math.max(0, (this.chargeStutterT || 0) - dt);
+    // 돌격 저지력: firstHit 동안 라인 순속도 0 (빈 라인 푸시 포함)
+    if (this.chargeStutterT > 0) {
+      this.netSpeed = 0;
+      for (const m of this.enemies) m.y = this.lineY - m.row * SLOT_ROW_H;
+      return;
+    }
     // 적이 없으면 전열 아군 저지력으로 시작 위치까지 밀어올림 (보스 대기 중에도 동일)
     if (this.enemies.length === 0) {
       let stopping = 0;
@@ -683,7 +721,8 @@ export class Game {
 
   // ---------- 아군 유닛: 착지 후 전진, 실제 교전 시(사거리 내 적) 정지 ----------
   _updateUnitAdvance(dt) {
-    const advTick = (BALANCE.unitAdvanceSpeed * this._effects().advanceMult) / 60; // px/초 → px/틱(기준 60fps)
+    const stepMs = this._stepMs || engineStepMs(dt);
+    const advTick = velFromPxPerSec(BALANCE.unitAdvanceSpeed * this._effects().advanceMult, stepMs);
     for (const u of this.units) {
       u.age += dt;
       // 발사 관성이 소진되면 정착 → 전진 시작
@@ -705,14 +744,15 @@ export class Game {
   }
 
   // ---------- 보스 집결: 교전하지 않는 유닛이 보스 쪽으로 이동 ----------
-  _updateBossGather() {
+  _updateBossGather(dt) {
     const strength = Math.max(0, Math.min(1, BALANCE.bossGatherStrength));
     if (strength <= 0) return;
     const boss = this.enemies.find((m) => m.isBoss);
     if (!boss) return;
 
     const engagedAlsoGather = strength > 0.7;
-    const maxVxTick = (BALANCE.gatherSpeed * strength) / 60; // px/초 → px/틱
+    const stepMs = this._stepMs || engineStepMs(dt);
+    const maxVxTick = velFromPxPerSec(BALANCE.gatherSpeed * strength, stepMs);
 
     for (const u of this.units) {
       if (!u.settled) continue;
@@ -746,7 +786,7 @@ export class Game {
           u.body.position.x - h.body.position.x,
           u.body.position.y - h.body.position.y,
         );
-        if (d < 140) return true;
+        if (d < HEROES.jeanne.auraRadius) return true;
       }
     }
     return false;
@@ -770,25 +810,27 @@ export class Game {
       u.attackCd = BALANCE.attackCooldown;
 
       let dmg = stat.atk;
-      if (this._jeanneBuffed(u)) dmg *= 1.5;
+      if (this._jeanneBuffed(u)) dmg *= HEROES.jeanne.damageBuff;
       this.effects.hitFlash(target.x, target.y, '#fff');
 
       // 티어 특수 능력
-      if (u.tier === 5) {
+      const sp = stat.special;
+      if (u.tier === 5 && sp) {
         for (const m2 of [...this.enemies]) {
-          if (m2 !== target && !m2.dead && Math.hypot(m2.x - target.x, m2.y - target.y) < 60) {
-            this._damageEnemy(m2, dmg * 0.5);
+          if (m2 !== target && !m2.dead && Math.hypot(m2.x - target.x, m2.y - target.y) < sp.cleaveRadius) {
+            this._damageEnemy(m2, dmg * sp.cleaveMult, u);
           }
         }
       }
-      if (u.tier === 6 && Math.random() < 0.10 && !target.dead) {
-        target.stunT = Math.max(target.stunT, 0.5);
+      if (u.tier === 6 && sp && Math.random() < sp.stunChance && !target.dead) {
+        target.stunT = Math.max(target.stunT, sp.stunDuration);
         this.effects.floatText(target.x, target.y - 24, '기절!', '#87CEFA', 12, 0.5);
       }
-      if (u.tier === 8 && !target.dead) {
-        target.burn = { dps: stat.atk * 0.2, t: 3 };
+      if (u.tier === 8 && sp && !target.dead) {
+        target.burn = { dps: stat.atk * sp.burnAtkFrac, t: sp.burnDuration };
       }
-      if (!target.dead) this._damageEnemy(target, dmg);
+      if (!target.dead) this._damageEnemy(target, dmg, u);
+      this._checkHeroMission(u);
     }
 
     // 적 → 아군
@@ -839,8 +881,9 @@ export class Game {
       u.abilityT += dt;
       const stat = this._unitStat(u);
 
-      // T7 성기사: 2초마다 주변 아군 회복
-      if (u.tier === 7 && u.abilityT >= 2) {
+      const sp = stat.special;
+      // T7 성기사: 주기마다 주변 아군 회복
+      if (u.tier === 7 && sp && u.abilityT >= sp.healPeriod) {
         u.abilityT = 0;
         for (const a of this.units) {
           if (a.dead || a === u) continue;
@@ -848,48 +891,45 @@ export class Game {
             a.body.position.x - u.body.position.x,
             a.body.position.y - u.body.position.y,
           );
-          if (d < 110 && a.hp < a.maxHp) {
-            a.hp = Math.min(a.maxHp, a.hp + a.maxHp * 0.04);
+          if (d < sp.healRadius && a.hp < a.maxHp) {
+            a.hp = Math.min(a.maxHp, a.hp + a.maxHp * sp.healPct);
             this.effects.burst(a.body.position.x, a.body.position.y - a.r, '#7CFC00', 3, 1.5, 2);
           }
         }
       }
 
-      // T9 대원수: 4초마다 사거리 내 광역 충격파
-      if (u.tier === 9 && u.abilityT >= 4) {
+      // T9 대원수: 주기마다 사거리 내 광역 충격파
+      if (u.tier === 9 && sp && u.abilityT >= sp.shockPeriod) {
         u.abilityT = 0;
         this.effects.burst(u.body.position.x, u.body.position.y, '#9370DB', 24, 5.5, 3.5);
         for (const m of [...this.enemies]) {
           if (m.dead) continue;
           const d = Math.hypot(m.x - u.body.position.x, m.y - u.body.position.y);
-          if (d < stat.range) this._damageEnemy(m, stat.atk * 0.3);
+          if (d < stat.range) this._damageEnemy(m, stat.atk * sp.shockAtkFrac, u);
         }
       }
 
-      // T10 영웅
+      // T10 영웅 (수명 타이머 없음 — 사명 쿼터 또는 HP 사망)
       if (u.heroType) {
-        u.heroLife -= dt;
-        if (u.heroLife <= 0) {
-          this.effects.burst(u.body.position.x, u.body.position.y, '#FFD700', 24, 4, 4);
-          this._removeUnit(u);
-          continue;
-        }
-        if (u.heroType === 'arthur' && u.abilityT >= 3) {
+        const hero = HEROES[u.heroType];
+        if (u.heroType === 'arthur' && u.abilityT >= hero.period) {
           u.abilityT = 0;
           this.effects.lineFlash(this.lineY, '#9be7ff');
           for (const m of [...this.enemies]) {
-            if (!m.dead) this._damageEnemy(m, stat.atk * 0.4);
+            if (!m.dead) this._damageEnemy(m, stat.atk * hero.atkFrac, u);
           }
+          this._checkHeroMission(u);
         }
         if (u.heroType === 'valkyrie') {
           u.valkTick += dt;
-          if (u.valkTick >= 0.3) {
+          if (u.valkTick >= hero.tick) {
             u.valkTick = 0;
             for (const m of [...this.enemies]) {
               if (m.dead) continue;
               const d = Math.hypot(m.x - u.body.position.x, m.y - u.body.position.y);
-              if (d < stat.range) this._damageEnemy(m, stat.atk * 0.12);
+              if (d < stat.range) this._damageEnemy(m, stat.atk * hero.atkFrac, u);
             }
+            this._checkHeroMission(u);
           }
         }
       }
@@ -944,11 +984,102 @@ export class Game {
     }
   }
 
+  _checkHeroMission(u) {
+    if (!u || u.dead || !u.heroType || u._ascending) return;
+    const quota = u.targetDamage || HERO_MISSION_DAMAGE;
+    if ((u.missionDamage || 0) >= quota) this._ascendHero(u);
+  }
+
+  _ascendHero(hero) {
+    if (!hero || hero.dead || hero._ascending) return;
+    hero._ascending = true;
+    const x = hero.body.position.x;
+    const y = hero.body.position.y;
+    const blast = this._unitStat(hero).atk * HERO_ASCENSION_ATK_MULT;
+
+    this.slowMoT = HERO_ASCENSION_SLOWMO;
+    this.ascendFlashT = HERO_ASCENSION_SLOWMO;
+    this.shakeT = Math.max(this.shakeT || 0, 0.22);
+
+    for (const m of [...this.enemies]) {
+      if (!m.dead) this._damageEnemy(m, blast);
+    }
+
+    this.lineY = LINE_START_Y;
+    this.netSpeed = 0;
+    for (const m of this.enemies) m.y = this.lineY - m.row * SLOT_ROW_H;
+
+    this.effects.burst(x, y, '#FFD700', 40, 7, 5);
+    this.effects.burst(x, y, '#fff8dc', 24, 5, 4);
+    this.effects.floatText(x, y - 40, '명예로운 승천!', '#FFD700', 22, 1.6);
+    this._grantScore(HERO_ASCENSION_BONUS_SCORE);
+
+    this._removeUnit(hero);
+
+    const t5 = UNITS[HERO_ASCENSION_REPLACEMENT_TIER - 1];
+    let sx = Math.max(t5.r + 4, Math.min(CANVAS_W - t5.r - 4, x));
+    let sy = Math.max(this.lineY + 40, Math.min(y, DEFEAT_Y - 30));
+    const knight = this._spawnUnit(HERO_ASCENSION_REPLACEMENT_TIER, sx, sy);
+    knight.settled = true;
+  }
+
+  _updateChargeHits() {
+    for (const u of this.units) {
+      if (u.dead || u.settled || u.firstHit) continue;
+      const { x, y } = u.body.position;
+      let hit = false;
+      for (const m of this.enemies) {
+        if (m.dead) continue;
+        if (Math.hypot(m.x - x, m.y - y) <= u.r + MONSTERS[m.key].r) {
+          hit = true;
+          break;
+        }
+      }
+      if (!hit) continue;
+      u.firstHit = true;
+      this.chargeStutterT = CHARGE_STUTTER_TIME;
+      this.shakeT = Math.max(this.shakeT || 0, 0.12);
+      this.effects.hitFlash(x, y, '#ffe8a0');
+    }
+  }
+
+  _applyMergeBlasts() {
+    if (!this.mergeBlastQueue.length) return;
+    const stepMs = this._stepMs || (1000 / 60);
+    const maxImpulse = velFromPxPerSec(MERGE_BLAST_FORCE, stepMs);
+    for (const blast of this.mergeBlastQueue) {
+      for (const u of this.units) {
+        if (u.dead || u === blast.exclude) continue;
+        const dx = u.body.position.x - blast.x;
+        const dy = u.body.position.y - blast.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > MERGE_BLAST_RADIUS || dist < 0.001) continue;
+        const mag = maxImpulse * (1 - dist / MERGE_BLAST_RADIUS);
+        const nx = dx / dist;
+        const ny = dy / dist;
+        Body.applyForce(u.body, u.body.position, {
+          x: nx * mag * u.body.mass,
+          y: ny * mag * u.body.mass,
+        });
+        Body.setVelocity(u.body, {
+          x: u.body.velocity.x + nx * mag,
+          y: u.body.velocity.y + ny * mag,
+        });
+      }
+    }
+    this.mergeBlastQueue.length = 0;
+  }
+
   // ---------- 메인 루프 ----------
   _loop(now) {
-    const dt = Math.min((now - this._lastTime) / 1000, 0.05);
+    const rawDt = Math.min((now - this._lastTime) / 1000, 0.05);
     this._lastTime = now;
 
+    if (this.slowMoT > 0) this.slowMoT = Math.max(0, this.slowMoT - rawDt);
+    if (this.ascendFlashT > 0) this.ascendFlashT = Math.max(0, this.ascendFlashT - rawDt);
+    if (this.shakeT > 0) this.shakeT = Math.max(0, this.shakeT - rawDt);
+
+    const dt = rawDt * (this.slowMoT > 0 ? SLOWMO_SCALE : 1);
     if (this.state === 'playing') this._update(dt);
     this._draw();
 
@@ -959,20 +1090,23 @@ export class Game {
     this._fx = meta.getEffects();
     this.launchCd = Math.max(0, this.launchCd - dt);
 
-    // 실제 경과 시간으로 물리 스텝 (60Hz가 아닌 모니터에서도 속도 일정)
-    Engine.update(this.engine, Math.min(dt * 1000, 33.33));
+    // Matter 속도는 스텝당 px. 이번 엔진 스텝과 같은 stepMs로 px/초를 변환한다.
+    this._stepMs = engineStepMs(dt);
+    Engine.update(this.engine, this._stepMs);
     this._processMerges();
     this._updateSpawning(dt);
     this._computeEngagement();
+    this._updateChargeHits();
     this._updateLine(dt);
     if (this.state !== 'playing') return;
     this._updateUnitAdvance(dt);
-    this._updateBossGather();
+    this._updateBossGather(dt);
     this._updateCombat(dt);
     this._updateRegen(dt);
     this._updateArchers(dt);
     this._updateEnemyTicks(dt);
     this._updateUnitAbilities(dt);
+    this._applyMergeBlasts();
     this._enforceLineBoundary();
     this.effects.update(dt);
 
@@ -985,6 +1119,12 @@ export class Game {
   _draw() {
     this._fx = meta.getEffects();
     const ctx = this.ctx;
+    const shaking = (this.shakeT || 0) > 0;
+    if (shaking) {
+      ctx.save();
+      const mag = 3.2 * Math.min(1, this.shakeT / 0.12);
+      ctx.translate((Math.random() - 0.5) * 2 * mag, (Math.random() - 0.5) * 2 * mag);
+    }
 
     // 배경
     const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
@@ -1118,12 +1258,24 @@ export class Game {
       ctx.restore();
       this._drawHpBar(x, y - u.r - 9, u.r * 2, u.hp / u.maxHp, '#2ecc71');
       if (u.heroType) {
+        const quota = u.targetDamage || HERO_MISSION_DAMAGE;
+        const t = quota > 0 ? Math.min(1, (u.missionDamage || 0) / quota) : 0;
+        const gw = u.r * 2.2;
+        const gx = x - gw / 2;
+        const gy = y - u.r - 20;
         ctx.save();
-        ctx.strokeStyle = 'rgba(255, 215, 0, 0.8)';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(x, y, u.r + 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (u.heroLife / HERO_LIFESPAN));
-        ctx.stroke();
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(gx, gy, gw, 5);
+        ctx.fillStyle = '#FFD700';
+        ctx.fillRect(gx, gy, gw * t, 5);
+        ctx.strokeStyle = 'rgba(255, 215, 0, 0.65)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(gx, gy, gw, 5);
+        ctx.fillStyle = 'rgba(255, 230, 140, 0.9)';
+        ctx.font = "9px 'Malgun Gothic', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('사명', x, gy - 1);
         ctx.restore();
       }
     }
@@ -1136,7 +1288,7 @@ export class Game {
         ctx.lineWidth = 2;
         ctx.setLineDash([5, 7]);
         ctx.beginPath();
-        ctx.arc(h.body.position.x, h.body.position.y, 140, 0, Math.PI * 2);
+        ctx.arc(h.body.position.x, h.body.position.y, HEROES.jeanne.auraRadius, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
@@ -1207,7 +1359,17 @@ export class Game {
       ctx.restore();
     }
 
+    if (shaking) ctx.restore();
+
     this._drawHud();
+
+    if ((this.ascendFlashT || 0) > 0) {
+      const a = Math.max(0, this.ascendFlashT / HERO_ASCENSION_SLOWMO);
+      ctx.fillStyle = `rgba(255, 215, 0, ${a * 0.28})`;
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      ctx.fillStyle = `rgba(255, 255, 255, ${a * 0.38})`;
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    }
   }
 
   _drawWall() {

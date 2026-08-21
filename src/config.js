@@ -11,7 +11,7 @@ export const BALANCE = {
   baseLineSpeed: 6,     // 웨이브라인 기본 전진 속도 (px/초)
   spawnInterval: 2.3,   // 적 스폰 기본 간격 (초, 웨이브에 따라 감소)
   launchCooldown: 0.75, // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
-  launchSpeed: 18,      // 발사 속도
+  launchSpeed: 1080,    // 발사 속도 (px/초). 구 값 18은 60fps 틱 속도(= 18×60)
   unitAdvanceSpeed: 30, // 착지 후 아군 전진 속도 (px/초)
   bossGatherStrength: 0.6, // 보스 집결 강도 (0=안함, 0.7 초과 시 교전 중인 유닛도 집결, 1=최대)
   gatherSpeed: 40,      // 집결 시 최대 가로 이동 속도 (px/초)
@@ -27,6 +27,16 @@ export const BALANCE = {
   emptyLinePushScale: 1,  // 저지력 배율 (1 = 교전 저지력과 동일)
   emptyLinePushSlack: 32, // 라인 홀드 위치에서 이 거리(px) 안이면 전열로 취급
 };
+
+// T2 발사 기본 확률 (_rollTier). 스킬 t2Bonus가 이 값에 가산.
+export const LAUNCH_T2_BASE = 0.25;
+
+// 돌격 저지력: 미정착 발사 유닛이 적과 첫 접촉 시 라인 정지
+export const CHARGE_STUTTER_TIME = 0.2; // 초 (갱신 스택)
+
+// 머지 팽창 넉백: 합성 중점에서 주변 아군을 밖으로 밀침
+export const MERGE_BLAST_RADIUS = 80; // px
+export const MERGE_BLAST_FORCE = 360; // px/초 임펄스 (중심에서 최대, 거리 감쇠)
 
 export const LIVE_MULT_MIN = 0.5;
 export const LIVE_MULT_MAX = 5.0;
@@ -59,21 +69,32 @@ export const UNITS = [
   { tier: 2,  name: '신병',         color: '#C2A679', r: 18, hp: 110,   atk: 12,   mass: 1.3,  stop: 6,  range: 50 },
   { tier: 3,  name: '경보병',       color: '#CD7F32', r: 20, hp: 240,   atk: 25,   mass: 1.7,  stop: 9,  range: 62 },
   { tier: 4,  name: '중보병',       color: '#708090', r: 22, hp: 500,   atk: 55,   mass: 2.2,  stop: 13, range: 75 },
-  { tier: 5,  name: '기사단원',     color: '#4682B4', r: 24, hp: 1050,  atk: 120,  mass: 2.8,  stop: 18, range: 90 },
-  { tier: 6,  name: '근위대장',     color: '#4169E1', r: 26, hp: 2200,  atk: 250,  mass: 3.5,  stop: 24, range: 108 },
-  { tier: 7,  name: '성기사',       color: '#FFD700', r: 28, hp: 4600,  atk: 520,  mass: 4.3,  stop: 32, range: 128 },
-  { tier: 8,  name: '드래곤가디언', color: '#8B0000', r: 30, hp: 9500,  atk: 1100, mass: 5.3,  stop: 42, range: 150 },
-  { tier: 9,  name: '대원수',       color: '#4B0082', r: 33, hp: 19000, atk: 2300, mass: 6.5,  stop: 55, range: 180 },
+  { tier: 5,  name: '기사단원',     color: '#4682B4', r: 24, hp: 1050,  atk: 120,  mass: 2.8,  stop: 18, range: 90,
+    special: { cleaveRadius: 60, cleaveMult: 0.5 } },
+  { tier: 6,  name: '근위대장',     color: '#4169E1', r: 26, hp: 2200,  atk: 250,  mass: 3.5,  stop: 24, range: 108,
+    special: { stunChance: 0.10, stunDuration: 0.5 } },
+  { tier: 7,  name: '성기사',       color: '#FFD700', r: 28, hp: 4600,  atk: 520,  mass: 4.3,  stop: 32, range: 128,
+    special: { healPeriod: 2, healRadius: 110, healPct: 0.04 } },
+  { tier: 8,  name: '드래곤가디언', color: '#8B0000', r: 30, hp: 9500,  atk: 1100, mass: 5.3,  stop: 42, range: 150,
+    special: { burnAtkFrac: 0.20, burnDuration: 3 } },
+  { tier: 9,  name: '대원수',       color: '#4B0082', r: 33, hp: 19000, atk: 2300, mass: 6.5,  stop: 55, range: 180,
+    special: { shockPeriod: 4, shockAtkFrac: 0.3 } },
   { tier: 10, name: '영웅',         color: '#FF4500', r: 38, hp: 50000, atk: 6500, mass: 10.0, stop: 90, range: 225 },
 ];
 
 export const HEROES = {
-  arthur:   { name: '아서',   desc: '3초마다 전체 검기' },
-  jeanne:   { name: '잔느',   desc: '주변 아군 공격력 +50%' },
-  valkyrie: { name: '발키리', desc: '사거리 내 회전 베기' },
+  arthur:   { name: '아서',   desc: '3초마다 전체 검기', period: 3, atkFrac: 0.4 },
+  jeanne:   { name: '잔느',   desc: '주변 아군 공격력 +50%', auraRadius: 140, damageBuff: 1.5 },
+  valkyrie: { name: '발키리', desc: '사거리 내 회전 베기', tick: 0.3, atkFrac: 0.12 },
 };
 
-export const HERO_LIFESPAN = 15; // 초
+// T10 사명: 피해 쿼터를 채우면 명예로운 승천. HP로 죽으면 승천 없음.
+export const HERO_MISSION_DAMAGE = 80000; // 기본 게이지 (이 영웅 바디가 적에게 가한 피해)
+export const HERO_MISSION_KILLS = 25;     // 미사용 대안 쿼터 (킬 모드 스위치 없음)
+export const HERO_ASCENSION_ATK_MULT = 1.5;
+export const HERO_ASCENSION_SLOWMO = 0.3; // 초 (실시간 슬로모·플래시)
+export const HERO_ASCENSION_REPLACEMENT_TIER = 5;
+export const HERO_ASCENSION_BONUS_SCORE = 400;
 
 // 적 (웨이브라인에 부착되는 개체)
 // speed = 라인 전진 가속 기여 (px/초, 0이면 라인을 밀지 않음)

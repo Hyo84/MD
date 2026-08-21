@@ -49,10 +49,10 @@
 | `baseLineSpeed` | **6** | 웨이브라인 기본 전진 px/초 |
 | `spawnInterval` | **2.3** | 적 스폰 기본 간격(초). 웨이브에 따라 감소 |
 | `launchCooldown` | **0.75** | 발사 쿨다운(초). 스킬로 감소, 하한 `PROGRESSION.launchCdFloor` |
-| `launchSpeed` | **18** | 발사 직후 Matter 속도 `{x:0, y: -18}` (코드 주석: 전진 속도와 같이 **px/초 → px/틱, 기준 60fps** 로 나눔) |
-| `unitAdvanceSpeed` | **30** | 착지 후 아군 전진 px/초. 실제 적용 `vel.y = -(unitAdvanceSpeed * advanceMult) / 60` |
+| `launchSpeed` | **1080** | 발사 속도 px/초. `vel.y = -(launchSpeed * stepMs / 1000)` (`stepMs = min(dt*1000, 33.33)`) |
+| `unitAdvanceSpeed` | **30** | 착지 후 아군 전진 px/초. `vel.y = -(unitAdvanceSpeed * advanceMult * stepMs / 1000)` |
 | `bossGatherStrength` | **0.6** | 보스 집결 강도 0~1. **0.7 초과**여야 교전 중 유닛도 집결. 기본 0.6이므로 교전 유닛은 집결하지 않음 |
-| `gatherSpeed` | **40** | 집결 최대 가로 이동 px/초. 적용 `maxVxTick = (gatherSpeed * strength) / 60` |
+| `gatherSpeed` | **40** | 집결 최대 가로 이동 px/초. `maxVxTick = gatherSpeed * strength * stepMs / 1000` |
 | `attackCooldown` | **0.8** | 아군·적 기본 공격 틱 간격(초) |
 | `enemyReach` | **50** | 적 근접 사거리 보정 px. 실제 사거리 = `적.r + 50` |
 | `gentleRate` | **0.10** | 완만 구간: 웨이브당 +10% |
@@ -103,7 +103,7 @@
 
 - **조준**: 포인터 `y > 560`에서 다운해야 드래그 시작. X만 사용. `aimX = clamp(x, 24, CANVAS_W-24)` = **[24, 426]**.
 - **발사**: 포인터 업 시 `state==='playing'`, 스킬 패널 닫힘, `launchCd<=0`이면 `_launchUnit()`.
-- 스폰 위치 `(aimX, LAUNCHER_Y=700)`, 속도 `{x:0, y: -BALANCE.launchSpeed}` → **수직 위 직선**. 각도/슬링샷 당김 없음.
+- 스폰 위치 `(aimX, LAUNCHER_Y=700)`, 속도 `{x:0, y: -velFromPxPerSec(launchSpeed, stepMs)}` → **수직 위 직선**. 각도/슬링샷 당김 없음.
 - 쿨다운: `launchCd = effects.launchCooldown` (기본 `max(0.25, 0.75 - rank(launchCd)*0.08)`).
 - **현재/다음 티어**: 시작 시 둘 다 `_rollTier()`. 발사 후 `currentTier = nextTier`, `nextTier = _rollTier()`.
 - HUD 프리뷰: 우측 하단 `(CANVAS_W-55, CANVAS_H-35)` = (395, 765), 반지름 14, 라벨 「다음」.
@@ -138,7 +138,7 @@ else → 티어 1
 - 그 외 → 새 유닛 스폰, **`settled = true`** (발사 관성 없이 즉시 전진) + 머지 충격
 - 점수/XP: `newTier * 5` (`_grantScore`)
 
-영웅 3종 균등 랜덤: `arthur` / `jeanne` / `valkyrie`. 수명 `HERO_LIFESPAN = 15`초.
+영웅 3종 균등 랜덤: `arthur` / `jeanne` / `valkyrie`. 수명 타이머 없음. `HERO_MISSION_DAMAGE = 80000` 피해 쿼터를 채우면 명예로운 승천.
 
 ### 2.3 웨이브라인 줄다리기
 
@@ -201,7 +201,7 @@ if lineY <= LINE_START_Y → lineY = LINE_START_Y, netSpeed = 0
 | 7 | 성기사 | `#FFD700` | 28 | 4600 | 520 | 4.3 | 128 | 32 | **2초마다** 자신 제외 거리 **&lt; 110** 아군에게 `maxHp * 0.04` 회복. 라벨 글자색 `#5c4500` |
 | 8 | 드래곤가디언 | `#8B0000` | 30 | 9500 | 1100 | 5.3 | 150 | 42 | 기본 공격 시 대상 `burn = { dps: atk*0.2, t: 3 }`. 기존 화상 **덮어씀**(스택 아님) |
 | 9 | 대원수 | `#4B0082` | 33 | 19000 | 2300 | 6.5 | 180 | 55 | **4초마다** 거리 `&lt; range(180)` 적에게 `atk * 0.3` (적 반지름 미차감) |
-| 10 | 영웅 | `#FF4500` | 38 | 50000 | 6500 | 10.0 | 225 | 90 | 15초 수명 + 히어로 스킬. 두 T9 머지로만 생성 |
+| 10 | 영웅 | `#FF4500` | 38 | 50000 | 6500 | 10.0 | 225 | 90 | 사명 피해 쿼터 + 히어로 스킬. 두 T9 머지로만 생성 |
 
 저지력 실효값: `stop * effects.stopMult`.  
 아군 HP/ATK/range는 웨이브 배율을 받지 않음.
@@ -215,10 +215,10 @@ if lineY <= LINE_START_Y → lineY = LINE_START_Y, netSpeed = 0
 | id | 이름 | 설정 desc | 실제 로직 |
 |----|------|-----------|-----------|
 | `arthur` | 아서 | 3초마다 전체 검기 | `abilityT >= 3`마다 리셋. **모든 생존 적**에게 `atk * 0.4` = **2600**. 라인 플래시 |
-| `jeanne` | 잔느 | 주변 아군 공격력 +50% | 오라 반경 **140px** (하드코딩, 설정 없음). 비영웅 아군의 **기본 공격 dmg × 1.5**. 패시브라 `abilityT` 미사용 |
-| `valkyrie` | 발키리 | 사거리 내 회전 베기 | `valkTick >= 0.3`마다 리셋. 거리 `&lt; range(225)` 적에게 `atk * 0.12` = **780**. 기본 공격과 별 틱 |
+| `jeanne` | 잔느 | 주변 아군 공격력 +50% | 오라 반경 **`HEROES.jeanne.auraRadius`(140px)**. 비영웅 아군의 **기본 공격 dmg × `damageBuff`(1.5)**. 패시브라 `abilityT` 미사용 |
+| `valkyrie` | 발키리 | 사거리 내 회전 베기 | `valkTick >= tick(0.3)`마다 리셋. 거리 `&lt; range(225)` 적에게 `atk * atkFrac(0.12)` = **780**. 기본 공격과 별 틱 |
 
-수명 0이 되면 골드 버스트 후 제거. 사망 점수 없음. 남은 수명은 유닛 둘레 호로 표시 (`heroLife / 15`).
+수명 타이머 없음. `missionDamage`가 `HERO_MISSION_DAMAGE`(80000)에 도달하면 명예로운 승천(슬로모 0.3초, 전체 `atk*1.5`, 라인 90 리셋, T5 스폰, 점수 400). HP 사망 시 승천 없음. 게이지는 영웅 위 「사명」 바.
 
 ---
 
@@ -415,7 +415,7 @@ if body.y < minY → 위치를 y=minY로 고정, vel.y<0이면 0
 
 ```
 minHoldY = lineY + 20 + u.r
-advTick = (unitAdvanceSpeed * advanceMult) / 60
+advTick = unitAdvanceSpeed * advanceMult * stepMs / 1000
 
 if y <= minHoldY:
   vel.y < 0 이면 vel.y = 0   // 위로 못 뚫음
@@ -457,7 +457,7 @@ HP 2300, ATK 85, speed 38, r 45, score 500.
 strength = clamp(bossGatherStrength, 0, 1)     // 기본 0.6
 if strength <= 0 또는 보스 없음 → return
 engagedAlsoGather = (strength > 0.7)           // 기본 false
-maxVxTick = (gatherSpeed * strength) / 60      // (40*0.6)/60 = 0.4
+maxVxTick = gatherSpeed * strength * stepMs / 1000  // 40*0.6 @16.67ms ≈ 0.4
 
 정착 유닛에 대해:
   교전 중이고 engagedAlsoGather 아니면 skip
@@ -858,12 +858,12 @@ healPct = rank * 0.04
 5. **라인 가속에 `waveMultiplier` 미적용.** HP/ATK만 웨이브 곡선. 후반 라인 압박은 보스 speed·개체 수·liveMult 중심.
 6. **트롤 regen 12는 난이도 배율과 무관.** 후반엔 상대적으로 약해짐.
 7. 궁수 「웨이브 솔로 불가」는 주석 의도일 뿐, 사격 자체는 라인/아군과 독립.
-8. 잔느 반경 140, T5 클레브 60, T6 10%/0.5s, T7 2s/110px/4%, T8 20% atk 3s, T9 4s/30% atk, 아서 40%, 발키리 0.3s/12% 등은 **UNITS 테이블이 아니라 `game.js` 하드코딩**.
-9. T2 기본 25%도 `_rollTier` 하드코딩.
+8. T5–T9 특수·영웅 스킬 수치는 `UNITS[].special` / `HEROES` 테이블. T2 기본 확률은 `LAUNCH_T2_BASE`.
+9. T2 기본 25%는 `_rollTier`에서 `LAUNCH_T2_BASE`를 읽음.
 10. 머지 충격 회복(`healPct`)은 적용되지만 스킬 UI 설명에서 빠짐.
 11. `archerCount.maxRank=4`이나 기본 `archerMax=3`이면 실효 최대 랭크 2.
-12. 영웅 수명 15초 후 소멸 — 장기 벽이 되지 않음.
-13. 전진/집결 속도는 `/60`으로 Matter 속도에 넣어 **60fps 틱 가정**. `Engine.update`는 실제 dt(최대 33.33ms). 고주사율·프레임 드랍 시 체감 속도가 어긋날 수 있음.
+12. 영웅은 사명 피해 쿼터(80000) 또는 HP 사망으로만 퇴장. 승천 시 T5가 전열을 이음.
+13. 발사/전진/집결은 `vel = pxPerSec * stepMs / 1000` (`stepMs = min(dt*1000, 33.33)`). `launchSpeed` 기본 1080 px/초.
 14. 시작 `spawnTimer=1.5`는 첫 간격 공식과 별개(첫 적은 약 1.5초 후).
 
 ---
@@ -876,7 +876,7 @@ healPct = rank * 0.04
 - W11부터 HP/ATK ×1.3 누적 vs 아군은 머지·메타만으로 성장. 라인 speed는 웨이브 배율을 안 받으므로 “스탯은 폭증, 라인은 보스·머릿수” 구조가 의도인지.
 - 스켈레톤(speed 0) 비중 증가 시 라인은 느린데 DPS 체크만 길어지는지.
 - 트롤 1200 HP + 비확대 regen 12가 W3에서 전열을 막는지, 후반엔 고블린보다 약한 몸인지.
-- 영웅 15초·아서 전체 2600×(15/3) vs T10 기본 6500/0.8s. 소환 타이밍 의존.
+- 영웅 사명 80000 vs T10 기본 6500/0.8s·아서 광역. 승천 시 라인 리셋 + T5. HP 사망 시 보상 없음.
 - 빈 라인 푸시: 전열 T1 stop 4px/s로 라인을 90까지 올리는 시간이 보스 경고 1.6초와 맞물리는지.
 - 궁수 기본 7 dmg / 1.05s / 10발 vs W1 고블린 40HP — 주석대로 웨이브 솔로가 정말 안 되는지, 탄약·사거리 올리면 우회되는지.
 - `higherTier` R5(T3 6% + T2 40%)가 머지 속도를 붕괴시키는지.
