@@ -28,6 +28,10 @@ function velFromPxPerSec(pxPerSec, stepMs) {
   return pxPerSec * stepMs / 1000;
 }
 
+// 발사는 짧은 돌진만. 관성이 라인까지 실어다 주면 진격 스킬이 안 보인다.
+const LAUNCH_BURST_MAX_S = 0.28;
+const LAUNCH_BURST_MIN_S = 0.12;
+
 function colorAlpha(hex, a) {
   const n = parseInt(String(hex).replace('#', ''), 16);
   if (Number.isNaN(n)) return `rgba(255,255,255,${a})`;
@@ -762,11 +766,16 @@ export class Game {
   // ---------- 아군 유닛: 착지 후 전진, 실제 교전 시(사거리 내 적) 정지 ----------
   _updateUnitAdvance(dt) {
     const stepMs = this._stepMs || engineStepMs(dt);
-    const advTick = velFromPxPerSec(BALANCE.unitAdvanceSpeed * this._effects().advanceMult, stepMs);
+    const advPx = BALANCE.unitAdvanceSpeed * this._effects().advanceMult;
+    const advTick = velFromPxPerSec(advPx, stepMs);
+    // body.speed는 px/스텝. 고정 숫자 2는 fps에 따라 의미가 달라진다.
+    const settleSpeed = velFromPxPerSec(Math.max(advPx * 1.25, 24), stepMs);
     for (const u of this.units) {
       u.age += dt;
-      // 발사 관성이 소진되면 정착 → 전진 시작
-      if (!u.settled && (u.age > 2.5 || (u.age > 0.4 && u.body.speed < 2))) {
+      if (!u.settled && (
+        u.age >= LAUNCH_BURST_MAX_S
+        || (u.age >= LAUNCH_BURST_MIN_S && u.body.speed <= settleSpeed)
+      )) {
         u.settled = true;
       }
       const pos = u.body.position;
