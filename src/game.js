@@ -265,11 +265,9 @@ export class Game {
       }
       if (this.skillPanelOpen) return;
       if (this.state !== 'playing') return;
-      if (p.y > 560) {
-        this.dragging = true;
-        this.aimX = clampAimX(p.x);
-        this.canvas.setPointerCapture(e.pointerId);
-      }
+      this.dragging = true;
+      this.aimX = clampAimX(p.x);
+      this.canvas.setPointerCapture(e.pointerId);
     });
     this.canvas.addEventListener('pointermove', (e) => {
       const p = toCanvas(e);
@@ -285,8 +283,8 @@ export class Game {
     this.canvas.addEventListener('pointerup', (e) => {
       if (!this.dragging) return;
       this.dragging = false;
-      if (this.skillPanelOpen || this.state !== 'playing' || this.launchCd > 0) return;
       this.aimX = clampAimX(toCanvas(e).x);
+      if (this.skillPanelOpen || this.state !== 'playing' || this.launchCd > 0) return;
       this._launchUnit();
     });
     this.canvas.addEventListener('pointercancel', () => { this.dragging = false; });
