@@ -2,7 +2,7 @@
 
 import {
   PROGRESSION, SKILLS, SKILL_BY_ID, xpToNextLevel, META_STORAGE_KEY, BALANCE,
-  rankUnlockLevel,
+  rankUnlockLevel, advanceSpeedForRank,
 } from './config.js';
 
 function emptyRanks() {
@@ -157,7 +157,8 @@ export class Meta {
       : 0;
     return {
       launchCooldown: launchCd,
-      advanceMult: 1 + r('advance') * SKILL_BY_ID.advance.perRank,
+      advanceSpeed: advanceSpeedForRank(r('advance')),
+      advanceMult: 1 + r('advance') * SKILL_BY_ID.advance.perRank, // 테이블이 있을 때 이동은 advanceSpeed
       regenPct: r('regen') * SKILL_BY_ID.regen.perRank,
       stopMult: 1 + r('stopping') * SKILL_BY_ID.stopping.perRank,
       t2Bonus,

@@ -18,6 +18,23 @@ function numberRow(label, obj, key, step = 1) {
   return row;
 }
 
+function numberAt(label, arr, index, step = 1) {
+  const row = document.createElement('label');
+  row.className = 'admin-row';
+  const span = document.createElement('span');
+  span.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = String(step);
+  input.value = String(arr[index]);
+  input.addEventListener('input', () => {
+    const v = parseFloat(input.value);
+    if (Number.isFinite(v)) arr[index] = v;
+  });
+  row.append(span, input);
+  return row;
+}
+
 function section(title) {
   const el = document.createElement('div');
   el.className = 'admin-section';
@@ -81,7 +98,13 @@ export function setupAdmin(game) {
     numberRow('적 스폰 간격 (s)', BALANCE, 'spawnInterval', 0.1),
     numberRow('발사 쿨다운 (s)', BALANCE, 'launchCooldown', 0.1),
     numberRow('발사 속도 (px/s)', BALANCE, 'launchSpeed', 10),
-    numberRow('아군 전진 속도 (px/s)', BALANCE, 'unitAdvanceSpeed', 1),
+    numberAt('진군 R0 (스킬 없음)', BALANCE.advanceSpeedByRank, 0, 1),
+    numberAt('진군 R1', BALANCE.advanceSpeedByRank, 1, 1),
+    numberAt('진군 R2', BALANCE.advanceSpeedByRank, 2, 1),
+    numberAt('진군 R3', BALANCE.advanceSpeedByRank, 3, 1),
+    numberAt('진군 R4', BALANCE.advanceSpeedByRank, 4, 1),
+    numberAt('진군 R5', BALANCE.advanceSpeedByRank, 5, 1),
+    numberRow('적 합류 속도 (px/s)', BALANCE, 'enemyJoinSpeed', 5),
     numberRow('보스 집결 강도 (0~1)', BALANCE, 'bossGatherStrength', 0.1),
     numberRow('집결 이동 속도 (px/s)', BALANCE, 'gatherSpeed', 5),
     numberRow('공격 틱 간격 (s)', BALANCE, 'attackCooldown', 0.1),
@@ -132,6 +155,7 @@ export function setupAdmin(game) {
     }
     for (const key of Object.keys(skill)) {
       if (!['perRank', 't2PerRank', 't3PerRank', 't3StartRank', 'dmgPerRank', 'radiusBase', 'radiusPerRank', 'knockbackPerRank', 'healPctPerRank', 'hpPerRank', 'kbPerRank', 'extraPerRank'].includes(key)) continue;
+      if (skill.id === 'advance' && key === 'perRank') continue;
       const step = Math.abs(skill[key]) < 1 ? 0.001 : 1;
       skSec.appendChild(numberRow(key, skill, key, step));
     }

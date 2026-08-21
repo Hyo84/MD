@@ -1,6 +1,6 @@
 // 스킬 패널 (스킬 버튼 / K). 구매는 즉시 현재 런에 반영.
 
-import { SKILLS, SKILL_TREES, SKILL_BY_ID, BALANCE, PROGRESSION, rankUnlockLevel } from './config.js';
+import { SKILLS, SKILL_TREES, SKILL_BY_ID, BALANCE, PROGRESSION, rankUnlockLevel, advanceSpeedForRank } from './config.js';
 
 function fmtPct(v) {
   return `${(v * 100).toFixed(v * 100 % 1 === 0 ? 0 : 1)}%`;
@@ -17,9 +17,11 @@ function effectLine(skill, rank) {
         (rank < skill.maxRank ? ` → ${cd(rank + 1).toFixed(2)}초` : '') +
         ` (최저 ${PROGRESSION.launchCdFloor}초)`;
     }
-    case 'advance':
-      return `전진 속도 +${fmtPct(rank * skill.perRank)}` +
-        (rank < skill.maxRank ? ` → +${fmtPct((rank + 1) * skill.perRank)}` : '');
+    case 'advance': {
+      const spd = (rk) => advanceSpeedForRank(rk);
+      return `전진 ${spd(rank)} px/s` +
+        (rank < skill.maxRank ? ` → ${spd(rank + 1)} px/s` : '');
+    }
     case 'regen':
       return `전투·전열 중 최대체력 ${fmtPct(rank * skill.perRank)}/초` +
         (rank < skill.maxRank ? ` → ${fmtPct((rank + 1) * skill.perRank)}/초` : '');

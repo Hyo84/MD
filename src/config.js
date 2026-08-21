@@ -4,6 +4,7 @@ export const CANVAS_W = 450;
 export const CANVAS_H = 800;
 export const DEFEAT_Y = 660;      // 마지노선
 export const LINE_START_Y = 90;   // 웨이브라인 시작 위치(밀어낼 수 있는 상한)
+export const ENEMY_SPAWN_Y = LINE_START_Y; // 적/보스 합류 시작 Y (라인이 여기면 즉시 착지)
 export const LAUNCHER_Y = 700;
 
 // 전역 밸런스 (어드민 패널에서 실시간 조정)
@@ -11,8 +12,11 @@ export const BALANCE = {
   baseLineSpeed: 6,     // 웨이브라인 기본 전진 속도 (px/초)
   spawnInterval: 2.3,   // 적 스폰 기본 간격 (초, 웨이브에 따라 감소)
   launchCooldown: 1.15, // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
-  launchSpeed: 480,     // 발사 돌진 (px/초). 라인까지 코스팅하지 않음 — 이후는 unitAdvanceSpeed
-  unitAdvanceSpeed: 10, // 착지 후 아군 전진 속도 (px/초). 스킬 진격 속도가 배율
+  launchSpeed: 720,     // 발사 돌진 (px/초). 짧은 버스트 후 진군 테이블로 걸음
+  unitAdvanceSpeed: 28, // 진군 테이블이 없을 때 폴백 (px/초)
+  // 진군 절대 속도 (px/초). 인덱스 0 = 스킬 없음, 1–5 = 진격 랭크
+  advanceSpeedByRank: [28, 34, 42, 52, 64, 80],
+  enemyJoinSpeed: 80,   // 적이 밀린 웨이브라인 슬롯까지 내려오는 합류 속도 (px/초)
   bossGatherStrength: 0.6, // 보스 집결 강도 (0=안함, 0.7 초과 시 교전 중인 유닛도 집결, 1=최대)
   gatherSpeed: 40,      // 집결 시 최대 가로 이동 속도 (px/초)
   attackCooldown: 0.8,  // 공격 틱 간격 (초)
@@ -193,7 +197,7 @@ export const SKILLS = [
     cost: 1,
     unlockLevel: 1,
     requires: null,
-    perRank: 0.80, // +80%/랭크 → R0 10 … R5 50 px/s
+    perRank: 0.80, // 미사용(이동은 BALANCE.advanceSpeedByRank). 스킬 설명은 테이블에서 생성
   },
   {
     id: 'regen',
@@ -324,6 +328,16 @@ export const SKILLS = [
 ];
 
 export const SKILL_BY_ID = Object.fromEntries(SKILLS.map((s) => [s.id, s]));
+
+/** 진군 랭크(0=스킬 없음 … 5)의 절대 전진 속도 px/초. 테이블 없으면 unitAdvanceSpeed. */
+export function advanceSpeedForRank(rank) {
+  const table = BALANCE.advanceSpeedByRank;
+  const max = Array.isArray(table) && table.length > 0 ? table.length - 1 : 5;
+  const r = Math.max(0, Math.min(max, Math.floor(Number(rank) || 0)));
+  const v = Array.isArray(table) ? table[r] : undefined;
+  if (Number.isFinite(v)) return v;
+  return Number.isFinite(BALANCE.unitAdvanceSpeed) ? BALANCE.unitAdvanceSpeed : 28;
+}
 
 /** 랭크 N(1부터)을 사려면 필요한 플레이어 레벨. rankLevelStep 기본 1. */
 export function rankUnlockLevel(skill, rank) {

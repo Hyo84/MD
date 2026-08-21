@@ -1,6 +1,6 @@
 import Matter from 'matter-js';
 import {
-  CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y,
+  CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y, ENEMY_SPAWN_Y,
     BALANCE, UNITS, MONSTERS, HEROES,
     HERO_MISSION_DAMAGE, HERO_MISSION_KILLS, HERO_ASCENSION_ATK_MULT, HERO_ASCENSION_SLOWMO,
     HERO_ASCENSION_REPLACEMENT_TIER, HERO_ASCENSION_BONUS_SCORE,
@@ -390,7 +390,8 @@ export class Game {
         for (const m of this.enemies) {
           if (m === exclude) continue;
           const mr = MONSTERS[m.key].r;
-          if (Math.hypot(m.x - x, m.y - y) < radius + mr + 2) {
+          const my = this.lineY - m.row * SLOT_ROW_H;
+          if (Math.hypot(m.x - x, my - y) < radius + mr + 2) {
             overlaps = true;
             break;
           }
@@ -428,28 +429,34 @@ export class Game {
     // 실효 배율 = 웨이브 곡선 × 실시간 수동 배율 (HP는 스냅샷, ATK/라인속도는 liveMult 즉시 반영)
     const waveMult = waveMultiplier(this.wave);
     const hp = Math.round(stat.hp * effectiveMult(this.wave, this.liveMult));
+    const slotY = this.lineY - row * SLOT_ROW_H;
+    const spawnY = ENEMY_SPAWN_Y - row * SLOT_ROW_H;
+    const joining = spawnY < slotY;
     const m = {
       key, isBoss, row, col, x,
-      y: this.lineY - row * SLOT_ROW_H,
+      y: joining ? spawnY : slotY,
+      joining,
       hp, maxHp: hp, waveMult,
       attackCd: Math.random() * 0.4,
       stunT: 0, burn: null, flashT: 0, dead: false,
     };
     this.enemies.push(m);
 
-    // 보스 착지 시 이미 그 자리에 있던 적들을 겹치지 않는 슬롯으로 밀어냄
+    // 보스 착지 슬롯과 겹치는 적을 미리 밀어냄 (합류 중 비주얼은 겹쳐도 됨)
     if (isBoss) {
+      const bossSlotY = this.lineY;
       for (const other of this.enemies) {
         if (other === m) continue;
         const or2 = MONSTERS[other.key].r;
-        if (Math.hypot(other.x - m.x, other.y - m.y) < stat.r + or2 + 2) {
+        const otherSlotY = this.lineY - other.row * SLOT_ROW_H;
+        if (Math.hypot(other.x - m.x, otherSlotY - bossSlotY) < stat.r + or2 + 2) {
           this.occupiedSlots.delete(`${other.row}:${other.col}`);
           const spot = this._findSpawnSpot(or2, other);
           if (spot) {
             other.row = spot.row;
             other.col = spot.col;
             other.x = spot.x;
-            other.y = this.lineY - spot.row * SLOT_ROW_H;
+            if (!other.joining) other.y = this.lineY - spot.row * SLOT_ROW_H;
           }
           this.occupiedSlots.add(`${other.row}:${other.col}`);
         }
@@ -568,7 +575,7 @@ export class Game {
     }
     if (shock.knockback > 0) {
       this.lineY = Math.max(LINE_START_Y, this.lineY - shock.knockback);
-      for (const m of this.enemies) m.y = this.lineY - m.row * SLOT_ROW_H;
+      this._syncEnemyY(0);
     }
     if (unit && !unit.dead && shock.healPct > 0) {
       unit.hp = Math.min(unit.maxHp, unit.hp + unit.maxHp * shock.healPct);
@@ -612,7 +619,7 @@ export class Game {
       if (this.bossWarnT <= 0) {
         this._spawnEnemy('boss');
         this.bossActive = true;
-        this.effects.burst(CANVAS_W / 2, this.lineY, '#B22222', 30, 5, 5);
+        this.effects.burst(CANVAS_W / 2, ENEMY_SPAWN_Y, '#B22222', 30, 5, 5);
         this.effects.floatText(CANVAS_W / 2, 330, '보스 출현! 병력 집결!', '#FF9040', 26, 2.0);
       }
       return;
@@ -675,6 +682,7 @@ export class Game {
     const range = this._unitStat(u).range;
     const { x, y } = u.body.position;
     for (const m of this.enemies) {
+      if (m.joining) continue;
       const er = MONSTERS[m.key].r;
       if (Math.hypot(m.x - x, m.y - y) <= range + er) return true;
     }
@@ -700,7 +708,7 @@ export class Game {
     // 돌격 저지력: firstHit 동안 라인 순속도 0 (빈 라인 푸시 포함)
     if (this.chargeStutterT > 0) {
       this.netSpeed = 0;
-      for (const m of this.enemies) m.y = this.lineY - m.row * SLOT_ROW_H;
+      this._syncEnemyY(dt);
       return;
     }
     // 적이 없으면 전열 아군 저지력으로 시작 위치까지 밀어올림 (보스 대기 중에도 동일)
@@ -720,6 +728,7 @@ export class Game {
     }
     let advance = BALANCE.baseLineSpeed;
     for (const m of this.enemies) {
+      if (m.joining) continue;
       if (m.stunT <= 0) advance += MONSTERS[m.key].speed * this.liveMult;
     }
     let stopping = 0;
@@ -738,9 +747,27 @@ export class Game {
         return;
       }
     }
-    // 적 위치를 라인에 맞춰 갱신 (뒤 열은 라인 위쪽으로 적층)
+    this._syncEnemyY(dt);
+  }
+
+  _enemySlotY(m) {
+    return this.lineY - m.row * SLOT_ROW_H;
+  }
+
+  // 합류 중: 슬롯을 향해 내려감. 착지 후: 라인에 고정.
+  _syncEnemyY(dt) {
+    const join = Number.isFinite(BALANCE.enemyJoinSpeed) ? Math.max(0, BALANCE.enemyJoinSpeed) : 80;
     for (const m of this.enemies) {
-      m.y = this.lineY - m.row * SLOT_ROW_H;
+      const slotY = this._enemySlotY(m);
+      if (m.joining) {
+        m.y += join * (dt || 0);
+        if (m.y >= slotY) {
+          m.y = slotY;
+          m.joining = false;
+        }
+      } else {
+        m.y = slotY;
+      }
     }
   }
 
@@ -766,7 +793,10 @@ export class Game {
   // ---------- 아군 유닛: 착지 후 전진, 실제 교전 시(사거리 내 적) 정지 ----------
   _updateUnitAdvance(dt) {
     const stepMs = this._stepMs || engineStepMs(dt);
-    const advPx = BALANCE.unitAdvanceSpeed * this._effects().advanceMult;
+    const fx = this._effects();
+    const advPx = Number.isFinite(fx.advanceSpeed)
+      ? fx.advanceSpeed
+      : BALANCE.unitAdvanceSpeed * (fx.advanceMult || 1);
     const advTick = velFromPxPerSec(advPx, stepMs);
     // body.speed는 px/스텝. 고정 숫자 2는 fps에 따라 의미가 달라진다.
     const settleSpeed = velFromPxPerSec(Math.max(advPx * 1.25, 24), stepMs);
@@ -903,7 +933,7 @@ export class Game {
 
     // 적 → 아군
     for (const m of [...this.enemies]) {
-      if (m.dead || m.stunT > 0) continue;
+      if (m.dead || m.joining || m.stunT > 0) continue;
       m.attackCd -= dt;
       if (m.attackCd > 0) continue;
       const stat = MONSTERS[m.key];
@@ -1075,7 +1105,7 @@ export class Game {
 
     this.lineY = LINE_START_Y;
     this.netSpeed = 0;
-    for (const m of this.enemies) m.y = this.lineY - m.row * SLOT_ROW_H;
+    this._syncEnemyY(0);
 
     this.effects.burst(x, y, '#FFD700', 40, 7, 5);
     this.effects.burst(x, y, '#fff8dc', 24, 5, 4);
@@ -1096,7 +1126,7 @@ export class Game {
       const { x, y } = u.body.position;
       let hit = false;
       for (const m of this.enemies) {
-        if (m.dead) continue;
+        if (m.dead || m.joining) continue;
         if (Math.hypot(m.x - x, m.y - y) <= u.r + MONSTERS[m.key].r) {
           hit = true;
           break;
