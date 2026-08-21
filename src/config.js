@@ -12,7 +12,7 @@ export const BALANCE = {
   spawnInterval: 2.3,   // 적 스폰 기본 간격 (초, 웨이브에 따라 감소)
   launchCooldown: 1.15, // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
   launchSpeed: 1080,    // 발사 속도 (px/초). 구 값 18은 60fps 틱 속도(= 18×60)
-  unitAdvanceSpeed: 18, // 착지 후 아군 전진 속도 (px/초)
+  unitAdvanceSpeed: 10, // 착지 후 아군 전진 속도 (px/초). 스킬 진격 속도가 배율
   bossGatherStrength: 0.6, // 보스 집결 강도 (0=안함, 0.7 초과 시 교전 중인 유닛도 집결, 1=최대)
   gatherSpeed: 40,      // 집결 시 최대 가로 이동 속도 (px/초)
   attackCooldown: 0.8,  // 공격 틱 간격 (초)
@@ -193,7 +193,7 @@ export const SKILLS = [
     cost: 1,
     unlockLevel: 1,
     requires: null,
-    perRank: 0.22, // +22%/랭크
+    perRank: 0.80, // +80%/랭크 → R0 10 … R5 50 px/s
   },
   {
     id: 'regen',
