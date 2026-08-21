@@ -16,6 +16,8 @@ const { Engine, World, Bodies, Body, Events } = Matter;
 const RANGE_MODE_LABELS = ['끄기', '아군만', '전체'];
 const ENGINE_DT_CAP_MS = 33.33;
 const SLOWMO_SCALE = 0.25;
+// Matter Verlet integrates F/m * dt^2. Never feed a px/step impulse through applyForce.
+const MERGE_BLAST_MAX_STEP_PX = 24;
 
 function engineStepMs(dt) {
   return Math.min(dt * 1000, ENGINE_DT_CAP_MS);
@@ -457,12 +459,31 @@ export class Game {
   }
 
   _removeUnit(u) {
-    if (u.dead) return;
+    if (!u || u.dead) return;
     u.dead = true;
+    u.isMerging = false;
     World.remove(this.engine.world, u.body);
     this.unitByBodyId.delete(u.body.id);
     const i = this.units.indexOf(u);
     if (i >= 0) this.units.splice(i, 1);
+  }
+
+  _unitFromBody(body) {
+    if (!body) return null;
+    return this.unitByBodyId.get(body.id)
+      || (body.parent ? this.unitByBodyId.get(body.parent.id) : null)
+      || null;
+  }
+
+  _clampFriendlyPos(x, y, r) {
+    const minY = this.lineY + 14 + r;
+    const maxY = Math.max(minY, DEFEAT_Y - 30);
+    const minX = r + 4;
+    const maxX = CANVAS_W - r - 4;
+    return {
+      x: Math.max(minX, Math.min(x, maxX)),
+      y: Math.max(minY, Math.min(y, maxY)),
+    };
   }
 
   _removeEnemy(m) {
@@ -476,9 +497,9 @@ export class Game {
   // ---------- 머지 (아군 물리 충돌) ----------
   _onCollision(ev) {
     for (const pair of ev.pairs) {
-      const a = this.unitByBodyId.get(pair.bodyA.id);
-      const b = this.unitByBodyId.get(pair.bodyB.id);
-      if (!a || !b) continue;
+      const a = this._unitFromBody(pair.bodyA);
+      const b = this._unitFromBody(pair.bodyB);
+      if (!a || !b || a === b) continue;
       if (a.dead || b.dead || a.isMerging || b.isMerging) continue;
       if (a.tier !== b.tier || a.tier >= 10) continue;
       a.isMerging = true;
@@ -488,35 +509,49 @@ export class Game {
   }
 
   _processMerges() {
+    const consumed = new Set();
     for (const [a, b] of this.mergeQueue) {
-      if (a.dead || b.dead) {
-        a.isMerging = false;
-        b.isMerging = false;
+      const aOk = a && !a.dead && !consumed.has(a);
+      const bOk = b && !b.dead && !consumed.has(b);
+      if (!aOk || !bOk) {
+        if (aOk) a.isMerging = false;
+        if (bOk) b.isMerging = false;
         continue;
       }
-      const mx = (a.body.position.x + b.body.position.x) / 2;
-      let my = (a.body.position.y + b.body.position.y) / 2;
-      my = Math.max(this.lineY + 40, Math.min(my, DEFEAT_Y - 30));
+      // One body participates in at most one merge per flush.
+      consumed.add(a);
+      consumed.add(b);
+
       const newTier = a.tier + 1;
+      const r = UNITS[newTier - 1].r;
+      const pos = this._clampFriendlyPos(
+        (a.body.position.x + b.body.position.x) / 2,
+        (a.body.position.y + b.body.position.y) / 2,
+        r,
+      );
+
       this._removeUnit(a);
       this._removeUnit(b);
 
       if (newTier === 10) {
-        const hero = this._summonHero(mx, my);
-        this._applyMergeShock(mx, my, hero);
-        this.mergeBlastQueue.push({ x: mx, y: my, exclude: hero });
+        const hero = this._summonHero(pos.x, pos.y);
+        this._applyMergeShock(pos.x, pos.y, hero);
+        this.mergeBlastQueue.push({ x: pos.x, y: pos.y, exclude: hero });
       } else {
         // 합성 유닛은 발사 관성이 없으므로 즉시 전진 가능
-        const spawned = this._spawnUnit(newTier, mx, my);
+        const spawned = this._spawnUnit(newTier, pos.x, pos.y);
         spawned.settled = true;
-        this.effects.burst(mx, my, UNITS[newTier - 1].color, 18, 4, 3.5);
-        this.effects.floatText(mx, my - 30, UNITS[newTier - 1].name, '#fff', 15, 0.9);
-        this._applyMergeShock(mx, my, spawned);
-        this.mergeBlastQueue.push({ x: mx, y: my, exclude: spawned });
+        this.effects.burst(pos.x, pos.y, UNITS[newTier - 1].color, 18, 4, 3.5);
+        this.effects.floatText(pos.x, pos.y - 30, UNITS[newTier - 1].name, '#fff', 15, 0.9);
+        this._applyMergeShock(pos.x, pos.y, spawned);
+        this.mergeBlastQueue.push({ x: pos.x, y: pos.y, exclude: spawned });
       }
       this._grantScore(newTier * 5);
     }
     this.mergeQueue.length = 0;
+    for (const u of this.units) {
+      if (u.isMerging) u.isMerging = false;
+    }
   }
 
   _applyMergeShock(x, y, unit) {
@@ -541,7 +576,8 @@ export class Game {
   _summonHero(x, y) {
     const types = Object.keys(HEROES);
     const type = types[Math.floor(Math.random() * types.length)];
-    const hero = this._spawnUnit(10, x, y, type);
+    const pos = this._clampFriendlyPos(x, y, UNITS[9].r);
+    const hero = this._spawnUnit(10, pos.x, pos.y, type);
     hero.settled = true;
     this.effects.burst(x, y, '#FF4500', 40, 6, 5);
     this.effects.burst(x, y, '#FFD700', 30, 4.5, 4);
@@ -774,11 +810,30 @@ export class Game {
   _enforceLineBoundary() {
     for (const u of this.units) {
       const minY = this.lineY + 14 + u.r;
-      if (u.body.position.y < minY) {
-        Body.setPosition(u.body, { x: u.body.position.x, y: minY });
-        if (u.body.velocity.y < 0) {
-          Body.setVelocity(u.body, { x: u.body.velocity.x, y: 0 });
-        }
+      const minX = u.r + 4;
+      const maxX = CANVAS_W - u.r - 4;
+      let x = u.body.position.x;
+      let y = u.body.position.y;
+      let vx = u.body.velocity.x;
+      let vy = u.body.velocity.y;
+      let moved = false;
+      if (y < minY) {
+        y = minY;
+        if (vy < 0) vy = 0;
+        moved = true;
+      }
+      if (x < minX) {
+        x = minX;
+        if (vx < 0) vx = 0;
+        moved = true;
+      } else if (x > maxX) {
+        x = maxX;
+        if (vx > 0) vx = 0;
+        moved = true;
+      }
+      if (moved) {
+        Body.setPosition(u.body, { x, y });
+        Body.setVelocity(u.body, { x: vx, y: vy });
       }
     }
   }
@@ -1023,9 +1078,8 @@ export class Game {
     this._removeUnit(hero);
 
     const t5 = UNITS[HERO_ASCENSION_REPLACEMENT_TIER - 1];
-    let sx = Math.max(t5.r + 4, Math.min(CANVAS_W - t5.r - 4, x));
-    let sy = Math.max(this.lineY + 40, Math.min(y, DEFEAT_Y - 30));
-    const knight = this._spawnUnit(HERO_ASCENSION_REPLACEMENT_TIER, sx, sy);
+    const spawn = this._clampFriendlyPos(x, y, t5.r);
+    const knight = this._spawnUnit(HERO_ASCENSION_REPLACEMENT_TIER, spawn.x, spawn.y);
     knight.settled = true;
   }
 
@@ -1049,13 +1103,36 @@ export class Game {
     }
   }
 
+  _clampBlastVelocity(u, vx, vy) {
+    const minY = this.lineY + 14 + u.r;
+    const minX = u.r + 4;
+    const maxX = CANVAS_W - u.r - 4;
+    const maxY = CANVAS_H - u.r - 4;
+    const { x, y } = u.body.position;
+    if (vy < 0) {
+      const room = y - minY;
+      vy = room <= 0 ? 0 : Math.max(vy, -room);
+    } else if (vy > 0) {
+      const room = maxY - y;
+      vy = room <= 0 ? 0 : Math.min(vy, room);
+    }
+    if (vx < 0) {
+      const room = x - minX;
+      vx = room <= 0 ? 0 : Math.max(vx, -room);
+    } else if (vx > 0) {
+      const room = maxX - x;
+      vx = room <= 0 ? 0 : Math.min(vx, room);
+    }
+    return { x: vx, y: vy };
+  }
+
   _applyMergeBlasts() {
     if (!this.mergeBlastQueue.length) return;
     const stepMs = this._stepMs || (1000 / 60);
-    const maxImpulse = velFromPxPerSec(MERGE_BLAST_FORCE, stepMs);
+    const maxImpulse = Math.min(velFromPxPerSec(MERGE_BLAST_FORCE, stepMs), MERGE_BLAST_MAX_STEP_PX);
     for (const blast of this.mergeBlastQueue) {
       for (const u of this.units) {
-        if (u.dead || u === blast.exclude) continue;
+        if (u.dead || u.isMerging || u === blast.exclude) continue;
         const dx = u.body.position.x - blast.x;
         const dy = u.body.position.y - blast.y;
         const dist = Math.hypot(dx, dy);
@@ -1063,14 +1140,8 @@ export class Game {
         const mag = maxImpulse * (1 - dist / MERGE_BLAST_RADIUS);
         const nx = dx / dist;
         const ny = dy / dist;
-        Body.applyForce(u.body, u.body.position, {
-          x: nx * mag * u.body.mass,
-          y: ny * mag * u.body.mass,
-        });
-        Body.setVelocity(u.body, {
-          x: u.body.velocity.x + nx * mag,
-          y: u.body.velocity.y + ny * mag,
-        });
+        const vel = Body.getVelocity(u.body);
+        Body.setVelocity(u.body, this._clampBlastVelocity(u, vel.x + nx * mag, vel.y + ny * mag));
       }
     }
     this.mergeBlastQueue.length = 0;
