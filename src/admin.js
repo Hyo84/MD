@@ -117,7 +117,7 @@ export function setupAdmin(game) {
   );
   const pfNote = document.createElement('p');
   pfNote.className = 'admin-note';
-  pfNote.textContent = `전장 슬롯: 기본 ${BASE_SLOT_COLS}칸 · 최대 ${MAX_SLOT_COLS}칸 (전장 확장). 칸당 벽 inset ${SLOT_INSET_PER_COL}px (5칸=${(MAX_SLOT_COLS - BASE_SLOT_COLS) * SLOT_INSET_PER_COL}px, 7칸=0).`;
+  pfNote.textContent = `전장 슬롯: 기본 ${BASE_SLOT_COLS}칸 · 최대 ${MAX_SLOT_COLS}칸 (3→5→7). extraInset=(MAX-cols)/2×${SLOT_INSET_PER_COL}px → 3칸=${(MAX_SLOT_COLS - BASE_SLOT_COLS) / 2 * SLOT_INSET_PER_COL}px, 5칸=${(MAX_SLOT_COLS - 5) / 2 * SLOT_INSET_PER_COL}px, 7칸=0 (플레이어블 250 / 350 / 450).`;
   g.appendChild(pfNote);
   panel.appendChild(g);
 
