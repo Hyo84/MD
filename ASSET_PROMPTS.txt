@@ -1,0 +1,277 @@
+이 파일을 레이어 AI에 통째로 주면 됨
+
+HOW TO PARSE
+- Treat this as a machine-readable prompt pack for KnightSlide sprites.
+- There is one GLOBAL_STYLE. Each FILE block already includes it inside PROMPT. You may paste PROMPT as-is. If you rebuild a prompt, append GLOBAL_STYLE to every prompt.
+- Do not translate PROMPT into Korean. Do not drop sentences. One prompt = one image.
+- Save output as PNG using FILENAME exactly (lowercase, underscore).
+- Blocks run from ===== FILE: name ===== to ===== END =====.
+- Keep ALL files: ally T1-T10, all enemies, all backgrounds.
+
+GLOBAL_STYLE
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark.
+
+COMMON RULES
+- ally T1-T10: player camera, STRICTLY FROM BEHIND, walking UP the screen, NO face, NO front view, full body, feet at bottom of frame, readable silhouette. Higher tier = bigger, flashier armor, cape, weapons. Same series look.
+- enemy: STRICTLY FROM THE FRONT, marching TOWARD the viewer, face visible.
+- bg: no units, no UI, no text. Opaque.
+- ally/enemy: transparent background. bg: opaque.
+- PNG only. Prefer real transparency for units. If a unit comes out front-facing, or wall has archers, regenerate with the same prompt.
+
+FILE INDEX
+ally_t1.png | ally | behind | 512x512 | transparent | Militia / 민병대
+ally_t2.png | ally | behind | 512x512 | transparent | Recruit / 신병
+ally_t3.png | ally | behind | 512x512 | transparent | Light Infantry / 경보병
+ally_t4.png | ally | behind | 512x512 | transparent | Heavy Infantry / 중보병
+ally_t5.png | ally | behind | 512x512 | transparent | Knight / 기사단원
+ally_t6.png | ally | behind | 512x512 | transparent | Guard Captain / 근위대장
+ally_t7.png | ally | behind | 512x512 | transparent | Paladin / 성기사
+ally_t8.png | ally | behind | 512x512 | transparent | Dragon Guardian / 드래곤가디언
+ally_t9.png | ally | behind | 512x512 | transparent | Marshal / 대원수
+ally_t10.png | ally | behind | 512x512 | transparent | Legendary Hero / 영웅
+enemy_goblin.png | enemy | front | 512x512 | transparent | Goblin / 고블린
+enemy_orc.png | enemy | front | 512x512 | transparent | Orc / 오크
+enemy_skeleton.png | enemy | front | 512x512 | transparent | Skeleton / 스켈레톤
+enemy_troll.png | enemy | front | 512x512 | transparent | Cave Troll / 동굴 트롤
+enemy_boss.png | enemy | front | 512x512 | transparent | Orc Warlord / 오크 워로드
+bg_field.png | bg | n/a | 450x800 | opaque | 초원 전장 + 중앙 흙길
+bg_camp.png | bg | n/a | 450x90 | opaque | 상단 몬스터 야영 목책 (or crop top 90px from 450x800)
+bg_wall.png | bg | n/a | 450x140 | opaque | 하단 석조 성벽
+bg_forest.png | bg | n/a | 100x800 or 450x800 | opaque | (optional) 측면 벌목용 소나무 숲 패널
+
+===== FILE: ally_t1.png =====
+FILENAME: ally_t1.png
+SUBJECT: ally
+CAMERA: behind
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Militia / 민병대
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM BEHIND, walking away from camera UP the screen, back of head and back of torso visible, NO face, NO front view. Feet planted at the BOTTOM of the frame, small ground shadow under feet only. T1 Militia peasant soldier: small skinny man, tan beige padded tunic #D2B48C, simple brown leather belt, cheap iron cap helmet seen from behind, wooden round shield on his back, holding a short spear pointing upward. Rough peasant boots. Humble, low-tier, readable simple shapes.
+===== END =====
+
+===== FILE: ally_t2.png =====
+FILENAME: ally_t2.png
+SUBJECT: ally
+CAMERA: behind
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Recruit / 신병
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM BEHIND, walking away from camera UP the screen, back of head and back of torso visible, NO face, NO front view. Feet planted at the BOTTOM of the frame, small ground shadow under feet only. T2 Recruit: slightly larger than militia, dusty khaki tunic #C2A679, leather vest, better iron helmet from behind, kite shield on his back, longer spear pointing up. Still a beginner soldier, a bit more trained than a peasant.
+===== END =====
+
+===== FILE: ally_t3.png =====
+FILENAME: ally_t3.png
+SUBJECT: ally
+CAMERA: behind
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Light Infantry / 경보병
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM BEHIND, walking away from camera UP the screen, back of head and back of torso visible, NO face, NO front view. Feet planted at the BOTTOM of the frame, small ground shadow under feet only. T3 Light Infantry: bronze-colored brigandine #CD7F32, short mail coif under a bronze nasal helmet seen from behind, small heater shield on the back, one-handed arming sword on the right hip pointing up-right. Athletic mid-tier soldier, clean cartoon shapes.
+===== END =====
+
+===== FILE: ally_t4.png =====
+FILENAME: ally_t4.png
+SUBJECT: ally
+CAMERA: behind
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Heavy Infantry / 중보병
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM BEHIND, walking away from camera UP the screen, back of head and back of torso visible, NO face, NO front view. Feet planted at the BOTTOM of the frame, small ground shadow under feet only. T4 Heavy Infantry: bulky slate-gray plate and mail #708090, wide kettle helmet from behind, large tower shield on the back, heavy arming sword. Thick legs, stomping walk, tanky silhouette, still clearly a human soldier.
+===== END =====
+
+===== FILE: ally_t5.png =====
+FILENAME: ally_t5.png
+SUBJECT: ally
+CAMERA: behind
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Knight / 기사단원
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM BEHIND, walking away from camera UP the screen, back of head and back of torso visible, NO face, NO front view. Feet planted at the BOTTOM of the frame, small ground shadow under feet only. T5 Knight of the Order: polished steel-blue plate armor #4682B4, closed great helm with a short crest seen from behind, white-and-blue tabard, longsword held high. First true knight look, gleaming pauldrons, no cape yet.
+===== END =====
+
+===== FILE: ally_t6.png =====
+FILENAME: ally_t6.png
+SUBJECT: ally
+CAMERA: behind
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Guard Captain / 근위대장
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM BEHIND, walking away from camera UP the screen, back of head and back of torso visible, NO face, NO front view. Feet planted at the BOTTOM of the frame, small ground shadow under feet only. T6 Guard Captain: royal blue ornate plate #4169E1, gold trim, short dark-blue officer cloak hanging from the shoulders, plumed helmet seen from behind, ornate longsword. Commander's presence, still a single soldier sprite.
+===== END =====
+
+===== FILE: ally_t7.png =====
+FILENAME: ally_t7.png
+SUBJECT: ally
+CAMERA: behind
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Paladin / 성기사
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM BEHIND, walking away from camera UP the screen, back of head and back of torso visible, NO face, NO front view. Feet planted at the BOTTOM of the frame, small ground shadow under feet only. T7 Paladin: shining golden plate armor #FFD700, white-and-gold surcoat, holy warhammer raised, thin golden halo ring behind the helmet (back view only). Radiant but not photoreal, no facial features, sacred knight marching away.
+===== END =====
+
+===== FILE: ally_t8.png =====
+FILENAME: ally_t8.png
+SUBJECT: ally
+CAMERA: behind
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Dragon Guardian / 드래곤가디언
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM BEHIND, walking away from camera UP the screen, back of head and back of torso visible, NO face, NO front view. Feet planted at the BOTTOM of the frame, small ground shadow under feet only. T8 Dragon Guardian: dark crimson plate #8B0000, dragon-scale pauldrons, long blood-red cape flowing down the back, two small red banner fins on the helm, huge two-handed greatsword on the right side. Menacing elite, still a human in armor, no actual dragon body.
+===== END =====
+
+===== FILE: ally_t9.png =====
+FILENAME: ally_t9.png
+SUBJECT: ally
+CAMERA: behind
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Marshal / 대원수
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM BEHIND, walking away from camera UP the screen, back of head and back of torso visible, NO face, NO front view. Feet planted at the BOTTOM of the frame, small ground shadow under feet only. T9 Grand Marshal: imperial indigo-purple armor #4B0082, heavy gold filigree, long royal purple cape, war standard pole with a purple banner on the right, horned or winged marshal helm from behind. Supreme commander silhouette, larger than T8, still one character.
+===== END =====
+
+===== FILE: ally_t10.png =====
+FILENAME: ally_t10.png
+SUBJECT: ally
+CAMERA: behind
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Legendary Hero / 영웅
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM BEHIND, walking away from camera UP the screen, back of head and back of torso visible, NO face, NO front view. Feet planted at the BOTTOM of the frame, small ground shadow under feet only. T10 Legendary Hero: the largest ally. Golden-orange legendary plate #FF4500 mixed with bright gold, a LONG GOLDEN CLOAK filling much of the back silhouette, glowing gold sword, small gold sparks around the shoulders only. Heroic, mythic, still a single human knight from behind — not a god, not a crowd, no face.
+===== END =====
+
+===== FILE: enemy_goblin.png =====
+FILENAME: enemy_goblin.png
+SUBJECT: enemy
+CAMERA: front
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Goblin / 고블린
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM THE FRONT, facing the camera, marching TOWARD the viewer, angry cartoon face visible. Feet at the BOTTOM of the frame, small ground shadow under feet only. Goblin: small wiry green goblin #3CB371, pointed ears, red eyes, ragged brown loincloth, crude rusty spear or hatchet raised. Lowest-tier monster, hunched, mischievous, clearly weaker than an orc.
+===== END =====
+
+===== FILE: enemy_orc.png =====
+FILENAME: enemy_orc.png
+SUBJECT: enemy
+CAMERA: front
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Orc / 오크
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM THE FRONT, facing the camera, marching TOWARD the viewer, angry cartoon face visible. Feet at the BOTTOM of the frame, small ground shadow under feet only. Orc: stocky olive-green orc #6B8E23, tusks, heavy brow, crude iron axe, leather harness, bulky arms. Mid-tier brute, bigger than a goblin, smaller than a troll.
+===== END =====
+
+===== FILE: enemy_skeleton.png =====
+FILENAME: enemy_skeleton.png
+SUBJECT: enemy
+CAMERA: front
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Skeleton / 스켈레톤
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM THE FRONT, facing the camera, marching TOWARD the viewer. Feet at the BOTTOM of the frame, small ground shadow under feet only. Skeleton warrior: bone-white skull face #DCDCDC with empty black eye sockets, visible ribcage, rusty sword, tattered dark cloth. Undead soldier, not a pile of bones, full body standing, cartoon not horror-gore.
+===== END =====
+
+===== FILE: enemy_troll.png =====
+FILENAME: enemy_troll.png
+SUBJECT: enemy
+CAMERA: front
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Cave Troll / 동굴 트롤
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM THE FRONT, facing the camera, marching TOWARD the viewer, angry cartoon face visible. Feet at the BOTTOM of the frame, small ground shadow under feet only. Cave Troll: huge hulking moss-green troll #556B2F, stone-like knobby skin, tiny angry eyes, massive club or boulder fist, hunched ape-like posture. Fills most of the square, still fully inside the frame, larger than orc, smaller than the boss.
+===== END =====
+
+===== FILE: enemy_boss.png =====
+FILENAME: enemy_boss.png
+SUBJECT: enemy
+CAMERA: front
+SIZE: 512x512
+TRANSPARENCY: transparent
+ROLE: Orc Warlord / 오크 워로드
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Square 512x512, fully transparent background, single character only, centered, full body, readable silhouette. Viewed STRICTLY FROM THE FRONT, facing the camera, marching TOWARD the viewer, roaring cartoon face visible. Feet at the BOTTOM of the frame, small ground shadow under feet only. Orc Warlord BOSS: much larger presence than a normal orc, still one character inside the 512 square. Crimson-red warlord armor #B22222, horned iron helm, white tusks, huge two-handed war axe, spiked shoulder plates, intimidating bulk. Boss of the wave, not a landscape, no minions, no throne.
+===== END =====
+
+===== FILE: bg_field.png =====
+FILENAME: bg_field.png
+SUBJECT: bg
+CAMERA: n/a
+SIZE: 450x800
+TRANSPARENCY: opaque
+ROLE: 초원 전장 + 중앙 흙길
+NOTE: Full battle canvas. Sky/distant hills only a thin band at the top. Mostly grass. Single vertical dirt path in the center. No units, tents, walls, or UI.
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Vertical portrait background 450x800 pixels, OPAQUE, no transparency. Top-down-ish 2D battlefield viewed from a high 2D camera, same as a mobile tower-defense map. Lush vibrant green grass field filling the canvas, subtle checker or patchwork grass texture, cartoon clover and grass clumps. A single dirt path of packed tan earth running VERTICALLY through the CENTER from near the top to near the bottom, about 40 percent of the width, soft grassy edges. Soft blue-green sky only in a thin band at the very top. NO units, NO soldiers, NO monsters, NO tents, NO castle, NO UI, NO banners, NO people, NO animals.
+===== END =====
+
+===== FILE: bg_camp.png =====
+FILENAME: bg_camp.png
+SUBJECT: bg
+CAMERA: n/a
+SIZE: 450x90
+TRANSPARENCY: opaque
+ROLE: 상단 몬스터 야영 목책
+NOTE: Top 90px strip of the battle canvas. Generate at 450x90, or generate 450x800 and use only the top 90px. Extra below may be cropped.
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Horizontal strip 450x90 pixels, OPAQUE, no transparency. This is the TOP 90 pixels of an 800-pixel-tall vertical battlefield. Monster siege camp palisade: row of sharpened wooden logs across the bottom of this strip, crude orc tents, a burning wooden gatehouse in the center, orange fire glow, gray smoke, distant overcast sky. Looking slightly downward at the camp edge. NO soldiers, NO goblins, NO orcs standing, NO people, NO UI, NO text. Empty camp scenery only.
+===== END =====
+
+===== FILE: bg_wall.png =====
+FILENAME: bg_wall.png
+SUBJECT: bg
+CAMERA: n/a
+SIZE: 450x140
+TRANSPARENCY: opaque
+ROLE: 하단 석조 성벽
+NOTE: Covers below the Maginot line (Y 660). Battlements/crenellations only. No archers, soldiers, or flags with people.
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Horizontal slice 450x140 pixels, OPAQUE, no transparency. Bottom of a vertical battlefield: massive gray stone castle wall filling the frame, merlons and crenellations along the TOP edge, weathered cartoon masonry blocks, thick black outlines. Clean empty battlement walkway. NO archers, NO soldiers, NO people, NO faces, NO banners with text, NO UI. Stone plus crenellations only.
+===== END =====
+
+===== FILE: bg_forest.png =====
+FILENAME: bg_forest.png
+SUBJECT: bg
+CAMERA: n/a
+SIZE: 100x800 or 450x800
+TRANSPARENCY: opaque
+ROLE: (optional) 측면 벌목용 소나무 숲 패널
+NOTE: Vertical forest for left/right insets (3-lane / 5-lane). Draw as a narrow vertical panel, or as 450x800 with dense forest packed to one side.
+STYLE_LOCK: already included in PROMPT (same as GLOBAL_STYLE)
+PROMPT:
+2D game sprite, thick black comic outline, bold cel-shaded medieval cartoon, vibrant colors, clean shapes, no photorealism, no text, no UI, no watermark. Vertical side panel, about 100x800 or 450x800 with dense forest packed to one side, OPAQUE, no transparency. Dense cartoon pine forest wall: stacked evergreen trees, dark green foliage, brown trunks, deep shadow, as a side margin of a vertical battlefield. No dirt path required. NO units, NO people, NO cabins, NO UI, NO text.
+===== END =====
+
+OUTPUT RULES FOR LAYER AI
+- PNG only. Avoid JPG/WebP when possible (edges and transparency).
+- Allies must be from behind, NO face. Enemies face the camera. Wall must have NO archers, NO soldiers.
+- Use FILENAME exactly. Hand the folder of PNGs back for game drop-in.
