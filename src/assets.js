@@ -426,34 +426,6 @@ function bakeProp(kind) {
   return canvas;
 }
 
-function paintArcherFigure(ctx, x, y, scale, decorative) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(scale, scale);
-  fillEllipse(ctx, 0, 18, 10, 3.4, 'rgba(0,0,0,0.35)');
-  fillRoundRect(ctx, -7, 2, 6, 15, 2, '#3a2a18', INK, 2.4);
-  fillRoundRect(ctx, 1, 2, 6, 15, 2, '#322418', INK, 2.4);
-  fillRoundRect(ctx, -9, -11, 18, 18, 5, decorative ? '#5c7038' : '#4a5c28', INK, 2.8);
-  fillEllipse(ctx, 0, -17, 8, 7.2, '#7a5c3c', INK, 2.6);
-  ctx.fillStyle = '#3a2a18';
-  ctx.fillRect(-7, -22, 14, 6);
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 2.2;
-  ctx.strokeRect(-7, -22, 14, 6);
-  ctx.strokeStyle = '#d4b078';
-  ctx.lineWidth = 2.6;
-  ctx.beginPath();
-  ctx.arc(-11, -8, 13, -0.9, 0.9);
-  ctx.stroke();
-  ctx.strokeStyle = '#f0e6d2';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.moveTo(-11, -19);
-  ctx.lineTo(-11, 3);
-  ctx.stroke();
-  ctx.restore();
-}
-
 function bakeWallBottom() {
   const hWorld = CANVAS_H - DEFEAT_Y;
   const w = CANVAS_W * BG_SCALE;
@@ -488,10 +460,6 @@ function bakeWallBottom() {
   ctx.moveTo(0, 22);
   ctx.lineTo(CANVAS_W, 22);
   ctx.stroke();
-
-  paintArcherFigure(ctx, 165, 40, 1.12, true);
-  paintArcherFigure(ctx, 225, 38, 1.2, true);
-  paintArcherFigure(ctx, 285, 40, 1.12, true);
 
   ctx.fillStyle = 'rgba(20,16,12,0.5)';
   ctx.fillRect(0, hWorld - 10, CANVAS_W, 10);
