@@ -183,6 +183,12 @@ export function playfieldExtraInset(cols) {
   return (MAX_SLOT_COLS - c) / 2 * SLOT_INSET_PER_COL;
 }
 
+/** 플레이어블 좌·우 X. 7칸=0–450, 5칸=50–400, 3칸=100–350. */
+export function getPlayfieldInset(cols) {
+  const extra = playfieldExtraInset(cols);
+  return { left: extra, right: CANVAS_W - extra };
+}
+
 /** 첫/마지막 슬롯 X에 쓰는 마진 = 벽 inset + 슬롯 패딩. */
 export function playfieldMargin(cols) {
   return playfieldExtraInset(cols) + SLOT_EDGE_PAD;

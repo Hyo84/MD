@@ -1,4 +1,5 @@
 import './style.css';
+import { assets } from './assets.js';
 import { Game } from './game.js';
 import { setupAdmin } from './admin.js';
 import { meta } from './meta.js';
@@ -12,6 +13,8 @@ const ui = {
   restartBtn: document.getElementById('restartBtn'),
   metaStatus: document.getElementById('metaStatus'),
 };
+
+await assets.ready;
 
 const game = new Game(canvas, ui);
 setupAdmin(game);

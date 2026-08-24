@@ -222,7 +222,7 @@ canvas {
 #skillBtn {
   position: absolute;
   left: 8px;
-  top: 76px;
+  top: 80px;
   z-index: 8;
   padding: 6px 12px;
   font-size: 13px;
@@ -247,7 +247,7 @@ canvas {
 
 #skillPanel {
   position: absolute;
-  inset: 72px 10px 18px;
+  inset: 80px 10px 40px;
   z-index: 12;
   overflow-y: auto;
   background: rgba(14, 11, 8, 0.96);
