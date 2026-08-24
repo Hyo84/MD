@@ -1,3 +1,5 @@
+최신 리뷰용 요약은 GEMINI_BRIEF.md
+
 # KnightSlide (MD) — 현재 구현 스펙
 
 외부 리뷰어(Gemini)용. 본 문서는 **채팅 이력이 아니라 소스 코드**(`src/config.js`, `src/game.js`, `src/meta.js`, `src/skills-ui.js`, `src/admin.js`, `src/main.js`, `src/effects.js`, `src/style.css`, `index.html`, `package.json`)의 현재 값을 그대로 옮긴다. 어드민 패널로 런타임에 바꿀 수 있는 값은 **기본값**이다.
