@@ -26,7 +26,7 @@ export const BALANCE = {
   bossGatherStrength: 0.6, // 보스 집결 강도 (0=안함, 0.7 초과 시 교전 중인 유닛도 집결, 1=최대)
   gatherSpeed: 40,      // 집결 시 최대 가로 이동 속도 (px/초)
   attackCooldown: 0.8,  // 공격 틱 간격 (초)
-  enemyReach: 50,       // 적 근접 공격 사거리 보정 (px)
+  enemyReach: 24,       // 적 근접 공격 사거리 보정 (px). 실제 거리 = 적.r + 24
 
   // 웨이브 난이도 곡선 (적 HP/ATK 배율, 스폰 시점에 적용)
   gentleRate: 0.10,     // 완만 구간: 웨이브당 +10% (웨이브 10 ≈ 1.9배)
@@ -75,21 +75,21 @@ export function effectiveMult(wave, liveMult = 1) {
 // 아군 유닛 (T1 ~ T10)
 // stop = 저지력(교전 중 라인 속도 감소, 적 없을 때 전열 푸시 속도 px/초), range = 공격 사거리(px)
 export const UNITS = [
-  { tier: 1,  name: '민병대',       color: '#D2B48C', r: 16, hp: 50,    atk: 5,    mass: 1.0,  stop: 4,  range: 40 },
-  { tier: 2,  name: '신병',         color: '#C2A679', r: 18, hp: 110,   atk: 12,   mass: 1.3,  stop: 6,  range: 50 },
-  { tier: 3,  name: '경보병',       color: '#CD7F32', r: 20, hp: 240,   atk: 25,   mass: 1.7,  stop: 9,  range: 62 },
-  { tier: 4,  name: '중보병',       color: '#708090', r: 22, hp: 500,   atk: 55,   mass: 2.2,  stop: 13, range: 75 },
-  { tier: 5,  name: '기사단원',     color: '#4682B4', r: 24, hp: 1050,  atk: 120,  mass: 2.8,  stop: 18, range: 90,
-    special: { cleaveRadius: 60, cleaveMult: 0.5 } },
-  { tier: 6,  name: '근위대장',     color: '#4169E1', r: 26, hp: 2200,  atk: 250,  mass: 3.5,  stop: 24, range: 108,
+  { tier: 1,  name: '민병대',       color: '#D2B48C', r: 16, hp: 50,    atk: 5,    mass: 1.0,  stop: 4,  range: 36 },
+  { tier: 2,  name: '신병',         color: '#C2A679', r: 18, hp: 110,   atk: 12,   mass: 1.3,  stop: 6,  range: 42 },
+  { tier: 3,  name: '경보병',       color: '#CD7F32', r: 20, hp: 240,   atk: 25,   mass: 1.7,  stop: 9,  range: 50 },
+  { tier: 4,  name: '중보병',       color: '#708090', r: 22, hp: 500,   atk: 55,   mass: 2.2,  stop: 13, range: 58 },
+  { tier: 5,  name: '기사단원',     color: '#4682B4', r: 24, hp: 1050,  atk: 120,  mass: 2.8,  stop: 18, range: 70,
+    special: { cleaveRadius: 56, cleaveMult: 0.5 } },
+  { tier: 6,  name: '근위대장',     color: '#4169E1', r: 26, hp: 2200,  atk: 250,  mass: 3.5,  stop: 24, range: 82,
     special: { stunChance: 0.10, stunDuration: 0.5 } },
-  { tier: 7,  name: '성기사',       color: '#FFD700', r: 28, hp: 4600,  atk: 520,  mass: 4.3,  stop: 32, range: 128,
+  { tier: 7,  name: '성기사',       color: '#FFD700', r: 28, hp: 4600,  atk: 520,  mass: 4.3,  stop: 32, range: 96,
     special: { healPeriod: 2, healRadius: 110, healPct: 0.04 } },
-  { tier: 8,  name: '드래곤가디언', color: '#8B0000', r: 30, hp: 9500,  atk: 1100, mass: 5.3,  stop: 42, range: 150,
+  { tier: 8,  name: '드래곤가디언', color: '#8B0000', r: 30, hp: 9500,  atk: 1100, mass: 5.3,  stop: 42, range: 112,
     special: { burnAtkFrac: 0.20, burnDuration: 3 } },
-  { tier: 9,  name: '대원수',       color: '#4B0082', r: 33, hp: 19000, atk: 2300, mass: 6.5,  stop: 55, range: 180,
+  { tier: 9,  name: '대원수',       color: '#4B0082', r: 33, hp: 19000, atk: 2300, mass: 6.5,  stop: 55, range: 128,
     special: { shockPeriod: 4, shockAtkFrac: 0.3 } },
-  { tier: 10, name: '영웅',         color: '#FF4500', r: 38, hp: 50000, atk: 6500, mass: 10.0, stop: 90, range: 225 },
+  { tier: 10, name: '영웅',         color: '#FF4500', r: 38, hp: 50000, atk: 6500, mass: 10.0, stop: 90, range: 168 },
 ];
 
 export const HEROES = {
