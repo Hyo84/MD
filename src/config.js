@@ -109,11 +109,11 @@ export const HERO_ASCENSION_BONUS_SCORE = 400;
 // 적 (웨이브라인에 부착되는 개체)
 // speed = 라인 전진 가속 기여 (px/초, 0이면 라인을 밀지 않음)
 export const MONSTERS = {
-  goblin:   { name: '고블린',     icon: '고', color: '#3CB371', outline: '#1e5c38', r: 15, hp: 40,    atk: 4,   speed: 3,  score: 10 },
-  orc:      { name: '오크',       icon: '오', color: '#6B8E23', outline: '#39510f', r: 20, hp: 180,   atk: 18,  speed: 1.5, score: 25 },
-  skeleton: { name: '스켈레톤',   icon: '스', color: '#DCDCDC', outline: '#6e6e6e', r: 18, hp: 120,   atk: 14,  speed: 0,  score: 20 },
-  troll:    { name: '동굴 트롤',  icon: '트', color: '#556B2F', outline: '#2c3a14', r: 28, hp: 1200,  atk: 80,  speed: 1,  score: 100, regen: 12 },
-  boss:     { name: '오크 워로드', icon: '보', color: '#B22222', outline: '#5c0e0e', r: 45, hp: 2300,  atk: 85,  speed: 38, score: 500, isBoss: true },
+  goblin:   { name: '고블린',     icon: '고', grade: '1', color: '#3CB371', outline: '#1e5c38', r: 15, hp: 40,    atk: 4,   speed: 3,  score: 10 },
+  orc:      { name: '오크',       icon: '오', grade: '2', color: '#6B8E23', outline: '#39510f', r: 20, hp: 180,   atk: 18,  speed: 1.5, score: 25 },
+  skeleton: { name: '스켈레톤',   icon: '스', grade: '3', color: '#DCDCDC', outline: '#6e6e6e', r: 18, hp: 120,   atk: 14,  speed: 0,  score: 20 },
+  troll:    { name: '동굴 트롤',  icon: '트', grade: '4', color: '#556B2F', outline: '#2c3a14', r: 28, hp: 1200,  atk: 80,  speed: 1,  score: 100, regen: 12 },
+  boss:     { name: '오크 워로드', icon: '보', grade: '보', color: '#B22222', outline: '#5c0e0e', r: 45, hp: 2300,  atk: 85,  speed: 38, score: 500, isBoss: true },
 };
 
 export const FRICTION_AIR_UNIT = 0.03;

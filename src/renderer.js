@@ -3,8 +3,9 @@
 import {
   CANVAS_W, CANVAS_H, DEFEAT_Y, LAUNCHER_Y, LINE_START_Y,
   BALANCE, UNITS, MONSTERS, HEROES, HERO_MISSION_DAMAGE, HERO_ASCENSION_SLOWMO,
+  playfieldExtraInset, BASE_SLOT_COLS,
 } from './config.js';
-import { assets } from './assets.js';
+import { assets, DIRT_W, FOREST_STRIP_W } from './assets.js';
 import { drawHud } from './hud.js';
 
 const EVO_BAR_H = 36;
@@ -61,6 +62,24 @@ function drawHpBar(ctx, x, y, w, ratio, color) {
   ctx.restore();
 }
 
+/** 두꺼운 아웃라인 등급 숫자. 머리 위, 스프라이트를 가리지 않게 작게. */
+function drawGradeBadge(ctx, x, y, label, bodyR) {
+  const text = String(label);
+  const fs = Math.max(12, Math.min(22, Math.round(bodyR * 0.78)));
+  ctx.save();
+  ctx.font = `900 ${fs}px 'Arial Black', 'Malgun Gothic', sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
+  ctx.lineWidth = Math.max(3.6, fs * 0.28);
+  ctx.strokeStyle = '#1a140c';
+  ctx.fillStyle = '#fff8e8';
+  ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
 function drawT10Particles(ctx, x, y, r, t) {
   for (let i = 0; i < 10; i++) {
     const a = t * 1.8 + i * (Math.PI * 2 / 10);
@@ -91,6 +110,23 @@ function drawMotionStreaks(ctx, x, y, r, color) {
   ctx.restore();
 }
 
+function fillWoodFrame(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.fillStyle = '#6a4324';
+  ctx.strokeStyle = '#1a140c';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(x, y, w, h, 6);
+  else ctx.rect(x, y, w, h);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = '#e8c56a';
+  ctx.lineWidth = 1.6;
+  ctx.strokeRect(x + 4, y + 3, w - 8, h - 6);
+  ctx.restore();
+}
+
 function drawAimArrow(ctx, game) {
   if (game.state !== 'playing') return;
   const x = game.aimX;
@@ -116,39 +152,130 @@ function drawAimArrow(ctx, game) {
   ctx.restore();
 }
 
-function drawSideStone(ctx, left, right) {
-  if (left <= 0 && right >= CANVAS_W) return;
-  const strip = assets.get('stone_side');
+function drawFlippedStrip(ctx, img, destX, destW, destY, destH) {
+  if (!img || destW <= 0) return;
   ctx.save();
-  if (left > 0) {
-    if (strip) ctx.drawImage(strip, 0, 0, left, CANVAS_H);
-    else {
-      ctx.fillStyle = '#14100c';
-      ctx.fillRect(0, 0, left, CANVAS_H);
+  ctx.translate(destX + destW, destY);
+  ctx.scale(-1, 1);
+  ctx.drawImage(img, 0, 0, destW, destH);
+  ctx.restore();
+}
+
+function drawDirtPath(ctx, left, right, cols) {
+  const dirt = assets.get('dirt_path');
+  const playW = Math.max(1, right - left);
+  const frac = cols <= 3 ? 0.78 : cols <= 5 ? 0.84 : 0.9;
+  const dirtW = Math.min(DIRT_W, playW * frac);
+  const dx = (left + right) / 2 - dirtW / 2;
+  const y0 = 72;
+  const h = DEFEAT_Y - y0 + 8;
+  if (dirt) ctx.drawImage(dirt, dx, y0, dirtW, h);
+  else {
+    ctx.fillStyle = 'rgba(214, 170, 92, 0.9)';
+    ctx.fillRect(dx, y0, dirtW, h);
+  }
+}
+
+function drawLoggedBand(ctx, img, x, w, y, h) {
+  if (!img || w <= 0) return;
+  ctx.drawImage(img, x, y, w, h);
+}
+
+function drawSideForest(ctx, cols, left, right) {
+  const dense = assets.get('forest_dense');
+  const logged = assets.get('forest_logged');
+  const edge = assets.get('forest_edge');
+  const y0 = 70;
+  const h = DEFEAT_Y - y0 + 18;
+  const inset3 = playfieldExtraInset(BASE_SLOT_COLS);
+  const inset5 = playfieldExtraInset(5);
+
+  // 남은 인셋 = 아직 벌목되지 않은 울창한 소나무 장벽
+  const drawDense = (destX, destW, flip) => {
+    if (destW <= 0) return;
+    if (dense) {
+      const iw = dense.width;
+      const ih = dense.height;
+      const srcW = Math.max(1, (destW / FOREST_STRIP_W) * iw);
+      if (flip) {
+        ctx.save();
+        ctx.translate(destX + destW, y0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(dense, 0, 0, srcW, ih, 0, 0, destW, h);
+        ctx.restore();
+      } else {
+        ctx.drawImage(dense, 0, 0, srcW, ih, destX, y0, destW, h);
+      }
+    } else {
+      ctx.fillStyle = '#143c1c';
+      ctx.fillRect(destX, y0, destW, h);
     }
+  };
+  drawDense(0, left, false);
+  drawDense(right, CANVAS_W - right, true);
+
+  // 3→5 벌목대: 그루터기 + 넘어진 통나무 (5칸에서 선명, 7칸에서는 희미한 잔재)
+  if (cols >= 5 && logged) {
+    const band = inset3 - inset5;
+    ctx.save();
+    ctx.globalAlpha = cols >= 7 ? 0.32 : 1;
+    drawLoggedBand(ctx, logged, inset5, band, y0, h);
+    ctx.translate(CANVAS_W - inset5, y0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(logged, 0, 0, band, h);
+    ctx.restore();
+  }
+  // 5→7 벌목대: 가장자리만 얇은 수목선 + 그루터기
+  if (cols >= 7) {
+    if (logged) {
+      ctx.save();
+      ctx.globalAlpha = 0.72;
+      drawLoggedBand(ctx, logged, 0, inset5, y0, h);
+      ctx.translate(CANVAS_W, y0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(logged, 0, 0, inset5, h);
+      ctx.restore();
+    }
+    if (edge) {
+      ctx.drawImage(edge, 0, y0, 16, h);
+      drawFlippedStrip(ctx, edge, CANVAS_W - 16, 16, y0, h);
+    }
+  }
+
+  ctx.save();
+  ctx.strokeStyle = '#1a140c';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (left > 0) {
+    ctx.moveTo(left + 0.5, y0);
+    ctx.lineTo(left + 0.5, y0 + h);
   }
   if (right < CANVAS_W) {
-    const sw = CANVAS_W - right;
-    if (strip) {
-      ctx.save();
-      ctx.translate(CANVAS_W, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(strip, 0, 0, sw, CANVAS_H);
-      ctx.restore();
-    } else {
-      ctx.fillStyle = '#14100c';
-      ctx.fillRect(right, 0, sw, CANVAS_H);
-    }
+    ctx.moveTo(right - 0.5, y0);
+    ctx.lineTo(right - 0.5, y0 + h);
   }
-  ctx.strokeStyle = 'rgba(160, 140, 110, 0.4)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(left, 0);
-  ctx.lineTo(left, CANVAS_H);
-  ctx.moveTo(right, 0);
-  ctx.lineTo(right, CANVAS_H);
   ctx.stroke();
   ctx.restore();
+}
+
+function drawEdgeProps(ctx, left, right) {
+  const crate = assets.get('prop_crate');
+  const barrel = assets.get('prop_barrel');
+  if (!crate && !barrel) return;
+  const spots = [
+    [left + 18, 170, true],
+    [left + 22, 310, false],
+    [left + 16, 470, true],
+    [right - 18, 190, false],
+    [right - 22, 350, true],
+    [right - 16, 510, false],
+  ];
+  for (const [x, y, isCrate] of spots) {
+    if (x < 8 || x > CANVAS_W - 8) continue;
+    const img = isCrate ? crate : barrel;
+    if (img) ctx.drawImage(img, x - 16, y - 16, 32, 32);
+  }
 }
 
 function drawDefeatLine(ctx, left, right) {
@@ -289,7 +416,7 @@ function drawEnemies(ctx, game) {
     if (!ok) {
       fallbackCircle(
         ctx, m.x, m.y, stat.r,
-        flash ? '#ffffff' : stat.color, stat.outline, stat.icon,
+        flash ? '#ffffff' : stat.color, stat.outline, stat.grade || stat.icon,
         m.key === 'skeleton' ? '#333' : '#fff',
       );
     }
@@ -305,7 +432,8 @@ function drawEnemies(ctx, game) {
       ctx.arc(m.x + stat.r * 0.5, m.y - stat.r * 0.5, 4 + Math.sin(t * 8) * 0.6, 0, Math.PI * 2);
       ctx.fill();
     }
-    drawHpBar(ctx, m.x, m.y - stat.r - 9, stat.r * 2, m.hp / m.maxHp, '#e74c3c');
+    drawHpBar(ctx, m.x, m.y - stat.r - 16, stat.r * 2, m.hp / m.maxHp, '#e74c3c');
+    drawGradeBadge(ctx, m.x, m.y - stat.r - 4, stat.grade || stat.icon, stat.r);
   }
 }
 
@@ -356,13 +484,14 @@ function drawFriendlies(ctx, game) {
       ctx.fillText(HEROES[u.heroType].name, x, y + u.r * 0.15);
       ctx.restore();
     }
-    drawHpBar(ctx, x, y - u.r - 9, u.r * 2, u.hp / u.maxHp, '#2ecc71');
+    drawHpBar(ctx, x, y - u.r - 16, u.r * 2, u.hp / u.maxHp, '#2ecc71');
+    drawGradeBadge(ctx, x, y - u.r - 4, String(u.tier), u.r);
     if (u.heroType) {
       const quota = u.targetDamage || HERO_MISSION_DAMAGE;
       const p = quota > 0 ? Math.min(1, (u.missionDamage || 0) / quota) : 0;
       const gw = u.r * 2.2;
       const gx = x - gw / 2;
-      const gy = y - u.r - 20;
+      const gy = y - u.r - 28;
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(gx, gy, gw, 5);
@@ -414,6 +543,7 @@ function drawLauncher(ctx, game, innerR) {
   if (!drawSprite(ctx, spr, game.aimX, LAUNCHER_Y, stat.r * 2.4, stat.r * 2.4)) {
     fallbackCircle(ctx, game.aimX, LAUNCHER_Y, stat.r, stat.color, 'rgba(255,255,255,0.5)', String(game.currentTier));
   }
+  drawGradeBadge(ctx, game.aimX, LAUNCHER_Y - stat.r - 4, String(game.currentTier), stat.r);
   ctx.restore();
 
   const barW = 44;
@@ -431,14 +561,16 @@ function drawLauncher(ctx, game, innerR) {
   const nextX = innerR - 55;
   const nspr = assets.unit(game.nextTier);
   ctx.save();
-  ctx.globalAlpha = ready ? 0.85 : 0.4;
-  ctx.fillStyle = '#c9b48a';
-  ctx.font = "13px 'Malgun Gothic', sans-serif";
+  ctx.globalAlpha = ready ? 0.95 : 0.45;
+  fillWoodFrame(ctx, nextX - 22, CANVAS_H - EVO_BAR_H - 52, 44, 46);
+  ctx.fillStyle = '#f0e6d2';
+  ctx.font = "bold 11px 'Malgun Gothic', sans-serif";
   ctx.textAlign = 'center';
-  ctx.fillText('다음', nextX, CANVAS_H - EVO_BAR_H - 40);
+  ctx.fillText('다음', nextX, CANVAS_H - EVO_BAR_H - 44);
   if (!drawSprite(ctx, nspr, nextX, CANVAS_H - EVO_BAR_H - 18, 28, 28)) {
     fallbackCircle(ctx, nextX, CANVAS_H - EVO_BAR_H - 18, 14, nstat.color, 'rgba(255,255,255,0.35)', String(game.nextTier));
   }
+  drawGradeBadge(ctx, nextX, CANVAS_H - EVO_BAR_H - 8, String(game.nextTier), 12);
   ctx.restore();
 }
 
@@ -495,11 +627,14 @@ class Renderer {
     if (bg) ctx.drawImage(bg, 0, 0, CANVAS_W, CANVAS_H);
     else {
       const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-      grad.addColorStop(0, '#2a6a48');
-      grad.addColorStop(1, '#1a4028');
+      grad.addColorStop(0, '#4cbf52');
+      grad.addColorStop(1, '#2a8234');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     }
+
+    const cols = game.slotCols || BASE_SLOT_COLS;
+    drawDirtPath(ctx, innerL, innerR, cols);
 
     const camp = assets.get('camp_top');
     if (camp) ctx.drawImage(camp, 0, 0, CANVAS_W, 90);
@@ -512,7 +647,8 @@ class Renderer {
       ctx.fillRect(0, DEFEAT_Y, CANVAS_W, CANVAS_H - DEFEAT_Y);
     }
 
-    drawSideStone(ctx, innerL, innerR);
+    drawSideForest(ctx, cols, innerL, innerR);
+    drawEdgeProps(ctx, innerL, innerR);
 
     ctx.save();
     ctx.beginPath();

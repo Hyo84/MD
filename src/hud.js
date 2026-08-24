@@ -7,14 +7,17 @@ import { assets } from './assets.js';
 export const RANGE_MODE_LABELS = ['끄기', '아군만', '전체'];
 
 function drawHudChip(ctx, bx, by, bw, bh, label, fill, stroke) {
-  ctx.fillStyle = fill;
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = 1;
+  ctx.fillStyle = fill || '#5a3a1c';
+  ctx.strokeStyle = stroke || '#1a140c';
+  ctx.lineWidth = 2.4;
   ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 4);
+  if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 5);
   else ctx.rect(bx, by, bw, bh);
   ctx.fill();
   ctx.stroke();
+  ctx.strokeStyle = '#e8c56a';
+  ctx.lineWidth = 1.1;
+  ctx.strokeRect(bx + 2.5, by + 2, bw - 5, bh - 4);
   ctx.fillStyle = '#e8dcc0';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
