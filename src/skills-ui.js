@@ -1,6 +1,6 @@
 // 스킬 패널 (스킬 버튼 / K). 구매는 즉시 현재 런에 반영.
 
-import { SKILLS, SKILL_TREES, SKILL_BY_ID, BALANCE, PROGRESSION, rankUnlockLevel, advanceSpeedForRank, slotColsForRank } from './config.js';
+import { SKILLS, SKILL_TREES, SKILL_BY_ID, BALANCE, PROGRESSION, rankUnlockLevel, advanceSpeedForRank, slotColsForRank, launchTierChances } from './config.js';
 
 function fmtPct(v) {
   return `${(v * 100).toFixed(v * 100 % 1 === 0 ? 0 : 1)}%`;
@@ -34,11 +34,28 @@ function effectLine(skill, rank) {
       return `전장 ${cols(rank)}칸` +
         (rank < skill.maxRank ? ` → ${cols(rank + 1)}칸` : '');
     }
-    case 'higherTier': {
-      const t2 = (r) => r * skill.t2PerRank;
-      const t3 = (r) => r >= skill.t3StartRank ? (r - (skill.t3StartRank - 1)) * skill.t3PerRank : 0;
-      let s = `추가 T2 ${fmtPct(t2(rank))} · T3 ${fmtPct(t3(rank))}`;
-      if (rank < skill.maxRank) s += ` → T2 ${fmtPct(t2(rank + 1))} · T3 ${fmtPct(t3(rank + 1))}`;
+    case 'eliteRecruit': {
+      const fmt = (rk) => {
+        const ch = launchTierChances(rk);
+        const parts = [`T1 ${fmtPct(ch[1])}`, `T2 ${fmtPct(ch[2])}`];
+        for (const t of [3, 4, 5]) {
+          if (ch[t] > 0) parts.push(`T${t} ${fmtPct(ch[t])}`);
+        }
+        return parts.join(' · ');
+      };
+      const nextUnlock = (rk) => {
+        const a = launchTierChances(rk);
+        const b = launchTierChances(rk + 1);
+        for (const t of [2, 3, 4, 5]) {
+          if (a[t] <= 0 && b[t] > 0) return `T${t} 해금`;
+        }
+        return '';
+      };
+      let s = fmt(rank);
+      if (rank < skill.maxRank) {
+        const tag = nextUnlock(rank);
+        s += ` → ${fmt(rank + 1)}` + (tag ? ` (${tag})` : '');
+      }
       return s;
     }
     case 'mergeShock': {

@@ -1,5 +1,5 @@
 // 어드민 패널: config 객체 값을 실시간으로 수정 (A 키 또는 ⚙ 버튼)
-import { BALANCE, UNITS, MONSTERS, LIVE_MULT_MIN, LIVE_MULT_MAX, LIVE_MULT_STEP, PROGRESSION, XP_TO_NEXT, SKILLS, BASE_SLOT_COLS, MAX_SLOT_COLS, SLOT_INSET_PER_COL } from './config.js';
+import { BALANCE, UNITS, MONSTERS, LIVE_MULT_MIN, LIVE_MULT_MAX, LIVE_MULT_STEP, PROGRESSION, XP_TO_NEXT, SKILLS, BASE_SLOT_COLS, MAX_SLOT_COLS, SLOT_INSET_PER_COL, BRANDING, BRANDING_STORAGE_KEY } from './config.js';
 
 function numberRow(label, obj, key, step = 1) {
   const row = document.createElement('label');
@@ -35,6 +35,51 @@ function numberAt(label, arr, index, step = 1) {
   return row;
 }
 
+function textRow(label, obj, key, onChange) {
+  const row = document.createElement('label');
+  row.className = 'admin-row admin-row-text';
+  const span = document.createElement('span');
+  span.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = String(obj[key] ?? '');
+  input.addEventListener('input', () => {
+    obj[key] = input.value;
+    onChange?.();
+  });
+  row.append(span, input);
+  return row;
+}
+
+function loadBranding() {
+  try {
+    const raw = localStorage.getItem(BRANDING_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.title === 'string') BRANDING.title = parsed.title;
+    if (typeof parsed.subtitle === 'string' && parsed.subtitle !== '중세 슬라이드 & 머지 디펜스') {
+      BRANDING.subtitle = parsed.subtitle;
+    }
+  } catch { /* ignore */ }
+}
+
+function persistBranding() {
+  try {
+    localStorage.setItem(BRANDING_STORAGE_KEY, JSON.stringify({
+      title: BRANDING.title,
+      subtitle: BRANDING.subtitle,
+    }));
+  } catch { /* quota / private mode */ }
+}
+
+function applyBranding() {
+  document.title = BRANDING.title || 'KnightSlide';
+  const h1 = document.getElementById('gameTitle');
+  const sub = document.getElementById('gameSubtitle');
+  if (h1) h1.textContent = BRANDING.title;
+  if (sub) sub.textContent = BRANDING.subtitle;
+}
+
 function section(title) {
   const el = document.createElement('div');
   el.className = 'admin-section';
@@ -57,6 +102,17 @@ export function setupAdmin(game) {
   note.className = 'admin-note';
   note.textContent = '값은 즉시 적용됩니다. 실시간 난이도는 살아있는 적 HP/ATK/라인 가속에도 바로 반영됩니다. (기본 HP 테이블은 신규 개체부터)';
   panel.appendChild(note);
+
+  loadBranding();
+  applyBranding();
+  persistBranding();
+  const brandSec = section('제목 / 서브타이틀');
+  const saveBrand = () => { persistBranding(); applyBranding(); };
+  brandSec.append(
+    textRow('게임 제목', BRANDING, 'title', saveBrand),
+    textRow('서브타이틀', BRANDING, 'subtitle', saveBrand),
+  );
+  panel.appendChild(brandSec);
 
   const liveSec = section('실시간 난이도');
   const liveRow = document.createElement('div');
@@ -204,10 +260,21 @@ export function setupAdmin(game) {
   btn.title = '어드민 패널 (A)';
   document.body.appendChild(btn);
 
+  const restart = document.createElement('button');
+  restart.id = 'quickRestartBtn';
+  restart.type = 'button';
+  restart.textContent = '재시작';
+  restart.title = '바로 다시 시작';
+  restart.addEventListener('click', (e) => {
+    e.stopPropagation();
+    game.start();
+  });
+  document.body.appendChild(restart);
+
   const toggle = () => panel.classList.toggle('hidden');
   btn.addEventListener('click', toggle);
   window.addEventListener('keydown', (e) => {
-    if (e.target instanceof HTMLInputElement) return;
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     if (e.key === 'a' || e.key === 'A' || e.key === 'ㅁ') toggle();
   });
 }

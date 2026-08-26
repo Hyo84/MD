@@ -2,9 +2,9 @@ import Matter from 'matter-js';
 import {
   CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y, ENEMY_SPAWN_Y,
     BALANCE, UNITS, MONSTERS, HEROES,
-    HERO_MISSION_DAMAGE, HERO_MISSION_KILLS, HERO_ASCENSION_ATK_MULT, HERO_ASCENSION_SLOWMO,
+    HERO_MISSION_DAMAGE, HERO_MISSION_KILLS, HERO_BOSS_LIMIT, HERO_ASCENSION_ATK_MULT, HERO_ASCENSION_SLOWMO,
     HERO_ASCENSION_REPLACEMENT_TIER, HERO_ASCENSION_BONUS_SCORE,
-    LAUNCH_T2_BASE, CHARGE_STUTTER_TIME, MERGE_BLAST_RADIUS, MERGE_BLAST_FORCE,
+    CHARGE_STUTTER_TIME, MERGE_BLAST_RADIUS, MERGE_BLAST_FORCE,
     FRICTION_AIR_UNIT, killsNeeded, waveMultiplier, effectiveMult,
     LIVE_MULT_STEP, clampLiveMult, PROGRESSION,
     BASE_SLOT_COLS, MAX_SLOT_COLS, getSlotX, playfieldExtraInset, getPlayfieldInset,
@@ -58,6 +58,8 @@ export class Game {
     this._diffPlusRect = { x: 0, y: 0, w: 0, h: 0 };
     this._evoBarRect = evoBarMetrics();
     this.cheatTier = 0; // 0=random, 1–10 sticky launch cheat (restarts keep it)
+    this._cssScale = 1;
+    this._drawScale = 1;
 
     this._setupInput();
     this.ui.restartBtn.addEventListener('click', () => this.start());
@@ -184,7 +186,7 @@ export class Game {
       const a = this.archers[i];
       const count = this.archers.length;
       a.x = count <= 1 ? (left + right) / 2 : left + 56 + i * ((span - 112) / (count - 1));
-      a.y = DEFEAT_Y - 16;
+      a.y = DEFEAT_Y + 14; // 마지노선 성벽 위(보도)
       const prevMax = a.maxAmmo;
       a.maxAmmo = fx.archerAmmo;
       if (fresh) a.ammo = fx.archerAmmo;
@@ -328,10 +330,13 @@ export class Game {
   }
 
   _rollTier() {
-    const fx = this._effects();
-    const r = Math.random();
-    if (fx.t3Chance > 0 && r < fx.t3Chance) return 3;
-    if (r < fx.t3Chance + LAUNCH_T2_BASE + fx.t2Bonus) return 2;
+    const ch = this._effects().launchChances;
+    let r = Math.random();
+    for (const t of [5, 4, 3, 2]) {
+      const p = ch[t] || 0;
+      if (p > 0 && r < p) return t;
+      r -= p;
+    }
     return 1;
   }
 
@@ -487,8 +492,10 @@ export class Game {
       flashT: 0, abilityT: 0,
       heroType,
       missionDamage: 0,
+      bossKills: 0,
       targetDamage: heroType ? HERO_MISSION_DAMAGE : 0,
       targetKills: heroType ? HERO_MISSION_KILLS : 0,
+      gatherToBoss: false,
       firstHit: false,
       valkTick: 0,
     };
@@ -788,12 +795,14 @@ export class Game {
 
       if (newTier === 10) {
         const hero = this._summonHero(pos.x, pos.y);
+        hero.gatherToBoss = !!(a.gatherToBoss || b.gatherToBoss);
         this._applyMergeShock(pos.x, pos.y, hero);
         this.mergeBlastQueue.push({ x: pos.x, y: pos.y, exclude: hero });
       } else {
         // 합성 유닛은 발사 관성이 없으므로 즉시 전진 가능
         const spawned = this._spawnUnit(newTier, pos.x, pos.y);
         spawned.settled = true;
+        spawned.gatherToBoss = !!(a.gatherToBoss || b.gatherToBoss);
         this.effects.burst(pos.x, pos.y, UNITS[newTier - 1].color, 18, 4, 3.5);
         this.effects.floatText(pos.x, pos.y - 30, UNITS[newTier - 1].name, '#fff', 15, 0.9);
         this._applyMergeShock(pos.x, pos.y, spawned);
@@ -834,13 +843,13 @@ export class Game {
     hero.settled = true;
     this.effects.burst(x, y, '#FF4500', 40, 6, 5);
     this.effects.burst(x, y, '#FFD700', 30, 4.5, 4);
-    this.effects.floatText(CANVAS_W / 2, 300, `영웅 소환! ${HEROES[type].name}`, '#FFD700', 28, 2.0);
+    this.effects.floatText(CANVAS_W / 2, 300, '영웅 소환!', '#FFD700', 28, 2.0);
     return hero;
   }
 
   // ---------- 웨이브 / 스폰 ----------
   _monsterPool() {
-    const pool = [['goblin', 55], ['orc', 25]];
+    const pool = [['goblin', this.wave <= 1 ? 78 : 55], ['orc', this.wave <= 1 ? 12 : 25]];
     if (this.wave >= 2) pool.push(['skeleton', 20]);
     if (this.wave >= 3) pool.push(['troll', 8]);
     return pool;
@@ -863,6 +872,7 @@ export class Game {
       if (this.bossWarnT <= 0) {
         this._spawnEnemy('boss');
         this.bossActive = true;
+        this._markBossGather();
         this.effects.burst(CANVAS_W / 2, ENEMY_SPAWN_Y, '#B22222', 30, 5, 5);
         this.effects.floatText(CANVAS_W / 2, 330, '보스 출현! 병력 집결!', '#FF9040', 26, 2.0);
       }
@@ -899,6 +909,7 @@ export class Game {
       this.kills = 0;
       this._refillArcherAmmo();
       this.effects.floatText(CANVAS_W / 2, 300, `웨이브 ${this.wave} 시작!`, '#7CFC00', 26, 2.0);
+      this._onBossSlain();
     } else {
       this.kills += 1;
     }
@@ -1095,7 +1106,13 @@ export class Game {
     }
   }
 
-  // ---------- 보스 집결: 교전하지 않는 유닛이 보스 쪽으로 이동 ----------
+  // ---------- 보스 집결: 등장 시점에 있던 아군만 보스 쪽으로. 이후 발사는 진격 경로 유지 ----------
+  _markBossGather() {
+    for (const u of this.units) {
+      if (!u.dead) u.gatherToBoss = true;
+    }
+  }
+
   _updateBossGather(dt) {
     const strength = Math.max(0, Math.min(1, BALANCE.bossGatherStrength));
     if (strength <= 0) return;
@@ -1107,7 +1124,7 @@ export class Game {
     const maxVxTick = velFromPxPerSec(BALANCE.gatherSpeed * strength, stepMs);
 
     for (const u of this.units) {
-      if (!u.settled) continue;
+      if (!u.settled || !u.gatherToBoss) continue;
       if (!engagedAlsoGather && u.engaged) continue;
       const dx = boss.x - u.body.position.x;
       if (Math.abs(dx) < 24) continue; // 보스 열 근처면 정지
@@ -1284,7 +1301,7 @@ export class Game {
       // T10 영웅 (수명 타이머 없음 — 사명 쿼터 또는 HP 사망)
       if (u.heroType) {
         const hero = HEROES[u.heroType];
-        if (u.heroType === 'arthur' && u.abilityT >= hero.period) {
+        if (u.heroType === 'arthur' && hero && u.abilityT >= hero.period) {
           u.abilityT = 0;
           this.effects.lineFlash(this.lineY, '#9be7ff');
           for (const m of [...this.enemies]) {
@@ -1292,7 +1309,7 @@ export class Game {
           }
           this._checkHeroMission(u);
         }
-        if (u.heroType === 'valkyrie') {
+        if (u.heroType === 'valkyrie' && hero) {
           u.valkTick += dt;
           if (u.valkTick >= hero.tick) {
             u.valkTick = 0;
@@ -1356,10 +1373,36 @@ export class Game {
     }
   }
 
+  _onBossSlain() {
+    for (const u of [...this.units]) {
+      if (u.dead || !u.heroType || u._ascending) continue;
+      u.bossKills = (u.bossKills || 0) + 1;
+      this._checkHeroMission(u);
+    }
+  }
+
   _checkHeroMission(u) {
     if (!u || u.dead || !u.heroType || u._ascending) return;
     const quota = u.targetDamage || HERO_MISSION_DAMAGE;
-    if ((u.missionDamage || 0) >= quota) this._ascendHero(u);
+    if ((u.missionDamage || 0) >= quota) {
+      this._ascendHero(u);
+      return;
+    }
+    if ((u.bossKills || 0) >= HERO_BOSS_LIMIT) this._retireHero(u);
+  }
+
+  _retireHero(hero) {
+    if (!hero || hero.dead || hero._ascending) return;
+    hero._ascending = true;
+    const x = hero.body.position.x;
+    const y = hero.body.position.y;
+    this.effects.burst(x, y, '#c9b48a', 22, 4, 4);
+    this.effects.floatText(x, y - 36, '영웅 퇴장', '#e8d5a0', 18, 1.3);
+    this._removeUnit(hero);
+    const t5 = UNITS[HERO_ASCENSION_REPLACEMENT_TIER - 1];
+    const spawn = this._clampFriendlyPos(x, y, t5.r);
+    const knight = this._spawnUnit(HERO_ASCENSION_REPLACEMENT_TIER, spawn.x, spawn.y);
+    knight.settled = true;
   }
 
   _ascendHero(hero) {
@@ -1462,12 +1505,14 @@ export class Game {
     const rawDt = Math.min((now - this._lastTime) / 1000, 0.05);
     this._lastTime = now;
 
-    if (this.slowMoT > 0) this.slowMoT = Math.max(0, this.slowMoT - rawDt);
-    if (this.ascendFlashT > 0) this.ascendFlashT = Math.max(0, this.ascendFlashT - rawDt);
-    if (this.shakeT > 0) this.shakeT = Math.max(0, this.shakeT - rawDt);
-
-    const dt = rawDt * (this.slowMoT > 0 ? SLOWMO_SCALE : 1);
-    if (this.state === 'playing') this._update(dt);
+    const paused = this.skillPanelOpen && this.state === 'playing';
+    if (!paused) {
+      if (this.slowMoT > 0) this.slowMoT = Math.max(0, this.slowMoT - rawDt);
+      if (this.ascendFlashT > 0) this.ascendFlashT = Math.max(0, this.ascendFlashT - rawDt);
+      if (this.shakeT > 0) this.shakeT = Math.max(0, this.shakeT - rawDt);
+      const dt = rawDt * (this.slowMoT > 0 ? SLOWMO_SCALE : 1);
+      if (this.state === 'playing') this._update(dt);
+    }
     this._draw();
 
     requestAnimationFrame(this._loop);
@@ -1503,10 +1548,31 @@ export class Game {
     }
   }
 
+  setViewScale(cssScale) {
+    const s = Number(cssScale);
+    this._cssScale = Number.isFinite(s) && s > 0 ? s : 1;
+    this._syncCanvasBacking();
+  }
+
+  _syncCanvasBacking() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const scale = Math.min(this._cssScale * dpr, 4);
+    const w = Math.max(1, Math.round(CANVAS_W * scale));
+    const h = Math.max(1, Math.round(CANVAS_H * scale));
+    this._drawScale = scale;
+    if (this.canvas.width === w && this.canvas.height === h) return;
+    this.canvas.width = w;
+    this.canvas.height = h;
+  }
+
   // ---------- 렌더링 ----------
   _draw() {
+    this._syncCanvasBacking();
+    const ctx = this.ctx;
+    ctx.setTransform(this._drawScale, 0, 0, this._drawScale, 0, 0);
+    ctx.imageSmoothingEnabled = false;
     this._fx = meta.getEffects();
-    renderer.draw(this, this.ctx);
+    renderer.draw(this, ctx);
   }
 
   _hitRect(p, r) {

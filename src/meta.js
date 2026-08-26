@@ -2,7 +2,7 @@
 
 import {
   PROGRESSION, SKILLS, SKILL_BY_ID, xpToNextLevel, META_STORAGE_KEY, BALANCE,
-  rankUnlockLevel, advanceSpeedForRank, slotColsForRank,
+  rankUnlockLevel, advanceSpeedForRank, slotColsForRank, launchTierChances,
 } from './config.js';
 
 function emptyRanks() {
@@ -26,7 +26,10 @@ function load() {
     if (Number.isFinite(parsed.skillPoints)) data.skillPoints = Math.max(0, Math.floor(parsed.skillPoints));
     if (parsed.ranks && typeof parsed.ranks === 'object') {
       for (const s of SKILLS) {
-        const r = parsed.ranks[s.id];
+        let r = parsed.ranks[s.id];
+        if (s.id === 'eliteRecruit' && !Number.isFinite(r) && Number.isFinite(parsed.ranks.higherTier)) {
+          r = parsed.ranks.higherTier;
+        }
         data.ranks[s.id] = Number.isFinite(r) ? Math.max(0, Math.min(s.maxRank, Math.floor(r))) : 0;
       }
     }
@@ -136,11 +139,7 @@ export class Meta {
       PROGRESSION.launchCdFloor,
       BALANCE.launchCooldown - r('launchCd') * SKILL_BY_ID.launchCd.perRank,
     );
-    const t2Bonus = r('higherTier') * SKILL_BY_ID.higherTier.t2PerRank;
-    const ht = SKILL_BY_ID.higherTier;
-    const t3Chance = r('higherTier') >= ht.t3StartRank
-      ? (r('higherTier') - (ht.t3StartRank - 1)) * ht.t3PerRank
-      : 0;
+    const launchChances = launchTierChances(r('eliteRecruit'));
     const ms = SKILL_BY_ID.mergeShock;
     const msh = r('mergeShock');
     const hasWall = r('wall') >= 1;
@@ -161,8 +160,7 @@ export class Meta {
       advanceMult: 1 + r('advance') * SKILL_BY_ID.advance.perRank, // 테이블이 있을 때 이동은 advanceSpeed
       regenPct: r('regen') * SKILL_BY_ID.regen.perRank,
       stopMult: 1 + r('stopping') * SKILL_BY_ID.stopping.perRank,
-      t2Bonus,
-      t3Chance,
+      launchChances,
       mergeShock: msh <= 0 ? null : {
         dmg: msh * ms.dmgPerRank,
         radius: ms.radiusBase + msh * ms.radiusPerRank,

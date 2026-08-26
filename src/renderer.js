@@ -2,7 +2,8 @@
 
 import {
   CANVAS_W, CANVAS_H, DEFEAT_Y, LAUNCHER_Y, LINE_START_Y,
-  BALANCE, UNITS, MONSTERS, HEROES, HERO_MISSION_DAMAGE, HERO_ASCENSION_SLOWMO,
+  BALANCE, UNITS, MONSTERS, HEROES, HERO_MISSION_DAMAGE, HERO_BOSS_LIMIT,
+  HERO_ASCENSION_SLOWMO,
 } from './config.js';
 import { assets, DIRT_W } from './assets.js';
 import { drawHud } from './hud.js';
@@ -12,6 +13,9 @@ const EVO_SLOT_W = 40;
 const EVO_SLOT_COUNT = 10;
 const FOREST_DRAW_H = CANVAS_H;
 const FOREST_SEAM_W = 2;
+/** Camp sits under the HUD. Height is fixed; width fills the playable strip. */
+const CAMP_DEST_Y = 64;
+const CAMP_DRAW_H = 164;
 
 export function evoBarMetrics() {
   const y = CANVAS_H - EVO_BAR_H;
@@ -105,7 +109,7 @@ function drawHpBar(ctx, x, y, w, ratio, color) {
 /** 두꺼운 아웃라인 등급 숫자. 머리 위, 스프라이트를 가리지 않게 작게. */
 function drawGradeBadge(ctx, x, y, label, bodyR) {
   const text = String(label);
-  const fs = Math.max(12, Math.min(22, Math.round(bodyR * 0.78)));
+  const fs = Math.max(11, Math.min(22, Math.round(bodyR * 0.78 * (text.length > 1 ? 0.72 : 1))));
   ctx.save();
   ctx.font = `900 ${fs}px 'Arial Black', 'Malgun Gothic', sans-serif`;
   ctx.textAlign = 'center';
@@ -257,21 +261,76 @@ function drawForestFieldSeam(ctx, left, right) {
   ctx.restore();
 }
 
-/** Castle wall with crenellation top pinned to the Maginot line. */
+/** Same black seam as the forest, where the camp band meets the field. */
+function drawCampFieldSeam(ctx, left, right) {
+  const y = CAMP_DEST_Y + CAMP_DRAW_H - FOREST_SEAM_W;
+  const w = Math.max(1, right - left);
+  ctx.save();
+  ctx.fillStyle = '#000';
+  ctx.fillRect(left, y, w, FOREST_SEAM_W);
+  ctx.restore();
+}
+
+/** Cached source rect: skip empty top of the wall PNG so stone fills Maginot→bottom. */
+let _wallStoneSrc = null;
+let _wallStoneKey = null;
+
+function wallStoneSource(wall) {
+  const iw = Math.max(1, wall.width || CANVAS_W);
+  const ih = Math.max(1, wall.height || (CANVAS_H - DEFEAT_Y));
+  const key = `${iw}x${ih}`;
+  if (_wallStoneSrc && _wallStoneKey === key) return _wallStoneSrc;
+
+  let sy = 0;
+  try {
+    const probe = document.createElement('canvas');
+    probe.width = iw;
+    probe.height = ih;
+    const pctx = probe.getContext('2d', { willReadFrequently: true });
+    pctx.drawImage(wall, 0, 0);
+    const { data } = pctx.getImageData(0, 0, iw, ih);
+    const er = data[0];
+    const eg = data[1];
+    const eb = data[2];
+    const thresh = iw * 0.08;
+    for (let y = 0; y < ih; y++) {
+      let hits = 0;
+      const row = y * iw * 4;
+      for (let x = 0; x < iw; x++) {
+        const i = row + x * 4;
+        if (Math.abs(data[i] - er) + Math.abs(data[i + 1] - eg) + Math.abs(data[i + 2] - eb) > 48) {
+          hits++;
+          if (hits > thresh) {
+            sy = y;
+            y = ih;
+            break;
+          }
+        }
+      }
+    }
+  } catch {
+    sy = 0;
+  }
+  if (sy > ih * 0.7) sy = 0;
+  _wallStoneKey = key;
+  _wallStoneSrc = { sx: 0, sy, sw: iw, sh: Math.max(1, ih - sy) };
+  return _wallStoneSrc;
+}
+
+/** Castle wall: dest covers Maginot (DEFEAT_Y) to canvas bottom. Crop empty PNG top. */
 function drawCastleWall(ctx) {
+  const destY = DEFEAT_Y;
+  const destH = CANVAS_H - DEFEAT_Y;
   const wall = assets.get('wall_bottom');
   if (!wall) {
     ctx.fillStyle = 'rgba(90, 90, 96, 0.9)';
-    ctx.fillRect(0, DEFEAT_Y, CANVAS_W, CANVAS_H - DEFEAT_Y);
+    ctx.fillRect(0, destY, CANVAS_W, destH);
     return;
   }
-  const iw = Math.max(1, wall.width || CANVAS_W);
-  const ih = Math.max(1, wall.height || (CANVAS_H - DEFEAT_Y));
-  const dw = CANVAS_W;
-  const dh = dw * (ih / iw);
+  const { sx, sy, sw, sh } = wallStoneSource(wall);
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(wall, 0, DEFEAT_Y, dw, dh);
+  ctx.drawImage(wall, sx, sy, sw, sh, 0, destY, CANVAS_W, destH);
   ctx.restore();
 }
 
@@ -322,16 +381,17 @@ function drawWallHp(ctx, game, left, right) {
   const w = right - left;
   const ratio = game.wall.maxHp > 0 ? game.wall.hp / game.wall.maxHp : 0;
   const barPad = Math.max(16, Math.min(40, w * 0.09));
+  const barY = DEFEAT_Y + 36;
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(left + barPad, DEFEAT_Y + 10, w - barPad * 2, 6);
+  ctx.fillRect(left + barPad, barY, w - barPad * 2, 6);
   ctx.fillStyle = ratio > 0.35 ? '#8ec8ff' : '#ff8866';
-  ctx.fillRect(left + barPad, DEFEAT_Y + 10, (w - barPad * 2) * ratio, 6);
+  ctx.fillRect(left + barPad, barY, (w - barPad * 2) * ratio, 6);
   ctx.fillStyle = '#dce8f4';
   ctx.font = "11px 'Malgun Gothic', sans-serif";
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillText(`방어벽 ${game.wall.hp} / ${game.wall.maxHp}`, (left + right) / 2, DEFEAT_Y + 18);
+  ctx.fillText(`방어벽 ${game.wall.hp} / ${game.wall.maxHp}`, (left + right) / 2, barY + 8);
   ctx.restore();
 }
 
@@ -450,6 +510,67 @@ function drawEnemies(ctx, game) {
   }
 }
 
+/** Remaining mission + remaining boss pips under a living T10 hero. HP/grade stay above. */
+function drawHeroFootHud(ctx, u, x, y, drawR) {
+  const quota = u.targetDamage || HERO_MISSION_DAMAGE;
+  const remainingDmg = Math.max(0, quota - (u.missionDamage || 0));
+  const remainRatio = quota > 0 ? remainingDmg / quota : 0;
+  const gw = Math.max(36, drawR * 2.2);
+  const gh = 5;
+  const gx = x - gw / 2;
+  const gy = y + drawR + 8;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(gx, gy, gw, gh);
+  ctx.fillStyle = remainRatio > 0.22 ? '#FFD700' : '#ff8866';
+  ctx.fillRect(gx, gy, gw * remainRatio, gh);
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.7)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(gx, gy, gw, gh);
+
+  if (gw >= 36) {
+    const label = remainingDmg >= 1000
+      ? `${Math.ceil(remainingDmg / 1000)}k`
+      : String(Math.ceil(remainingDmg));
+    ctx.font = "bold 9px 'Malgun Gothic', sans-serif";
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = 'rgba(26, 20, 12, 0.85)';
+    ctx.fillStyle = '#fff3c0';
+    ctx.strokeText(label, gx + gw + 3, gy + gh / 2);
+    ctx.fillText(label, gx + gw + 3, gy + gh / 2);
+  }
+
+  const remainingBoss = Math.max(0, HERO_BOSS_LIMIT - (u.bossKills || 0));
+  const pipR = 3.2;
+  const pipGap = 10;
+  const pipY = gy + gh + 8;
+  const pipX0 = x - ((HERO_BOSS_LIMIT - 1) * pipGap) / 2;
+  for (let i = 0; i < HERO_BOSS_LIMIT; i++) {
+    const px = pipX0 + i * pipGap;
+    const unfilled = i < remainingBoss;
+    ctx.beginPath();
+    ctx.arc(px, pipY, pipR, 0, Math.PI * 2);
+    if (unfilled) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.strokeStyle = 'rgba(255, 215, 80, 0.95)';
+      ctx.lineWidth = 1.6;
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = 'rgba(72, 62, 44, 0.9)';
+      ctx.strokeStyle = 'rgba(36, 28, 18, 0.95)';
+      ctx.lineWidth = 1;
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 function drawFriendlies(ctx, game) {
   const t = performance.now() / 1000;
   for (const u of game.units) {
@@ -482,45 +603,14 @@ function drawFriendlies(ctx, game) {
         ctx, x, y, drawR,
         flash ? '#ffffff' : u.color,
         'rgba(0,0,0,0.45)',
-        u.heroType ? HEROES[u.heroType].name : String(u.tier),
+        u.heroType ? UNITS[9].name : String(u.tier),
         u.tier === 7 ? '#5c4500' : '#fff',
       );
-      ctx.restore();
-    } else if (u.heroType) {
-      ctx.save();
-      ctx.fillStyle = '#FFD700';
-      ctx.font = `bold ${Math.max(9, drawR * 0.38)}px 'Malgun Gothic', sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.strokeStyle = 'rgba(0,0,0,0.65)';
-      ctx.lineWidth = 3;
-      ctx.strokeText(HEROES[u.heroType].name, x, y + drawR * 0.15);
-      ctx.fillText(HEROES[u.heroType].name, x, y + drawR * 0.15);
       ctx.restore();
     }
     drawHpBar(ctx, x, y - drawR - 16, drawR * 2, u.hp / u.maxHp, '#2ecc71');
     drawGradeBadge(ctx, x, y - drawR - 4, String(u.tier), drawR);
-    if (u.heroType) {
-      const quota = u.targetDamage || HERO_MISSION_DAMAGE;
-      const p = quota > 0 ? Math.min(1, (u.missionDamage || 0) / quota) : 0;
-      const gw = drawR * 2.2;
-      const gx = x - gw / 2;
-      const gy = y - drawR - 28;
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(gx, gy, gw, 5);
-      ctx.fillStyle = '#FFD700';
-      ctx.fillRect(gx, gy, gw * p, 5);
-      ctx.strokeStyle = 'rgba(255, 215, 0, 0.65)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(gx, gy, gw, 5);
-      ctx.fillStyle = 'rgba(255, 230, 140, 0.9)';
-      ctx.font = "9px 'Malgun Gothic', sans-serif";
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('사명', x, gy - 1);
-      ctx.restore();
-    }
+    if (u.heroType) drawHeroFootHud(ctx, u, x, y, drawR);
   }
 
   for (const h of game.units) {
@@ -618,10 +708,152 @@ function drawEvoBar(ctx, game) {
   ctx.restore();
 }
 
+/** Cached source rect: skip empty/uniform margins on the camp PNG. */
+let _campSrc = null;
+let _campSrcKey = null;
+
+function campContentSource(camp) {
+  const iw = Math.max(1, camp.width || CANVAS_W);
+  const ih = Math.max(1, camp.height || CAMP_DRAW_H);
+  const key = `${iw}x${ih}`;
+  if (_campSrc && _campSrcKey === key) return _campSrc;
+  let sx = 0;
+  let sy = 0;
+  let ex = iw;
+  let ey = ih;
+  try {
+    const probe = document.createElement('canvas');
+    probe.width = iw;
+    probe.height = ih;
+    const pctx = probe.getContext('2d', { willReadFrequently: true });
+    pctx.drawImage(camp, 0, 0);
+    const { data } = pctx.getImageData(0, 0, iw, ih);
+    const er = data[0];
+    const eg = data[1];
+    const eb = data[2];
+    const rowThresh = iw * 0.08;
+    const colThresh = ih * 0.08;
+    const colorful = (i) =>
+      Math.abs(data[i] - er) + Math.abs(data[i + 1] - eg) + Math.abs(data[i + 2] - eb) > 48;
+    const rowHits = (y) => {
+      let hits = 0;
+      const row = y * iw * 4;
+      for (let x = 0; x < iw; x++) {
+        if (colorful(row + x * 4)) {
+          hits++;
+          if (hits > rowThresh) return true;
+        }
+      }
+      return false;
+    };
+    const colHits = (x) => {
+      let hits = 0;
+      for (let y = 0; y < ih; y++) {
+        if (colorful((y * iw + x) * 4)) {
+          hits++;
+          if (hits > colThresh) return true;
+        }
+      }
+      return false;
+    };
+    for (let y = 0; y < ih; y++) {
+      if (rowHits(y)) { sy = y; break; }
+    }
+    ey = sy + 1;
+    for (let y = ih - 1; y > sy; y--) {
+      if (rowHits(y)) { ey = y + 1; break; }
+    }
+    for (let x = 0; x < iw; x++) {
+      if (colHits(x)) { sx = x; break; }
+    }
+    ex = sx + 1;
+    for (let x = iw - 1; x > sx; x--) {
+      if (colHits(x)) { ex = x + 1; break; }
+    }
+  } catch {
+    sx = 0;
+    sy = 0;
+    ex = iw;
+    ey = ih;
+  }
+  if (sy > ih * 0.7) sy = 0;
+  _campSrcKey = key;
+  _campSrc = { sx, sy, sw: Math.max(1, ex - sx), sh: Math.max(1, ey - sy) };
+  return _campSrc;
+}
+
+function drawCampEdgeFill(ctx, camp, srcX, srcW, sy, sh, x0, x1, destY, destH, flip) {
+  if (x1 <= x0 || srcW <= 0) return;
+  const scale = destH / sh;
+  const tileW = Math.max(8, srcW * scale);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  if (flip) {
+    let x = x1;
+    while (x > x0) {
+      const dw = Math.min(tileW, x - x0);
+      const take = (dw / tileW) * srcW;
+      ctx.save();
+      ctx.translate(x, destY);
+      ctx.scale(-1, 1);
+      ctx.drawImage(camp, srcX + srcW - take, sy, take, sh, 0, 0, dw, destH);
+      ctx.restore();
+      x -= dw;
+    }
+  } else {
+    let x = x0;
+    while (x < x1) {
+      const dw = Math.min(tileW, x1 - x);
+      const take = (dw / tileW) * srcW;
+      ctx.drawImage(camp, srcX, sy, take, sh, x, destY, dw, destH);
+      x += dw;
+    }
+  }
+  ctx.restore();
+}
+
+/** Center tents at native aspect; tile camp edges so 5/7-col boards are not empty. No fade. */
+function drawEnemyCamp(ctx, left, right) {
+  const destY = CAMP_DEST_Y;
+  const destH = CAMP_DRAW_H;
+  const innerW = Math.max(1, right - left);
+  const camp = assets.get('camp_top');
+  if (!camp) {
+    ctx.fillStyle = '#4a3a28';
+    ctx.fillRect(left, destY, innerW, destH);
+    return;
+  }
+  const { sx, sy, sw, sh } = campContentSource(camp);
+  const scale = destH / sh;
+  const edgeSrc = Math.max(10, Math.round(sw * 0.2));
+  const midSrc = Math.max(1, sw - edgeSrc * 2);
+  const midDw = midSrc * scale;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  if (midDw >= innerW) {
+    const extra = ((midDw - innerW) / scale);
+    ctx.drawImage(camp, sx + edgeSrc + extra / 2, sy, midSrc - extra, sh, left, destY, innerW, destH);
+  } else {
+    const midX = left + (innerW - midDw) / 2;
+    drawCampEdgeFill(ctx, camp, sx, edgeSrc, sy, sh, left, midX, destY, destH, false);
+    ctx.drawImage(camp, sx + edgeSrc, sy, midSrc, sh, midX, destY, midDw, destH);
+    drawCampEdgeFill(ctx, camp, sx + sw - edgeSrc, edgeSrc, sy, sh, midX + midDw, right, destY, destH, true);
+  }
+  ctx.restore();
+}
+
 function drawCampSmoke(ctx, left, right) {
   const t = performance.now() / 1000;
+  const mid = (left + right) / 2;
+  const span = Math.max(48, (right - left) * 0.28);
+  const baseY = CAMP_DEST_Y + 52;
+  const spots = [
+    [mid - span, baseY, 0],
+    [mid, baseY - 12, 1.2],
+    [mid + span, baseY + 4, 2.1],
+  ];
   ctx.save();
-  for (const [bx, by, phase] of [[70, 22, 0], [210, 14, 1.2], [340, 20, 2.1]]) {
+  for (const [bx, by, phase] of spots) {
     if (bx < left - 10 || bx > right + 10) continue;
     const yy = by - (t * 8 + phase * 3) % 16;
     ctx.globalAlpha = 0.16;
@@ -662,13 +894,10 @@ class Renderer {
     // PNG 필드에 흙길이 이미 들어 있음. 프로시저럴 폴백만 고정 위치로 덧그림 (인셋에 따라 늘리지 않음).
     if (!assets.fromPng('bg_field')) drawDirtPath(ctx);
 
-    const camp = assets.get('camp_top');
-    if (camp) ctx.drawImage(camp, 0, 0, CANVAS_W, 90);
-    drawCampSmoke(ctx, innerL, innerR);
-
-    drawCastleWall(ctx);
     drawSideForest(ctx, innerL, innerR);
     drawForestFieldSeam(ctx, innerL, innerR);
+
+    if (game.wall) drawCastleWall(ctx);
 
     ctx.save();
     ctx.beginPath();
@@ -677,6 +906,10 @@ class Renderer {
 
     ctx.fillStyle = 'rgba(140, 30, 40, 0.10)';
     ctx.fillRect(innerL, 0, innerW, game.lineY);
+
+    drawEnemyCamp(ctx, innerL, innerR);
+    drawCampSmoke(ctx, innerL, innerR);
+    drawCampFieldSeam(ctx, innerL, innerR);
 
     drawWaveLine(ctx, game, innerL, innerR);
     drawDefeatLine(ctx, innerL, innerR);
