@@ -1,0 +1,147 @@
+Gemini Nano Banana용 — 배경 / 궁수 / 화살 (게임 레이아웃 맞춤)
+KnightSlide (MD) — 중세 슬라이드 & 머지 디펜스
+
+이 파일만 배경·궁수·화살에 쓴다. 유닛(ally_t01~t10, enemy_*)은 NANOBANANA_PROMPTS.txt.
+
+사용 방법:
+1. 한 번에 프롬프트 하나만 붙여넣기. (여러 개를 한꺼번에 넣지 말 것)
+2. 각 블록의 PROMPT: 아래 영어 문단만 복사해서 Nano Banana에 붙여넣는다.
+3. 결과 파일명을 아래 FILE 이름으로 저장한다.
+
+게임은 위에서 내려다보는 세로 전장이다. 지평선 RPG 길/성문에서 밖을 보는 구도 금지.
+유저가 만든 4장은 스타일(픽셀, 검은 외곽선, 흙길)은 참고하되 카메라가 틀림.
+
+유저가 준 이미지의 문제:
+1. bg_field: 땅에서 지평선을 보는 1점 투시 흙길. 하늘이 위를 차지함. 탑다운 전장이 아님.
+2. bg_wall: 성벽 위에서 밖을 내다보는 구도. 벽이 화면 아래가 아니라 ‘내가 서 있는 곳’이 됨.
+3. bg_forest: 숲길을 걸어 들어가는 아이레벨. 좌우 마진용 세로 나무 패널이 아님.
+4. bg_camp: 길이 멀어지며 줄어드는 캠프. 전장 최상단 가로 스트립이 아님.
+5. 공통: 픽셀·검은 외곽선·흙길 팔레트는 유지하되, 카메라를 위에서 땅을 내려다보게 바꿔야 함.
+
+레이아웃 (캔버스 450×800, Y는 아래로 증가):
+  Y 0–90    적 캠프 (bg_camp 오버레이). 필드 맨 위는 어두운 빈 잔디만.
+  Y 90–660  들판·중앙 흙길. 적은 위에서 아래로, 아군은 아래에서 위로.
+  Y 660     마지노선. 바로 위는 빈 잔디(유닛이 설 자리).
+  Y 660–800 우리 쪽 석벽 (bg_wall). 화면 맨 아래.
+  boardWidth 3/5/7: 중앙만 플레이. 양옆은 숲(bg_forest)이 잘려 나감. 3칸일 때 좌우 약 100px 숲.
+
+총 개수: 6 (배경 4 + 궁수 1 + 화살 1). fx_arrow_impact 없음.
+
+스타일 고정 (모든 배경): 16-bit pixel art, thick black outlines, muted olive / forest green / tan / brown / grey. Same earthy palette as the user's gens, but CORRECT camera. No people on any background.
+
+-----------------------------------------
+FILE: bg_field.png
+용도: 세로 전장 전체 바닥. 적 캠프는 맨 위 빈 자리에 따로 올림. 유닛 없음.
+크기: 450x800 opaque PNG
+PROMPT:
+STRICT OUTPUT: exactly ONE image, ONE top-down battlefield map, 450x800 portrait, opaque, filling the whole frame. Finished vertical mobile-game playfield. Not a painting of a journey. Not a window looking at the horizon.
+
+THIS IS A TOP-DOWN ORTHOGRAPHIC GAME BOARD (slight 3/4 from ABOVE). Camera looks DOWN at the GROUND, like a tower-defense map or 16-bit SNES overworld tile, NOT like walking on a road. You see dirt and grass as a flat plan. Path width stays nearly CONSTANT from bottom to top (no vanishing point). Trees/bushes are seen from above (canopy blobs + slight 3/4). The stone wall is at the BOTTOM EDGE of the image, seen from above/slight 3/4, as the player's castle in a vertical shooter.
+
+GAME LAYOUT (Y increases downward, canvas 450 wide x 800 tall):
+- TOP ~90 pixels (Y 0-90): darker empty grass only. Reserved for a camp overlay later. NO tents, NO palisade, NO sky, NO hills, NO horizon.
+- MIDDLE (Y 90-660): playable field. A brown dirt path of EVEN WIDTH runs VERTICALLY up the CENTER toward the TOP of the image (enemies come FROM the top). Olive/forest-green grass and low shrubs LEFT and RIGHT of the path. Small rocks, moss patches, hatched grass texture. Maginot / empty grass strip just ABOVE the wall (around Y 640-660) — keep that band clear, no props.
+- BOTTOM ~140-160 pixels (Y 660-800): OUR stone castle battlements spanning the full 450px width. Crenellations, grey masonry, wooden gate in the center, wall-walk seen from above. This wall is the BOTTOM of a vertical mobile game, not a viewpoint you stand on.
+
+FORBIDDEN CAMERA (the user's 4 gens did this — DO NOT REPEAT):
+- one-point perspective road tapering to a vanishing point
+- ground-level or eye-level view standing ON the path
+- looking OUT from a gate / from atop a wall toward the horizon
+- sky occupying the top of the image, pale sky band, clouds, sun
+- distant rolling hills / mountains as a horizon line
+- RPG walking-route illustration
+- isometric JRPG town
+- people, soldiers, archers, units, animals, chibi characters, character sheets
+
+STYLE: 16-bit pixel art, thick consistent black pixel outlines on grass clumps, path, rocks, and stones. Muted earthy palette: olive, forest green, tan, dusty brown, grey masonry. Stippled grass, uneven dirt with moss patches. Same look as classic 16-bit RPG tiles, but FLAT TOP-DOWN layout. NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor chunky pixels.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO UNITS, NO PEOPLE.
+
+-----------------------------------------
+FILE: bg_wall.png
+용도: 화면 맨 아래 우리 성벽 스트립. 궁수/병사 없음. 필드 위에 겹침.
+크기: 450x160 opaque PNG strip
+PROMPT:
+STRICT OUTPUT: exactly ONE image, ONE architectural strip, 450 pixels wide by 160 pixels tall, landscape/wide rectangle, opaque. A single empty castle-wall tile for the BOTTOM of a vertical mobile game. Not a full landscape. Not a view from the ramparts.
+
+CAMERA: from ABOVE looking DOWN at the wall (slight 3/4 from above). The wall fills this short wide strip. You see the stone walkway, crenellations (merlons/embrasures) along the NORTH edge (toward the top of this strip = toward the battlefield), grey brick masonry, a centered wooden double gate with iron hinges. The camera is NOT standing on the wall looking outward. There is NO horizon, NO sky, NO distant forest, NO receding road, NO field occupying most of the frame.
+
+CONTENT: 16-bit pixel art stone battlements, thick black outlines, weathered grey bricks, cracks, wooden gate planks, empty wall-walk. Muted grey/brown palette matching a 16-bit castle tileset.
+
+FORBIDDEN: people, archers, soldiers, faces, bows, banners with figures, animals, character sheets, one-point perspective, looking out from a gate, eye-level fortification view, tall portrait 450x800 landscape, sky, hills, vanishing-point road, isometric JRPG town.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO UNITS, NO PEOPLE. NO ARCHERS. NO SOLDIERS.
+
+STYLE: 16-bit pixel art, thick black outlines, chunky pixels, NO anti-aliasing, NO blur, NO photorealism, NO 3D render.
+
+-----------------------------------------
+FILE: bg_camp.png
+용도: 세로 전장 최상단 적 캠프 스트립. 이 아래(화면 아래쪽)에서 적이 스폰됨.
+크기: 450x120 opaque PNG strip
+PROMPT:
+STRICT OUTPUT: exactly ONE image, ONE camp strip, 450 pixels wide by 120 pixels tall, wide rectangle, opaque. A top-of-battlefield overlay, not a scene along a road.
+
+CAMERA: TOP-DOWN orthographic (slight 3/4 from ABOVE) looking DOWN at a monster palisade camp. This strip is the TOP EDGE of a vertical 450x800 mobile battlefield. Enemies would spawn BELOW this strip (toward the bottom of the game screen). Camp structures sit in a horizontal band across 450px. NOT a camp flanking a receding road. NOT isometric JRPG town. NOT one-point perspective toward hills.
+
+CONTENT: crude monster palisade / spiked wooden stakes along the BOTTOM edge of this strip (the edge that faces the battlefield). Behind the palisade (toward the TOP of this strip): ragged goblin/orc tents, smoke wisps from campfires, crates, tattered banners, dark grass. Empty-ish ground just inside the palisade so sprites can overlay. 16-bit pixel art, thick black outlines, muted olive/brown/grey, same palette as a dirt-path medieval field.
+
+FORBIDDEN: people, orcs drawn as characters, goblins, soldiers, faces, chibi units, character sheets, vanishing-point road, horizon sky, rolling hills occupying the frame, ground-level walk into camp, looking out from a gate, tall 450x800 portrait of a path.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO CREATURES, NO PEOPLE.
+
+STYLE: 16-bit pixel art, thick black outlines, chunky pixels, NO anti-aliasing, NO blur, NO photorealism, NO 3D render.
+
+-----------------------------------------
+FILE: bg_forest.png
+용도: 보드 3칸일 때 좌우 마진 숲. 좌우 미러로 씀. 숲길 아님.
+크기: 120x800 opaque PNG (tall narrow panel)
+PROMPT:
+STRICT OUTPUT: exactly ONE image, ONE forest panel, 120 pixels wide by 800 pixels tall, a tall NARROW vertical column, opaque. Side margin of a vertical mobile game, meant to be placed on the LEFT (and mirrored on the RIGHT). Not a path through woods. Not a square landscape.
+
+CAMERA: TOP-DOWN / slight 3/4 from ABOVE looking DOWN at a dense pine forest strip. You see a vertical stack of tree canopies and trunks packed into a 120px-wide column. Trees read as seen from above (round/oval pine crowns, some trunk sides). The panel is ALL forest from top to bottom. NO dirt road, NO path walking into the woods, NO vanishing point, NO sky band, NO horizon, NO clearing in the center.
+
+CONTENT: dense pines and dark forest green, thick black outlines, moss, a few rocks, maybe a fallen log parallel to the long axis. Muted olive/forest green/brown/grey 16-bit pixel art. Same earthy palette as the field dirt-path tiles. Readable as "unlogged woods" beside a playable strip.
+
+FORBIDDEN: ground-level forest walk, one-point perspective trail, eye-level trees towering over a path, people, animals, units, character sheets, isometric town, looking out from a gate, 450x800 full battlefield, pale sky at the top.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO PEOPLE.
+
+STYLE: 16-bit pixel art, thick black outlines, chunky pixels, NO anti-aliasing, NO blur, NO photorealism, NO 3D render.
+
+-----------------------------------------
+FILE: ally_archer.png
+용도: 석벽 위 아군 궁수. 화면 위쪽 적을 향해 쏨. 한 명만.
+크기: 128x128 pixel art, magenta #FF00FF or transparent
+PROMPT:
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one archer filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body, people crowd, isometric town, horizon landscape.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
+
+CAMERA: strictly FROM BEHIND. Rear view only. Standing on a castle wall shooting UP the screen toward enemies at the TOP of the battlefield. Back of head, back of cloak/tunic. Bow drawn, arrow pointing UP (toward the top of the sprite). Never face, never three-quarter, never side profile.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel. If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky. No wall tiles in the sprite (wall is a separate background).
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: one medieval wall archer SD chibi, forest-green tunic and brown leather, simple hood or cap seen from behind, wooden bow, arrow nocked pointing UP, muted olive/brown matching the 16-bit field palette.
+
+-----------------------------------------
+FILE: fx_arrow.png
+용도: 궁수 화살 이펙트. 화면 위(적 쪽)로 비행.
+크기: 64x64 pixel art, magenta #FF00FF or transparent
+PROMPT:
+STRICT OUTPUT: exactly ONE arrow sprite, ONE object, 64x64. A single projectile filling most of the frame. Not a character. Not a sheet of variants.
+
+FORBIDDEN: character, person, archer, character sheet, multiple arrows in a row, collage, white background, photorealism, 3D render, bow (arrow only).
+
+STYLE: 16-bit pixel art, thick black outline, chunky pixels, wooden shaft, feather fletching, metal arrowhead. Limited palette: tan wood, grey/steel tip, cream/brown fletching. NO anti-aliasing, NO blur.
+
+ORIENTATION: the arrow points UP toward the TOP of the image (flies toward the top of a vertical mobile screen). Vertical projectile, tip at the top, fletching at the bottom.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-arrow pixel. No ground, no sky, no drop shadow.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO CHARACTERS.
