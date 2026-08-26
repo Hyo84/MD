@@ -26,6 +26,11 @@ export function colorAlpha(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
+/** Visual radius for sprites / HP bars / grade badges. Physics still uses UNITS.r. */
+function unitDrawR(stat) {
+  return stat.drawR ?? stat.r;
+}
+
 /** Uniform scale that fits img inside a maxW×maxH box (no stretch to square). */
 function fitSpriteSize(img, maxW, maxH) {
   const iw = Math.max(1, img.width || maxW);
@@ -449,18 +454,19 @@ function drawFriendlies(ctx, game) {
   const t = performance.now() / 1000;
   for (const u of game.units) {
     const { x, y } = u.body.position;
+    const drawR = unitDrawR(game._unitStat(u));
     const spr = assets.unit(u.tier);
-    const dim = u.r * 2.4;
+    const dim = drawR * 2.4;
     const flash = u.flashT > 0;
     const stretching = !u.settled;
-    if (stretching) drawMotionStreaks(ctx, x, y, u.r, u.color);
+    if (stretching) drawMotionStreaks(ctx, x, y, drawR, u.color);
     if (u.tier === 10) {
       ctx.save();
       ctx.shadowColor = '#FFD700';
       ctx.shadowBlur = 18;
-      fillAura(ctx, x, y, u.r);
+      fillAura(ctx, x, y, drawR);
       ctx.restore();
-      drawT10Particles(ctx, x, y, u.r, t);
+      drawT10Particles(ctx, x, y, drawR, t);
     }
     const ok = drawSprite(ctx, spr, x, y, dim, dim, {
       flash,
@@ -473,7 +479,7 @@ function drawFriendlies(ctx, game) {
         ctx.shadowBlur = 16;
       }
       fallbackCircle(
-        ctx, x, y, u.r,
+        ctx, x, y, drawR,
         flash ? '#ffffff' : u.color,
         'rgba(0,0,0,0.45)',
         u.heroType ? HEROES[u.heroType].name : String(u.tier),
@@ -483,23 +489,23 @@ function drawFriendlies(ctx, game) {
     } else if (u.heroType) {
       ctx.save();
       ctx.fillStyle = '#FFD700';
-      ctx.font = `bold ${Math.max(9, u.r * 0.38)}px 'Malgun Gothic', sans-serif`;
+      ctx.font = `bold ${Math.max(9, drawR * 0.38)}px 'Malgun Gothic', sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.strokeStyle = 'rgba(0,0,0,0.65)';
       ctx.lineWidth = 3;
-      ctx.strokeText(HEROES[u.heroType].name, x, y + u.r * 0.15);
-      ctx.fillText(HEROES[u.heroType].name, x, y + u.r * 0.15);
+      ctx.strokeText(HEROES[u.heroType].name, x, y + drawR * 0.15);
+      ctx.fillText(HEROES[u.heroType].name, x, y + drawR * 0.15);
       ctx.restore();
     }
-    drawHpBar(ctx, x, y - u.r - 16, u.r * 2, u.hp / u.maxHp, '#2ecc71');
-    drawGradeBadge(ctx, x, y - u.r - 4, String(u.tier), u.r);
+    drawHpBar(ctx, x, y - drawR - 16, drawR * 2, u.hp / u.maxHp, '#2ecc71');
+    drawGradeBadge(ctx, x, y - drawR - 4, String(u.tier), drawR);
     if (u.heroType) {
       const quota = u.targetDamage || HERO_MISSION_DAMAGE;
       const p = quota > 0 ? Math.min(1, (u.missionDamage || 0) / quota) : 0;
-      const gw = u.r * 2.2;
+      const gw = drawR * 2.2;
       const gx = x - gw / 2;
-      const gy = y - u.r - 28;
+      const gy = y - drawR - 28;
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(gx, gy, gw, 5);
@@ -543,21 +549,22 @@ function fillAura(ctx, x, y, r) {
 function drawLauncher(ctx, game, innerR) {
   if (game.state !== 'playing') return;
   const stat = UNITS[game.currentTier - 1];
+  const drawR = unitDrawR(stat);
   const ready = game.launchCd <= 0;
   const maxCd = Math.max(0.001, game._launchCooldown());
   const spr = assets.unit(game.currentTier);
   ctx.save();
   ctx.globalAlpha = ready ? 1 : 0.38;
-  if (!drawSprite(ctx, spr, game.aimX, LAUNCHER_Y, stat.r * 2.4, stat.r * 2.4)) {
-    fallbackCircle(ctx, game.aimX, LAUNCHER_Y, stat.r, stat.color, 'rgba(255,255,255,0.5)', String(game.currentTier));
+  if (!drawSprite(ctx, spr, game.aimX, LAUNCHER_Y, drawR * 2.4, drawR * 2.4)) {
+    fallbackCircle(ctx, game.aimX, LAUNCHER_Y, drawR, stat.color, 'rgba(255,255,255,0.5)', String(game.currentTier));
   }
-  drawGradeBadge(ctx, game.aimX, LAUNCHER_Y - stat.r - 4, String(game.currentTier), stat.r);
+  drawGradeBadge(ctx, game.aimX, LAUNCHER_Y - drawR - 4, String(game.currentTier), drawR);
   ctx.restore();
 
   const barW = 44;
   const barH = 5;
   const bx = game.aimX - barW / 2;
-  const by = LAUNCHER_Y + stat.r + 8;
+  const by = LAUNCHER_Y + drawR + 8;
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.fillRect(bx, by, barW, barH);
