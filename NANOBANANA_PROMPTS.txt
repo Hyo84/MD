@@ -7,12 +7,14 @@ KnightSlide (MD) — 중세 슬라이드 & 머지 디펜스
 3. 결과 파일명을 아래 FILE 이름으로 저장한다. (예: ally_t01.png)
 4. 유닛(15장)은 128x128. 배경이 투명이면 그대로 쓰고, 아니면 순수 마젠타 #FF00FF 로 받아서 나중에 키아웃한다.
 5. 아군은 뒤에서 본 뒷모습만 (카메라에서 멀어지며 위로 진군). 적은 카메라를 보는 정면만.
-6. 배경(4장)은 불투명 450x800 PNG. 유닛/인물 없음. 한 장의 장면이지 콜라주가 아님.
+6. 유닛 비율은 아군·적 전부 3등신 SD 치비로 통일 (큰 머리, 작은 몸, 짧은 팔다리). 리얼 해부학/6~8등신 금지. 보스는 캔버스에서만 더 크게, 비율은 그대로 3등신.
+7. 배경(4장)은 불투명 450x800 PNG. 유닛/인물/치비 없음. 한 장의 장면이지 콜라주가 아님.
 
 나노바나나가 자주 무시하는 것:
 - 한 이미지에 여러 캐릭터/변형을 그림
 - 1024 컨셉 시트가 됨
 - 흰 배경 (투명 대신)
+- 리얼 해부학·키 큰 6~8등신으로 그림 (반드시 3등신 SD)
 해결: 아래 금지 문구를 모든 PROMPT에 포함. 투명 안 되면 배경을 순수 마젠타 #FF00FF 로 달라고 하고 우리가 나중에 키아웃.
 
 총 개수: 유닛 15 + 배경 4 = 19
@@ -28,9 +30,11 @@ FILE: ally_t01.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one peasant filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three peasants, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three peasants, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of head, back of tunic. Never face, never three-quarter, never side profile.
 
@@ -38,7 +42,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: cheap medieval militia peasant, tan wheat-colored ragged tunic matching #D2B48C, patched brown trousers, wrapped cloth gaiters, no metal armor, no helmet, short messy brown hair seen from behind, wooden pitchfork or crude wooden spear on the back/shoulder, small cloth sack, skinny poor farmer-soldier, readable chunky pixels.
+Character: cheap medieval militia peasant, tan wheat-colored ragged tunic matching #D2B48C, patched brown trousers, wrapped cloth gaiters, no metal armor, no helmet, short messy brown hair seen from behind, wooden pitchfork or crude wooden spear on the back/shoulder, small cloth sack, skinny poor farmer-soldier SD chibi, readable chunky pixels.
 
 -----------------------------------------
 FILE: ally_t02.png
@@ -47,9 +51,11 @@ FILE: ally_t02.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one recruit filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of helmet, back of padded armor. Never face, never three-quarter, never side profile.
 
@@ -57,7 +63,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: medieval army recruit, dull tan padded jack matching #C2A679, simple round iron cap helmet seen from behind, wooden round shield strapped on the back, short spear, leather belt, slightly sturdier than a peasant, no fancy cape.
+Character: medieval army recruit SD chibi, dull tan padded jack matching #C2A679, simple round iron cap helmet seen from behind, wooden round shield strapped on the back, short spear, leather belt, slightly sturdier than a peasant, no fancy cape.
 
 -----------------------------------------
 FILE: ally_t03.png
@@ -66,9 +72,11 @@ FILE: ally_t03.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one light infantryman filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of bronze helmet, back of leather cuirass. Never face, never three-quarter, never side profile.
 
@@ -76,7 +84,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: medieval light infantry, bronze-brown leather armor matching #CD7F32, bronze nasal helmet seen from behind, short sword at the hip, small buckler on the back, leather bracers, more professional soldier than a recruit.
+Character: medieval light infantry SD chibi, bronze-brown leather armor matching #CD7F32, bronze nasal helmet seen from behind, short sword at the hip, small buckler on the back, leather bracers, more professional soldier than a recruit.
 
 -----------------------------------------
 FILE: ally_t04.png
@@ -85,9 +93,11 @@ FILE: ally_t04.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one heavy infantryman filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of kettle helm, back of chainmail, kite shield on the back. Never face, never three-quarter, never side profile.
 
@@ -95,7 +105,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: medieval heavy infantry, slate-gray chainmail hauberk matching #708090, kettle hat helmet seen from behind, large kite shield strapped on the back, spear, mail coif, bulky armored silhouette clearly heavier than light infantry.
+Character: medieval heavy infantry SD chibi, slate-gray chainmail hauberk matching #708090, kettle hat helmet seen from behind, large kite shield strapped on the back, spear, mail coif, bulky armored silhouette clearly heavier than light infantry, still 3-heads-tall.
 
 -----------------------------------------
 FILE: ally_t05.png
@@ -104,9 +114,11 @@ FILE: ally_t05.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one knight filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of visored helm, back of plate and tabard. Never face, never three-quarter, never side profile.
 
@@ -114,7 +126,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: medieval knight, steel-blue plate armor matching #4682B4, blue tabard with a simple cross on the back, visored bascinet helmet seen from behind, heater shield on the back, longsword, knightly capelet, clean noble military silhouette.
+Character: medieval knight SD chibi, steel-blue plate armor matching #4682B4, blue tabard with a simple cross on the back, visored bascinet helmet seen from behind, heater shield on the back, longsword, knightly capelet, clean noble military silhouette.
 
 -----------------------------------------
 FILE: ally_t06.png
@@ -123,9 +135,11 @@ FILE: ally_t06.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one guard captain filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of crested helm, flowing cape, ornate plate. Never face, never three-quarter, never side profile.
 
@@ -133,7 +147,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: medieval captain of the royal guard, royal-blue ornate plate matching #4169E1, gold trim, long blue officer cape seen from behind, helmet with a tall plume/crest, decorated pauldrons, command baton or fine sword, taller more impressive silhouette than a regular knight.
+Character: medieval captain of the royal guard SD chibi, royal-blue ornate plate matching #4169E1, gold trim, long blue officer cape seen from behind, helmet with a tall plume/crest, decorated pauldrons, command baton or fine sword, chunkier more impressive silhouette than a regular knight, still 3-heads-tall not taller anatomy.
 
 -----------------------------------------
 FILE: ally_t07.png
@@ -142,9 +156,11 @@ FILE: ally_t07.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one paladin filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of great helm with a cross, white-gold cape. Never face, never three-quarter, never side profile.
 
@@ -152,7 +168,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: medieval paladin, white and gold holy plate armor matching #FFD700 gold, glowing gold cross on the back of the cape, great helm with a cross crest seen from behind, warhammer or holy longsword, saintly radiant trim in hard pixels not blur, sacred knight silhouette.
+Character: medieval paladin SD chibi, white and gold holy plate armor matching #FFD700 gold, glowing gold cross on the back of the cape, great helm with a cross crest seen from behind, warhammer or holy longsword, saintly radiant trim in hard pixels not blur, sacred knight silhouette.
 
 -----------------------------------------
 FILE: ally_t08.png
@@ -161,9 +177,11 @@ FILE: ally_t08.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one dragon guardian filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of horned dragon helm, dragon-scale armor, huge weapon. Never face, never three-quarter, never side profile.
 
@@ -171,7 +189,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: elite dragon guardian, dark crimson dragon-scale plate matching #8B0000, horned dragon helmet seen from behind, spined pauldrons like wings, massive two-handed greatsword on the back, ember-red accents in hard pixels, bulky draconic silhouette clearly larger than a paladin.
+Character: elite dragon guardian SD chibi, dark crimson dragon-scale plate matching #8B0000, horned dragon helmet seen from behind, spined pauldrons like wings, massive two-handed greatsword on the back, ember-red accents in hard pixels, chunkier draconic silhouette than a paladin, still 3-heads-tall not taller anatomy.
 
 -----------------------------------------
 FILE: ally_t09.png
@@ -180,9 +198,11 @@ FILE: ally_t09.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one field marshal filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of ornate marshal helm, imperial cloak. Never face, never three-quarter, never side profile.
 
@@ -190,7 +210,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: legendary marshal, deep indigo and purple ornate armor matching #4B0082, gold embroidery, long imperial cloak with a star or eagle emblem on the back, marshal's crested helm seen from behind, decorated greatsword or marshal baton, commanding oversized silhouette, royal and severe.
+Character: legendary marshal SD chibi, deep indigo and purple ornate armor matching #4B0082, gold embroidery, long imperial cloak with a star or eagle emblem on the back, marshal's crested helm seen from behind, decorated greatsword or marshal baton, commanding chunky SD silhouette, royal and severe, still 3-heads-tall.
 
 -----------------------------------------
 FILE: ally_t10.png
@@ -199,9 +219,11 @@ FILE: ally_t10.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one legendary hero filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of crowned helm, glowing golden cape. Never face, never three-quarter, never side profile.
 
@@ -209,7 +231,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: the ultimate golden hero, shining gold plate armor with orange-red accents matching #FF4500, long fiery golden cape seen from behind, crowned or laurel hero helmet, mythic two-handed sword on the back, largest thickest silhouette of the ally roster, legendary and unmistakable, hard-pixel gold highlights not blur.
+Character: the ultimate golden hero SD chibi, shining gold plate armor with orange-red accents matching #FF4500, long fiery golden cape seen from behind, crowned or laurel hero helmet, mythic two-handed sword on the back, chunkiest SD silhouette of the ally roster, legendary and unmistakable, hard-pixel gold highlights not blur, still 3-heads-tall not taller anatomy.
 
 -----------------------------------------
 FILE: enemy_goblin.png
@@ -218,9 +240,11 @@ FILE: enemy_goblin.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one goblin filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three goblins, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three goblins, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM THE FRONT. Facing the camera, looking at the player. Front view only. Aggressive small-monster pose. Never rear view, never three-quarter, never side profile, never a group.
 
@@ -228,7 +252,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: goblin, small hunched green-skinned creature matching #3CB371, huge pointed ears, yellow eyes, snaggle teeth, crude rusty dagger or club, ragged brown loincloth, skinny arms, mean and cowardly, clearly smaller than an orc.
+Character: goblin SD chibi, small hunched green-skinned creature matching #3CB371, huge pointed ears on an oversized head, yellow eyes, snaggle teeth, crude rusty dagger or club, ragged brown loincloth, skinny stubby arms, mean and cowardly, clearly smaller on canvas than an orc, still 3-heads-tall.
 
 -----------------------------------------
 FILE: enemy_orc.png
@@ -237,9 +261,11 @@ FILE: enemy_orc.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one orc filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three orcs, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three orcs, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM THE FRONT. Facing the camera, looking at the player. Front view only. Aggressive warrior pose. Never rear view, never three-quarter, never side profile, never a group.
 
@@ -247,7 +273,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: orc warrior, bulky olive-green brute matching #6B8E23, tusks, heavy brow, crude iron axe, scraps of leather armor, thick muscular arms, mean grunt, larger and heavier than a goblin, not a warlord.
+Character: orc warrior SD chibi, bulky olive-green brute matching #6B8E23, tusks, heavy brow on an oversized head, crude iron axe, scraps of leather armor, thick stubby muscular arms, mean grunt, chunkier and heavier than a goblin, still 3-heads-tall not a warlord.
 
 -----------------------------------------
 FILE: enemy_skeleton.png
@@ -256,9 +282,11 @@ FILE: enemy_skeleton.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one skeleton filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three skeletons, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three skeletons, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round skull-head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy.
 
 CAMERA: strictly FROM THE FRONT. Facing the camera, looking at the player. Front view only. Undead idle pose. Never rear view, never three-quarter, never side profile, never a group.
 
@@ -266,7 +294,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: skeleton warrior, bleached bone matching #DCDCDC, dark empty eye sockets, rusty notched sword, tattered dark-gray rags, ribcage clearly visible, skull facing camera, thin bony limbs, menacing but lighter than an orc.
+Character: skeleton warrior SD chibi, bleached bone matching #DCDCDC, dark empty eye sockets on a huge skull, rusty notched sword, tattered dark-gray rags, ribcage clearly visible, skull facing camera, thin stubby bony limbs, menacing but lighter than an orc, still 3-heads-tall.
 
 -----------------------------------------
 FILE: enemy_troll.png
@@ -275,9 +303,11 @@ FILE: enemy_troll.png
 PROMPT:
 STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one cave troll filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three trolls, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three trolls, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. NOT realistic anatomy. Chunkier on canvas than orc or skeleton, but same 3-head ratio, not realistic giant anatomy.
 
 CAMERA: strictly FROM THE FRONT. Facing the camera, looking at the player. Front view only. Hulking cave-monster pose. Never rear view, never three-quarter, never side profile, never a group.
 
@@ -285,18 +315,20 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: cave troll, huge hunched giant matching #556B2F mossy dark olive, warty stone-like skin, tiny mean eyes, massive stone club, moss and rock patches on shoulders, long arms, much larger silhouette than orc or skeleton, cave brute not a boss warlord.
+Character: cave troll SD chibi, huge hunched giant matching #556B2F mossy dark olive, warty stone-like skin, tiny mean eyes on an oversized head, massive stone club, moss and rock patches on shoulders, long stubby arms, chunkier silhouette than orc or skeleton, still 3-heads-tall, cave brute not a boss warlord.
 
 -----------------------------------------
 FILE: enemy_boss.png
 용도: 적 보스 오크 워로드 정면
 크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one orc warlord filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one orc warlord filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout. Boss may occupy more of the canvas (chunkier, larger sprite) but MUST keep 3-heads-tall SD proportions, not realistic anatomy.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three bosses, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three bosses, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views, realistic anatomy, 6-heads-tall, 8-heads-tall, fashion-model proportions, anatomically correct adult body.
 
 STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+PROPORTIONS: super-deformed SD chibi, 3 heads tall (the head is about one-third of total height), oversized round head, tiny compact body, short stubby limbs. Big head, small body. Larger and chunkier on the canvas than a normal orc, but SAME 3-head SD ratio. NOT realistic anatomy, NOT a tall realistic warlord.
 
 CAMERA: strictly FROM THE FRONT. Facing the camera, looking at the player. Front view only. Commanding boss pose. Never rear view, never three-quarter, never side profile, never a group.
 
@@ -304,7 +336,7 @@ BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (e
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
-Character: orc warlord boss, massive elite orc matching #B22222 crimson, heavy red-black war plate, horned warlord helmet, huge two-handed battleaxe, tusks, cape of dark fur, widest thickest enemy silhouette, clearly the boss not a normal orc.
+Character: orc warlord boss SD chibi, massive elite orc matching #B22222 crimson, heavy red-black war plate, horned warlord helmet on an oversized head, huge two-handed battleaxe, tusks, cape of dark fur, widest thickest enemy silhouette, clearly the boss not a normal orc, still 3-heads-tall chunky SD not realistic anatomy.
 
 -----------------------------------------
 FILE: bg_field.png
@@ -313,11 +345,11 @@ FILE: bg_field.png
 PROMPT:
 STRICT OUTPUT: exactly ONE image, ONE scene, ONE background. A single 450x800 portrait game backdrop filling the whole frame. Not a layout, not a set of variants.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, animals, UI mockup.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, animals, UI mockup, chibi characters, SD characters.
 
-STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette matching the same pixel-art palette as the chibi sprites, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
 
-NO UNITS. Empty scenery only. Never draw characters.
+NO UNITS. Empty scenery only. Never draw characters. No chibi units, no people.
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
@@ -330,11 +362,11 @@ FILE: bg_camp.png
 PROMPT:
 STRICT OUTPUT: exactly ONE image, ONE scene, ONE background. A single 450x800 portrait game backdrop filling the whole frame. Not a layout, not a set of variants.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, animals, UI mockup.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, animals, UI mockup, chibi characters, SD characters.
 
-STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette matching the same pixel-art palette as the chibi sprites, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
 
-NO UNITS. Empty scenery only. Never draw characters. No faces.
+NO UNITS. Empty scenery only. Never draw characters. No faces. No chibi units, no people.
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
@@ -347,11 +379,11 @@ FILE: bg_wall.png
 PROMPT:
 STRICT OUTPUT: exactly ONE image, ONE scene, ONE background. A single 450x800 portrait game backdrop filling the whole frame. Not a layout, not a set of variants.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, archers, faces, bows, animals, UI mockup.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, archers, faces, bows, animals, UI mockup, chibi characters, SD characters.
 
-STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette matching the same pixel-art palette as the chibi sprites, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
 
-NO UNITS. Empty architecture only. Never draw characters. NO archers on the wall.
+NO UNITS. Empty architecture only. Never draw characters. NO archers on the wall. No chibi units, no people.
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
@@ -364,11 +396,11 @@ FILE: bg_forest.png
 PROMPT:
 STRICT OUTPUT: exactly ONE image, ONE scene, ONE background. A single 450x800 portrait game backdrop filling the whole frame. Not a layout, not a set of variants.
 
-FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, animals, UI mockup.
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, animals, UI mockup, chibi characters, SD characters.
 
-STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette matching the same pixel-art palette as the chibi sprites, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
 
-NO UNITS. Empty scenery only. Never draw characters.
+NO UNITS. Empty scenery only. Never draw characters. No chibi units, no people.
 
 NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
 
