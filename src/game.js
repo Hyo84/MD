@@ -11,7 +11,7 @@ import {
 } from './config.js';
 import { Effects } from './effects.js';
 import { meta } from './meta.js';
-import { renderer } from './renderer.js';
+import { renderer, evoBarMetrics } from './renderer.js';
 import { RANGE_MODE_LABELS } from './hud.js';
 
 const { Engine, World, Bodies, Body, Events } = Matter;
@@ -56,6 +56,8 @@ export class Game {
     this._rangeToggleRect = { x: 0, y: 0, w: 0, h: 0 };
     this._diffMinusRect = { x: 0, y: 0, w: 0, h: 0 };
     this._diffPlusRect = { x: 0, y: 0, w: 0, h: 0 };
+    this._evoBarRect = evoBarMetrics();
+    this.cheatTier = 0; // 0=random, 1–10 sticky launch cheat (restarts keep it)
 
     this._setupInput();
     this.ui.restartBtn.addEventListener('click', () => this.start());
@@ -121,8 +123,8 @@ export class Game {
     this.launchCd = 0;
     this.aimX = CANVAS_W / 2;
     this.dragging = false;
-    this.currentTier = this._rollTier();
-    this.nextTier = this._rollTier();
+    this.currentTier = this.cheatTier || this._rollTier();
+    this.nextTier = this.cheatTier || this._rollTier();
 
     this.effects = new Effects();
     this.wall = null;
@@ -357,6 +359,7 @@ export class Game {
         this.adjustLiveMult(LIVE_MULT_STEP);
         return;
       }
+      if (this._tryEvoCheat(p)) return;
       if (this.skillPanelOpen) return;
       if (this.state !== 'playing') return;
       this.dragging = true;
@@ -371,6 +374,7 @@ export class Game {
         if (this._hitRect(p, this._rangeToggleRect)) return;
         if (this._hitRect(p, this._diffMinusRect)) return;
         if (this._hitRect(p, this._diffPlusRect)) return;
+        if (this._hitRect(p, this._evoBarRect)) return;
       }
       this.aimX = this._clampAimX(p.x);
     });
@@ -434,7 +438,32 @@ export class Game {
     Body.setVelocity(u.body, { x: 0, y: -velFromPxPerSec(BALANCE.launchSpeed, stepMs) });
     this.launchCd = this._launchCooldown();
     this.currentTier = this.nextTier;
-    this.nextTier = this._rollTier();
+    this.nextTier = this.cheatTier || this._rollTier();
+  }
+
+  _playfieldCenterX() {
+    const { left, right } = this._playfieldInner();
+    return (left + right) / 2;
+  }
+
+  /** Sticky T1–T10 cheat. Same slot again clears back to random. Consumes the click (no launch). */
+  _tryEvoCheat(p) {
+    const bar = this._evoBarRect || evoBarMetrics();
+    if (!this._hitRect(p, bar)) return false;
+    const { startX, slot, count } = evoBarMetrics();
+    const i = Math.floor((p.x - startX) / slot);
+    if (i < 0 || i >= count) return true;
+    const tier = i + 1;
+    if (this.cheatTier === tier) {
+      this.cheatTier = 0;
+      this.currentTier = this._rollTier();
+      this.nextTier = this._rollTier();
+    } else {
+      this.cheatTier = tier;
+      this.currentTier = tier;
+      this.nextTier = tier;
+    }
+    return true;
   }
 
   // ---------- 생성 ----------
@@ -507,7 +536,7 @@ export class Game {
   _spawnEnemy(key) {
     const stat = MONSTERS[key];
     const isBoss = !!stat.isBoss;
-    let row = 0, col = -1, x = CANVAS_W / 2;
+    let row = 0, col = -1, x = this._playfieldCenterX();
     if (!isBoss) {
       const spot = this._findSpawnSpot(stat.r);
       if (spot) {
@@ -535,19 +564,17 @@ export class Game {
         }
       }
       this.occupiedSlots.add(`${row}:${col}`);
-    } else {
-      x = this._bossLineX(stat.r);
     }
     // 실효 배율 = 웨이브 곡선 × 실시간 수동 배율 (HP는 스냅샷, ATK/라인속도는 liveMult 즉시 반영)
     const waveMult = waveMultiplier(this.wave);
     const hp = Math.round(stat.hp * effectiveMult(this.wave, this.liveMult));
     const slotY = this.lineY - row * SLOT_ROW_H;
-    // 항상 화면 상단(합류 시작 Y)에서 내려온다. 뒷열이라고 위에서 즉시 착지하지 않음.
+    // 보스는 전열 중앙에 즉시 착지해 라인을 민다. 잡몹은 화면 상단에서 합류.
     const spawnY = ENEMY_SPAWN_Y;
-    const joining = spawnY < slotY - JOIN_ARRIVE_EPS;
+    const joining = isBoss ? false : spawnY < slotY - JOIN_ARRIVE_EPS;
     const m = {
-      key, isBoss, row, col, x,
-      y: joining ? spawnY : slotY,
+      key, isBoss, row, col, x: isBoss ? this._playfieldCenterX() : x,
+      y: isBoss ? this.lineY : (joining ? spawnY : slotY),
       joining,
       hp, maxHp: hp, waveMult,
       attackCd: Math.random() * 0.4,
@@ -555,24 +582,13 @@ export class Game {
     };
     this.enemies.push(m);
 
-    if (isBoss) this._displaceOverlapping(m);
+    if (isBoss) {
+      this._displaceOverlapping(m);
+      this._compactEnemySlots();
+    }
 
     this.effects.burst(m.x, m.y, stat.color, 8, 2.5, 2.5);
     return m;
-  }
-
-  // 보스는 라인(row 0)에 착지. 중앙이 막히면 빈 x, 아니면 밀어내고 중앙 유지.
-  _bossLineX(radius) {
-    const center = CANVAS_W / 2;
-    if (!this._slotOverlapsOthers(center, this.lineY, radius, null, true)) return center;
-    const cols = this.slotCols || BASE_SLOT_COLS;
-    const free = [];
-    for (let col = 0; col < cols; col++) {
-      const x = this._slotX(col);
-      if (!this._slotOverlapsOthers(x, this.lineY, radius, null, true)) free.push(x);
-    }
-    if (free.length > 0) return free[Math.floor(free.length / 2)];
-    return center;
   }
 
   _displaceOverlapping(anchor) {
@@ -582,18 +598,21 @@ export class Game {
       if (other === anchor || other.dead || other.isBoss) continue;
       const or2 = MONSTERS[other.key].r;
       const oy = this._enemyReserveY(other);
-      if (Math.hypot(other.x - anchor.x, oy - ay) < ar + or2 + 2) {
-        this.occupiedSlots.delete(`${other.row}:${other.col}`);
-        const minRow = Math.max(other.row + 1, 1);
-        const spot = this._findSpawnSpot(or2, other, minRow);
-        if (spot) {
-          other.row = spot.row;
-          other.col = spot.col;
-          other.x = spot.x;
-          if (!other.joining) other.y = this._enemySlotY(other);
-        }
-        this.occupiedSlots.add(`${other.row}:${other.col}`);
+      const overlaps = Math.hypot(other.x - anchor.x, oy - ay) < ar + or2 + 2;
+      const frontCenter = other.row === 0 && Math.abs(other.x - anchor.x) < ar + or2 + 2;
+      if (!overlaps && !frontCenter) continue;
+      this.occupiedSlots.delete(`${other.row}:${other.col}`);
+      const spot = this._findSpawnSpot(or2, other, 0);
+      if (spot) {
+        other.row = spot.row;
+        other.col = spot.col;
+        other.x = spot.x;
+        if (!other.joining) other.y = this._enemySlotY(other);
+      } else {
+        other.row = Math.max((Number(other.row) || 0) + 1, 1);
+        if (!other.joining) other.y = this._enemySlotY(other);
       }
+      this.occupiedSlots.add(`${other.row}:${other.col}`);
     }
   }
 
@@ -602,10 +621,8 @@ export class Game {
     if (!m || m.dead || !m.joining) return;
     const stat = MONSTERS[m.key];
     if (m.isBoss) {
-      if (this._slotOverlapsOthers(m.x, this.lineY, stat.r, m, true)) {
-        m.x = this._bossLineX(stat.r);
-        this._displaceOverlapping(m);
-      }
+      m.x = this._playfieldCenterX();
+      this._displaceOverlapping(m);
       return;
     }
     const slotY = this._enemySlotY(m);
@@ -643,6 +660,7 @@ export class Game {
     }
 
     const living = this.enemies.filter((m) => !m.dead && !m.isBoss);
+    const bosses = this.enemies.filter((m) => !m.dead && m.isBoss);
     const buckets = Array.from({ length: cols }, () => []);
     for (const m of living) {
       let col = Number(m.col);
@@ -663,11 +681,23 @@ export class Game {
       buckets[col].push(m);
     }
 
+    const slotBlockedByBoss = (x, y, radius) => {
+      for (const b of bosses) {
+        const br = MONSTERS[b.key].r;
+        const by = b.joining ? this.lineY : b.y;
+        if (Math.hypot(b.x - x, by - y) < br + radius + 2) return true;
+      }
+      return false;
+    };
+
     for (let col = 0; col < cols; col++) {
       const group = buckets[col];
       group.sort((a, b) => b.y - a.y);
-      for (let row = 0; row < group.length; row++) {
-        const m = group[row];
+      let row = 0;
+      for (const m of group) {
+        const radius = MONSTERS[m.key].r;
+        const x = this._slotX(col);
+        while (row < 30 && slotBlockedByBoss(x, this.lineY - row * SLOT_ROW_H, radius)) row += 1;
         m.row = row;
         m.col = col;
         const slotY = this.lineY - row * SLOT_ROW_H;
@@ -677,6 +707,7 @@ export class Game {
           m.joining = false;
         }
         this.occupiedSlots.add(`${row}:${col}`);
+        row += 1;
       }
     }
   }

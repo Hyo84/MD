@@ -167,7 +167,7 @@ function pngSpriteList() {
     ['archer', '/sprites/ally_archer.png', { chroma: true, maxW: ARCHER_SIZE, maxH: ARCHER_SIZE }],
     ['arrow', '/sprites/fx_arrow.png', { chroma: true, maxW: 96, maxH: 96 }],
     ['bg_field', '/sprites/bg_field.png', { chroma: false, maxW: CANVAS_W * BG_SCALE, maxH: CANVAS_H * BG_SCALE }],
-    ['wall_bottom', '/sprites/bg_wall.png', { chroma: false, maxW: CANVAS_W * BG_SCALE, maxH: (CANVAS_H - DEFEAT_Y) * BG_SCALE }],
+    ['wall_bottom', '/sprites/bg_wall.png', { chroma: false, maxW: CANVAS_W * BG_SCALE, maxH: 220 * BG_SCALE }],
     ['camp_top', '/sprites/bg_camp.png', { chroma: false, maxW: CANVAS_W * BG_SCALE, maxH: 90 * BG_SCALE }],
     ['bg_forest', '/sprites/bg_forest.png', { chroma: false, maxW: FOREST_STRIP_W * 2 * BG_SCALE, maxH: CANVAS_H * BG_SCALE }],
   );

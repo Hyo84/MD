@@ -8,7 +8,17 @@ import { assets, DIRT_W } from './assets.js';
 import { drawHud } from './hud.js';
 
 const EVO_BAR_H = 36;
+const EVO_SLOT_W = 40;
+const EVO_SLOT_COUNT = 10;
 const FOREST_DRAW_H = CANVAS_H;
+const FOREST_SEAM_W = 2;
+
+export function evoBarMetrics() {
+  const y = CANVAS_H - EVO_BAR_H;
+  const slot = EVO_SLOT_W;
+  const startX = (CANVAS_W - slot * EVO_SLOT_COUNT) / 2;
+  return { x: 0, y, w: CANVAS_W, h: EVO_BAR_H, slot, startX, count: EVO_SLOT_COUNT };
+}
 
 export function colorAlpha(hex, a) {
   const n = parseInt(String(hex).replace('#', ''), 16);
@@ -231,6 +241,33 @@ function drawSideForest(ctx, left, right) {
     ctx.fillRect(0, 0, left, CANVAS_H);
     ctx.fillRect(right, 0, CANVAS_W - right, CANVAS_H);
   }
+}
+
+/** 1–2px black seam where forest meets the playable field. */
+function drawForestFieldSeam(ctx, left, right) {
+  ctx.save();
+  ctx.fillStyle = '#000';
+  if (left > 0) ctx.fillRect(left - FOREST_SEAM_W, 0, FOREST_SEAM_W, CANVAS_H);
+  if (right < CANVAS_W) ctx.fillRect(right, 0, FOREST_SEAM_W, CANVAS_H);
+  ctx.restore();
+}
+
+/** Castle wall with crenellation top pinned to the Maginot line. */
+function drawCastleWall(ctx) {
+  const wall = assets.get('wall_bottom');
+  if (!wall) {
+    ctx.fillStyle = 'rgba(90, 90, 96, 0.9)';
+    ctx.fillRect(0, DEFEAT_Y, CANVAS_W, CANVAS_H - DEFEAT_Y);
+    return;
+  }
+  const iw = Math.max(1, wall.width || CANVAS_W);
+  const ih = Math.max(1, wall.height || (CANVAS_H - DEFEAT_Y));
+  const dw = CANVAS_W;
+  const dh = dw * (ih / iw);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(wall, 0, DEFEAT_Y, dw, dh);
+  ctx.restore();
 }
 
 function drawDefeatLine(ctx, left, right) {
@@ -546,20 +583,31 @@ function drawLauncher(ctx, game, innerR) {
 }
 
 function drawEvoBar(ctx, game) {
+  const m = evoBarMetrics();
+  game._evoBarRect = { x: m.x, y: m.y, w: m.w, h: m.h };
   const bar = assets.get('evo_bar');
-  const y = CANVAS_H - EVO_BAR_H;
-  if (bar) ctx.drawImage(bar, 0, y, CANVAS_W, EVO_BAR_H);
+  if (bar) ctx.drawImage(bar, 0, m.y, CANVAS_W, EVO_BAR_H);
   else {
     ctx.fillStyle = 'rgba(40, 28, 14, 0.85)';
-    ctx.fillRect(0, y, CANVAS_W, EVO_BAR_H);
+    ctx.fillRect(0, m.y, CANVAS_W, EVO_BAR_H);
   }
-  const slot = 40;
-  const startX = (CANVAS_W - slot * 10) / 2;
-  const cur = game.currentTier;
+  const cheat = game.cheatTier | 0;
+  const mark = cheat || game.currentTier;
+  const bx = m.startX + (mark - 1) * m.slot + 2;
+  const by = m.y + 3;
+  const bw = m.slot - 4;
+  const bh = EVO_BAR_H - 6;
   ctx.save();
-  ctx.strokeStyle = 'rgba(255, 220, 100, 0.85)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(startX + (cur - 1) * slot + 2, y + 3, slot - 4, EVO_BAR_H - 6);
+  if (cheat) {
+    ctx.fillStyle = 'rgba(255, 210, 50, 0.42)';
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = 'rgba(255, 230, 90, 1)';
+    ctx.lineWidth = 2.6;
+  } else {
+    ctx.strokeStyle = 'rgba(255, 220, 100, 0.85)';
+    ctx.lineWidth = 2;
+  }
+  ctx.strokeRect(bx, by, bw, bh);
   ctx.restore();
 }
 
@@ -611,14 +659,9 @@ class Renderer {
     if (camp) ctx.drawImage(camp, 0, 0, CANVAS_W, 90);
     drawCampSmoke(ctx, innerL, innerR);
 
-    const wall = assets.get('wall_bottom');
-    if (wall) ctx.drawImage(wall, 0, DEFEAT_Y, CANVAS_W, CANVAS_H - DEFEAT_Y);
-    else {
-      ctx.fillStyle = 'rgba(90, 90, 96, 0.9)';
-      ctx.fillRect(0, DEFEAT_Y, CANVAS_W, CANVAS_H - DEFEAT_Y);
-    }
-
+    drawCastleWall(ctx);
     drawSideForest(ctx, innerL, innerR);
+    drawForestFieldSeam(ctx, innerL, innerR);
 
     ctx.save();
     ctx.beginPath();
@@ -667,4 +710,4 @@ class Renderer {
 }
 
 export const renderer = new Renderer();
-export { EVO_BAR_H };
+export { EVO_BAR_H, EVO_SLOT_W, EVO_SLOT_COUNT };
