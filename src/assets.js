@@ -150,7 +150,8 @@ function processSprite(img, opts = {}) {
     const nw = Math.max(1, Math.round(cw * scale));
     const nh = Math.max(1, Math.round(ch * scale));
     const o = makeCanvas(nw, nh);
-    o.ctx.imageSmoothingEnabled = false;
+    o.ctx.imageSmoothingEnabled = true;
+    o.ctx.imageSmoothingQuality = 'high';
     o.ctx.drawImage(cropped, 0, 0, nw, nh);
     return o.canvas;
   }

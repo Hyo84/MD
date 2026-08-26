@@ -1670,7 +1670,8 @@ export class Game {
     this._syncCanvasBacking();
     const ctx = this.ctx;
     ctx.setTransform(this._drawScale, 0, 0, this._drawScale, 0, 0);
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     this._fx = meta.getEffects();
     renderer.draw(this, ctx);
   }

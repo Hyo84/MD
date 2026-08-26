@@ -9,11 +9,11 @@ export const MAX_SLOT_COLS = 7;
 export const SLOT_INSET_PER_COL = 50;
 export const SLOT_EDGE_PAD = 40;      // 슬롯을 내면에서 한 칸 더 안쪽 (7칸일 때 기존 40)
 export const DEFEAT_Y = 660;      // 마지노선
-export const LINE_START_Y = 90;   // 웨이브라인 시작 위치(밀어낼 수 있는 상한)
-export const ENEMY_SPAWN_Y = LINE_START_Y; // 적/보스 합류 시작 Y (라인이 여기면 즉시 착지)
-export const LAUNCHER_Y = 700;
 export const CAMP_DEST_Y = 64;   // 적 캠프 그리기·아군 침입 판정
 export const CAMP_DRAW_H = 164;
+export const LINE_START_Y = CAMP_DEST_Y + CAMP_DRAW_H / 2; // 웨이브라인 상한 = 캠프 절반 (146)
+export const ENEMY_SPAWN_Y = CAMP_DEST_Y; // 캠프 상단에서 합류. 라인이 상한이어도 내려오며 착지
+export const LAUNCHER_Y = 700;
 
 // 전역 밸런스 (어드민 패널에서 실시간 조정)
 export const BALANCE = {
@@ -114,11 +114,11 @@ export function effectiveMult(wave, liveMult = 1) {
 // stop = 저지력(교전 중 라인 속도 감소, 적 없을 때 전열 푸시 속도 px/초), range = 공격 사거리(px)
 // r = 물리/충돌 반경. drawR = 스프라이트·HP바·등급 숫자용 시각 반경 (전투 스탯과 무관)
 export const UNITS = [
-  { tier: 1,  name: '민병대',       color: '#D2B48C', r: 16, drawR: 11, hp: 50,    atk: 5,    mass: 1.0,  stop: 4,  range: 18 },
-  { tier: 2,  name: '신병',         color: '#C2A679', r: 18, drawR: 13, hp: 110,   atk: 12,   mass: 1.3,  stop: 6,  range: 21 },
-  { tier: 3,  name: '경보병',       color: '#CD7F32', r: 20, drawR: 15, hp: 240,   atk: 25,   mass: 1.7,  stop: 9,  range: 25 },
-  { tier: 4,  name: '중보병',       color: '#708090', r: 22, drawR: 17, hp: 500,   atk: 55,   mass: 2.2,  stop: 13, range: 29 },
-  { tier: 5,  name: '기사단원',     color: '#4682B4', r: 24, drawR: 19, hp: 1050,  atk: 120,  mass: 2.8,  stop: 18, range: 35,
+  { tier: 1,  name: '민병대',       color: '#D2B48C', r: 16, drawR: 14, hp: 50,    atk: 5,    mass: 1.0,  stop: 4,  range: 18 },
+  { tier: 2,  name: '신병',         color: '#C2A679', r: 18, drawR: 16, hp: 110,   atk: 12,   mass: 1.3,  stop: 6,  range: 21 },
+  { tier: 3,  name: '경보병',       color: '#CD7F32', r: 20, drawR: 18, hp: 240,   atk: 25,   mass: 1.7,  stop: 9,  range: 25 },
+  { tier: 4,  name: '중보병',       color: '#708090', r: 22, drawR: 20, hp: 500,   atk: 55,   mass: 2.2,  stop: 13, range: 29 },
+  { tier: 5,  name: '기사단원',     color: '#4682B4', r: 24, drawR: 22, hp: 1050,  atk: 120,  mass: 2.8,  stop: 18, range: 35,
     special: { cleaveRadius: 28, cleaveMult: 0.5 } },
   { tier: 6,  name: '근위대장',     color: '#4169E1', r: 26, drawR: 27, hp: 2200,  atk: 250,  mass: 3.5,  stop: 24, range: 41,
     special: { stunChance: 0.10, stunDuration: 0.5 } },

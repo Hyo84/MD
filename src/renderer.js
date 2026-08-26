@@ -45,7 +45,8 @@ function drawSprite(ctx, img, x, y, w, h, opts = {}) {
   if (!img) return false;
   const { dw, dh } = fitSpriteSize(img, w, h);
   ctx.save();
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
   if (opts.flash) ctx.filter = 'brightness(2.4) saturate(0.4)';
   if (opts.stretchY && opts.stretchY !== 1) {
