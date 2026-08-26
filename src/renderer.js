@@ -2,6 +2,7 @@
 
 import {
   CANVAS_W, CANVAS_H, DEFEAT_Y, LAUNCHER_Y, LINE_START_Y,
+  CAMP_DEST_Y, CAMP_DRAW_H,
   BALANCE, UNITS, MONSTERS, HEROES, HERO_MISSION_DAMAGE, HERO_BOSS_LIMIT,
   HERO_ASCENSION_SLOWMO,
 } from './config.js';
@@ -13,9 +14,6 @@ const EVO_SLOT_W = 40;
 const EVO_SLOT_COUNT = 10;
 const FOREST_DRAW_H = CANVAS_H;
 const FOREST_SEAM_W = 2;
-/** Camp sits under the HUD. Height is fixed; width fills the playable strip. */
-const CAMP_DEST_Y = 64;
-const CAMP_DRAW_H = 164;
 
 export function evoBarMetrics() {
   const y = CANVAS_H - EVO_BAR_H;

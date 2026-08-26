@@ -114,6 +114,35 @@ export function setupAdmin(game) {
   );
   panel.appendChild(brandSec);
 
+  const cheatSec = section('치트');
+  const cheatNote = document.createElement('p');
+  cheatNote.className = 'admin-note';
+  cheatNote.textContent = 'On이면 하단 T1–T10을 눌러 다음 발사를 고정합니다. 기본은 Off.';
+  const cheatRow = document.createElement('div');
+  cheatRow.className = 'admin-row';
+  const cheatSpan = document.createElement('span');
+  cheatSpan.textContent = '치트';
+  const cheatToggle = document.createElement('div');
+  cheatToggle.className = 'admin-toggle';
+  const cheatOff = document.createElement('button');
+  cheatOff.type = 'button';
+  cheatOff.textContent = 'Off';
+  const cheatOn = document.createElement('button');
+  cheatOn.type = 'button';
+  cheatOn.textContent = 'On';
+  const syncCheats = () => {
+    cheatOff.classList.toggle('active', !game.cheatsEnabled);
+    cheatOn.classList.toggle('active', !!game.cheatsEnabled);
+  };
+  cheatOff.addEventListener('click', () => game.setCheatsEnabled(false));
+  cheatOn.addEventListener('click', () => game.setCheatsEnabled(true));
+  game.onCheatsChange = syncCheats;
+  syncCheats();
+  cheatToggle.append(cheatOff, cheatOn);
+  cheatRow.append(cheatSpan, cheatToggle);
+  cheatSec.append(cheatNote, cheatRow);
+  panel.appendChild(cheatSec);
+
   const liveSec = section('실시간 난이도');
   const liveRow = document.createElement('div');
   liveRow.className = 'admin-row';
@@ -152,6 +181,10 @@ export function setupAdmin(game) {
   g.append(
     numberRow('기본 라인 속도 (px/s)', BALANCE, 'baseLineSpeed', 0.5),
     numberRow('적 스폰 간격 (s)', BALANCE, 'spawnInterval', 0.1),
+    numberRow('웨이브 스폰 가속', BALANCE, 'spawnIntervalAccel', 0.01),
+    numberRow('최단 스폰 간격 (s)', BALANCE, 'spawnIntervalFloor', 0.05),
+    numberRow('캠프 침입 배율 최소', BALANCE, 'spawnCampRaidMin', 0.1),
+    numberRow('캠프 침입 배율 최대', BALANCE, 'spawnCampRaidMax', 0.1),
     numberRow('발사 쿨다운 (s)', BALANCE, 'launchCooldown', 0.1),
     numberRow('발사 속도 (px/s)', BALANCE, 'launchSpeed', 10),
     numberAt('진군 R0 (스킬 없음)', BALANCE.advanceSpeedByRank, 0, 1),
@@ -254,11 +287,13 @@ export function setupAdmin(game) {
 
   document.body.appendChild(panel);
 
+  const chromeRight = document.getElementById('chromeRight') || document.body;
+
   const btn = document.createElement('button');
   btn.id = 'adminBtn';
+  btn.type = 'button';
   btn.textContent = '⚙';
   btn.title = '어드민 패널 (A)';
-  document.body.appendChild(btn);
 
   const restart = document.createElement('button');
   restart.id = 'quickRestartBtn';
@@ -269,7 +304,7 @@ export function setupAdmin(game) {
     e.stopPropagation();
     game.start();
   });
-  document.body.appendChild(restart);
+  chromeRight.append(restart, btn);
 
   const toggle = () => panel.classList.toggle('hidden');
   btn.addEventListener('click', toggle);

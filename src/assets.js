@@ -56,6 +56,10 @@ function shade(hex, t) {
   return t >= 0 ? mixHex(hex, '#ffffff', t) : mixHex(hex, '#000000', -t);
 }
 
+function yieldFrame() {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 async function toBitmap(canvas) {
   if (typeof createImageBitmap === 'function') {
     try {
@@ -174,13 +178,24 @@ function pngSpriteList() {
   return list;
 }
 
-async function overlayPngSprites(raw) {
-  const loaded = new Set();
-  for (const [name, url, opts] of pngSpriteList()) {
+async function overlayPngSprites(raw, onStep) {
+  const list = pngSpriteList();
+  let loadedN = 0;
+  const fetched = await Promise.all(list.map(async ([name, url, opts]) => {
     const img = await loadImage(url);
-    if (!img) continue;
-    raw.set(name, processSprite(img, opts));
-    loaded.add(name);
+    loadedN += 1;
+    onStep?.('load', loadedN - 1, list.length, name);
+    return [name, opts, img];
+  }));
+  const loaded = new Set();
+  for (let i = 0; i < fetched.length; i++) {
+    const [name, opts, img] = fetched[i];
+    if (img) {
+      raw.set(name, processSprite(img, opts));
+      loaded.add(name);
+    }
+    onStep?.('process', i, fetched.length, name);
+    await yieldFrame();
   }
   return loaded;
 }
@@ -970,7 +985,21 @@ class AssetManager {
   constructor() {
     this._map = new Map();
     this._png = new Set();
+    this.onProgress = null;
     this.ready = this._init();
+  }
+
+  _report(pct, label) {
+    const n = Math.max(0, Math.min(100, Math.round(pct)));
+    const fill = document.getElementById('loadFill');
+    const num = document.getElementById('loadPct');
+    const lab = document.getElementById('loadLabel');
+    if (fill) fill.style.width = `${n}%`;
+    if (num) num.textContent = `${n}%`;
+    if (lab && label) lab.textContent = label;
+    try {
+      this.onProgress?.(n, label);
+    } catch { /* UI optional */ }
   }
 
   get(name) {
@@ -991,6 +1020,8 @@ class AssetManager {
 
   async _init() {
     try {
+      this._report(1, '그래픽 준비');
+      await yieldFrame();
       const raw = new Map();
       raw.set('bg_field', bakeBgField());
       raw.set('dirt_path', bakeDirtPath());
@@ -1001,15 +1032,28 @@ class AssetManager {
       raw.set('archer', bakeArcher());
       for (let t = 1; t <= 10; t++) raw.set(`unit_${t}`, bakeUnit(t));
       for (const key of Object.keys(MONSTERS)) raw.set(`monster_${key}`, bakeMonster(key));
-      this._png = await overlayPngSprites(raw);
-      raw.set('evo_bar', bakeEvoBar(raw));
+      this._report(8, '이미지 불러오는 중');
+      await yieldFrame();
 
-      const entries = await Promise.all(
-        [...raw.entries()].map(async ([name, canvas]) => [name, await toBitmap(canvas)]),
-      );
-      for (const [name, img] of entries) this._map.set(name, img);
+      this._png = await overlayPngSprites(raw, (phase, i, n) => {
+        if (phase === 'load') this._report(8 + ((i + 1) / n) * 62, '이미지 불러오는 중');
+        else this._report(70 + ((i + 1) / n) * 18, '스프라이트 다듬는 중');
+      });
+      raw.set('evo_bar', bakeEvoBar(raw));
+      this._report(90, '마무리 중');
+      await yieldFrame();
+
+      const entries = [...raw.entries()];
+      for (let i = 0; i < entries.length; i++) {
+        const [name, canvas] = entries[i];
+        this._map.set(name, await toBitmap(canvas));
+        this._report(90 + ((i + 1) / entries.length) * 10, '마무리 중');
+        if (i % 4 === 3) await yieldFrame();
+      }
+      this._report(100, '완료');
     } catch (err) {
       console.warn('[assets] bake failed, circle fallback will be used', err);
+      this._report(100, '완료');
     }
   }
 }

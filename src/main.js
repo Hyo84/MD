@@ -6,6 +6,17 @@ import { meta } from './meta.js';
 import { setupSkillsUi } from './skills-ui.js';
 import { setupViewScale } from './viewScale.js';
 
+const loadOverlay = document.getElementById('loadOverlay');
+const loadFill = document.getElementById('loadFill');
+const loadPct = document.getElementById('loadPct');
+const loadLabel = document.getElementById('loadLabel');
+
+assets.onProgress = (pct, label) => {
+  if (loadFill) loadFill.style.width = `${pct}%`;
+  if (loadPct) loadPct.textContent = `${pct}%`;
+  if (loadLabel && label) loadLabel.textContent = label;
+};
+
 const canvas = document.getElementById('game');
 const ui = {
   startOverlay: document.getElementById('startOverlay'),
@@ -16,6 +27,7 @@ const ui = {
 };
 
 await assets.ready;
+loadOverlay?.classList.add('hidden');
 
 const game = new Game(canvas, ui);
 setupAdmin(game);

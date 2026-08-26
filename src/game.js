@@ -1,6 +1,7 @@
 import Matter from 'matter-js';
 import {
-  CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y, ENEMY_SPAWN_Y,
+    CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y, ENEMY_SPAWN_Y,
+    CAMP_DEST_Y, CAMP_DRAW_H,
     BALANCE, UNITS, MONSTERS, HEROES,
     HERO_MISSION_DAMAGE, HERO_MISSION_KILLS, HERO_BOSS_LIMIT, HERO_ASCENSION_ATK_MULT, HERO_ASCENSION_SLOWMO,
     HERO_ASCENSION_REPLACEMENT_TIER, HERO_ASCENSION_BONUS_SCORE,
@@ -8,6 +9,7 @@ import {
     FRICTION_AIR_UNIT, killsNeeded, waveMultiplier, effectiveMult,
     LIVE_MULT_STEP, clampLiveMult, PROGRESSION,
     BASE_SLOT_COLS, MAX_SLOT_COLS, getSlotX, playfieldExtraInset, getPlayfieldInset,
+    CHEATS_STORAGE_KEY,
 } from './config.js';
 import { Effects } from './effects.js';
 import { meta } from './meta.js';
@@ -57,7 +59,10 @@ export class Game {
     this._diffMinusRect = { x: 0, y: 0, w: 0, h: 0 };
     this._diffPlusRect = { x: 0, y: 0, w: 0, h: 0 };
     this._evoBarRect = evoBarMetrics();
+    this.cheatsEnabled = false;
+    try { this.cheatsEnabled = localStorage.getItem(CHEATS_STORAGE_KEY) === '1'; } catch { /* ignore */ }
     this.cheatTier = 0; // 0=random, 1–10 sticky launch cheat (restarts keep it)
+    this.onCheatsChange = null;
     this._cssScale = 1;
     this._drawScale = 1;
 
@@ -116,8 +121,9 @@ export class Game {
 
     this.wave = 1;
     this.kills = 0;
+    this.waveTrashSpawned = 0;
     this.score = 0;
-    this.spawnTimer = 1.5;
+    this.spawnTimer = BALANCE.spawnInterval * 0.75;
     this.bossActive = false;
     this.bossPending = false;
     this.bossWarnT = 0;
@@ -125,8 +131,8 @@ export class Game {
     this.launchCd = 0;
     this.aimX = CANVAS_W / 2;
     this.dragging = false;
-    this.currentTier = this.cheatTier || this._rollTier();
-    this.nextTier = this.cheatTier || this._rollTier();
+    this.currentTier = (this.cheatsEnabled && this.cheatTier) ? this.cheatTier : this._rollTier();
+    this.nextTier = (this.cheatsEnabled && this.cheatTier) ? this.cheatTier : this._rollTier();
 
     this.effects = new Effects();
     this.wall = null;
@@ -351,6 +357,7 @@ export class Game {
     };
 
     this.canvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
       const p = toCanvas(e);
       if (this._hitRect(p, this._rangeToggleRect)) {
         this.rangeMode = (this.rangeMode + 1) % RANGE_MODE_LABELS.length;
@@ -370,7 +377,7 @@ export class Game {
       this.dragging = true;
       this.aimX = this._clampAimX(p.x);
       this.canvas.setPointerCapture(e.pointerId);
-    });
+    }, { passive: false });
     this.canvas.addEventListener('pointermove', (e) => {
       const p = toCanvas(e);
       this.mouse = p;
@@ -443,7 +450,20 @@ export class Game {
     Body.setVelocity(u.body, { x: 0, y: -velFromPxPerSec(BALANCE.launchSpeed, stepMs) });
     this.launchCd = this._launchCooldown();
     this.currentTier = this.nextTier;
-    this.nextTier = this.cheatTier || this._rollTier();
+    this.nextTier = (this.cheatsEnabled && this.cheatTier) ? this.cheatTier : this._rollTier();
+  }
+
+  setCheatsEnabled(on) {
+    const next = !!on;
+    this.cheatsEnabled = next;
+    try { localStorage.setItem(CHEATS_STORAGE_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+    if (!next && this.cheatTier) {
+      this.cheatTier = 0;
+      this.currentTier = this._rollTier();
+      this.nextTier = this._rollTier();
+    }
+    this.onCheatsChange?.();
+    return this.cheatsEnabled;
   }
 
   _playfieldCenterX() {
@@ -455,6 +475,7 @@ export class Game {
   _tryEvoCheat(p) {
     const bar = this._evoBarRect || evoBarMetrics();
     if (!this._hitRect(p, bar)) return false;
+    if (!this.cheatsEnabled) return true;
     const { startX, slot, count } = evoBarMetrics();
     const i = Math.floor((p.x - startX) / slot);
     if (i < 0 || i >= count) return true;
@@ -594,6 +615,7 @@ export class Game {
       this._compactEnemySlots();
     }
 
+    if (!isBoss) this.waveTrashSpawned = (this.waveTrashSpawned || 0) + 1;
     this.effects.burst(m.x, m.y, stat.color, 8, 2.5, 2.5);
     return m;
   }
@@ -866,6 +888,42 @@ export class Game {
     return 'goblin';
   }
 
+  _waveSpawnInterval() {
+    const accel = BALANCE.spawnIntervalAccel ?? 0.22;
+    const floor = BALANCE.spawnIntervalFloor ?? 0.9;
+    const wave = Math.max(1, this.wave);
+    return Math.max(floor, BALANCE.spawnInterval / (1 + (wave - 1) * accel));
+  }
+
+  _campRaidMult() {
+    const campTop = CAMP_DEST_Y;
+    const campBot = CAMP_DEST_Y + CAMP_DRAW_H;
+    let n = 0;
+    for (const u of this.units) {
+      if (u.kind !== 'ally' || u.launching || u.dying || u.ascended) continue;
+      if (u.y >= campTop && u.y <= campBot) n++;
+    }
+    if (n <= 0) return 1;
+    const min = BALANCE.spawnCampRaidMin ?? 2;
+    const max = BALANCE.spawnCampRaidMax ?? 3;
+    return Math.min(max, min + (n - 1) * ((max - min) / 2));
+  }
+
+  _livingTrashEnemies() {
+    let n = 0;
+    for (const m of this.enemies) {
+      if (m.dead || m.isBoss) continue;
+      n++;
+    }
+    return n;
+  }
+
+  _waveQuotaFull() {
+    const need = killsNeeded(this.wave);
+    if ((this.waveTrashSpawned || 0) >= need) return true;
+    return this.kills + this._livingTrashEnemies() >= need;
+  }
+
   _updateSpawning(dt) {
     if (this.bossWarnT > 0) {
       this.bossWarnT -= dt;
@@ -886,12 +944,14 @@ export class Game {
       return;
     }
 
-    this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0) {
-      const interval = Math.max(0.7, BALANCE.spawnInterval - this.wave * 0.15) * (this.bossActive ? 1.8 : 1);
-      this.spawnTimer = interval * (0.7 + Math.random() * 0.6);
-      this._spawnEnemy(this._pickMonster());
-    }
+    if (this._waveQuotaFull()) return;
+
+    this.spawnTimer -= dt * this._campRaidMult();
+    if (this.spawnTimer > 0) return;
+    const jitter = 0.82 + Math.random() * 0.36;
+    this.spawnTimer = this._waveSpawnInterval() * jitter;
+    if (this._waveQuotaFull()) return;
+    this._spawnEnemy(this._pickMonster());
   }
 
   _onEnemyKilled(m) {
@@ -907,6 +967,8 @@ export class Game {
       this.bossPending = false;
       this.wave += 1;
       this.kills = 0;
+      this.waveTrashSpawned = 0;
+      this.spawnTimer = this._waveSpawnInterval() * 0.7;
       this._refillArcherAmmo();
       this.effects.floatText(CANVAS_W / 2, 300, `웨이브 ${this.wave} 시작!`, '#7CFC00', 26, 2.0);
       this._onBossSlain();

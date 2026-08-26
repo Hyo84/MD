@@ -6,16 +6,27 @@
 
 html, body {
   height: 100%;
+  height: 100dvh;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   background: radial-gradient(ellipse at center, #2b2118 0%, #14100b 70%, #0a0806 100%);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
   overflow: hidden;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  padding-top: max(6px, env(safe-area-inset-top, 0px));
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
 }
 
 #wrap {
@@ -25,18 +36,37 @@ body {
   flex-shrink: 0;
 }
 
+#topChrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 450px;
+  min-height: 44px;
+  flex-shrink: 0;
+  z-index: 20;
+  margin: 0 0 6px;
+  pointer-events: auto;
+}
+
+#scaleHost,
+#chromeRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 #scaleBar {
-  position: fixed;
-  top: 10px;
-  left: 10px;
+  position: static;
   z-index: 20;
   display: flex;
   gap: 4px;
 }
 
 #scaleBar button {
-  min-width: 40px;
-  height: 32px;
+  min-width: 44px;
+  height: 40px;
   padding: 0 8px;
   font-size: 13px;
   font-family: inherit;
@@ -46,6 +76,7 @@ body {
   border: 1px solid #7a5c2e;
   border-radius: 6px;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 #scaleBar button:hover {
@@ -68,6 +99,8 @@ canvas {
   border-radius: 6px;
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.8), 0 0 12px rgba(120, 90, 40, 0.3);
   touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .overlay {
@@ -85,6 +118,11 @@ canvas {
   text-align: center;
   cursor: pointer;
   user-select: none;
+}
+
+#loadOverlay {
+  z-index: 14;
+  cursor: default;
 }
 
 .overlay.hidden {
@@ -106,6 +144,36 @@ canvas {
   margin-top: 30px;
   font-size: 20px;
   animation: blink 1.2s ease-in-out infinite;
+}
+
+.load-track {
+  width: 72%;
+  max-width: 280px;
+  height: 14px;
+  margin-top: 8px;
+  background: #241c11;
+  border: 2px solid #7a5c2e;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.load-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(180deg, #e8c878, #a8854a);
+  transition: width 0.12s linear;
+}
+
+#loadPct {
+  font-size: 22px;
+  font-weight: bold;
+  color: #ffe7a0;
+  letter-spacing: 1px;
+}
+
+.load-label {
+  font-size: 13px;
+  color: #9a8a6a;
 }
 
 @keyframes blink {
@@ -135,10 +203,9 @@ canvas {
 /* ---------- 어드민 패널 ---------- */
 
 #adminBtn {
-  position: fixed;
-  top: 10px;
-  right: 10px;
+  position: static;
   width: 40px;
+  min-width: 40px;
   height: 40px;
   font-size: 20px;
   color: #f0e6d2;
@@ -147,6 +214,7 @@ canvas {
   border-radius: 8px;
   cursor: pointer;
   z-index: 20;
+  touch-action: manipulation;
 }
 
 #adminBtn:hover {
@@ -154,10 +222,9 @@ canvas {
 }
 
 #quickRestartBtn {
-  position: fixed;
-  top: 10px;
-  right: 56px;
+  position: static;
   height: 40px;
+  min-height: 40px;
   padding: 0 12px;
   font-size: 13px;
   font-family: inherit;
@@ -168,6 +235,7 @@ canvas {
   border-radius: 8px;
   cursor: pointer;
   z-index: 20;
+  touch-action: manipulation;
 }
 
 #quickRestartBtn:hover {
@@ -176,10 +244,11 @@ canvas {
 
 #adminPanel {
   position: fixed;
-  top: 0;
+  top: 50px;
   right: 0;
-  width: 300px;
-  height: 100vh;
+  width: min(300px, 100vw);
+  height: calc(100vh - 50px);
+  height: calc(100dvh - 50px);
   overflow-y: auto;
   background: rgba(18, 14, 9, 0.96);
   border-left: 2px solid #5a4630;
@@ -187,6 +256,7 @@ canvas {
   padding: 14px 14px 40px;
   z-index: 15;
   font-size: 13px;
+  touch-action: pan-y;
 }
 
 #adminPanel.hidden {
@@ -286,6 +356,36 @@ canvas {
   filter: brightness(1.25);
 }
 
+#adminPanel .admin-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+#adminPanel .admin-toggle button {
+  min-width: 48px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: bold;
+  color: #f0e6d2;
+  background: #3a2f1e;
+  border: 1px solid #7a5c2e;
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+#adminPanel .admin-toggle button:hover {
+  filter: brightness(1.25);
+}
+
+#adminPanel .admin-toggle button.active {
+  border-color: #e8c878;
+  background: rgba(90, 70, 30, 0.95);
+  box-shadow: 0 0 8px rgba(232, 200, 120, 0.35);
+}
+
 /* ---------- 스킬 패널 ---------- */
 
 #skillBtn {
@@ -293,7 +393,8 @@ canvas {
   left: 8px;
   top: 80px;
   z-index: 8;
-  padding: 6px 12px;
+  min-height: 40px;
+  padding: 8px 14px;
   font-size: 13px;
   font-family: inherit;
   font-weight: bold;
@@ -303,6 +404,7 @@ canvas {
   border-radius: 6px;
   cursor: pointer;
   pointer-events: auto;
+  touch-action: manipulation;
 }
 
 #skillBtn.has-points {

@@ -12,11 +12,17 @@ export const DEFEAT_Y = 660;      // 마지노선
 export const LINE_START_Y = 90;   // 웨이브라인 시작 위치(밀어낼 수 있는 상한)
 export const ENEMY_SPAWN_Y = LINE_START_Y; // 적/보스 합류 시작 Y (라인이 여기면 즉시 착지)
 export const LAUNCHER_Y = 700;
+export const CAMP_DEST_Y = 64;   // 적 캠프 그리기·아군 침입 판정
+export const CAMP_DRAW_H = 164;
 
 // 전역 밸런스 (어드민 패널에서 실시간 조정)
 export const BALANCE = {
   baseLineSpeed: 4,     // 웨이브라인 기본 전진 속도 (px/초)
-  spawnInterval: 2.6,   // 적 스폰 기본 간격 (초, 웨이브에 따라 감소)
+  spawnInterval: 3.5,   // 1웨이브 적 스폰 간격 (초). 웨이브가 오를수록 짧아짐
+  spawnIntervalAccel: 0.22, // interval = base / (1 + (wave-1)*accel)
+  spawnIntervalFloor: 0.9,  // 최단 스폰 간격 (초)
+  spawnCampRaidMin: 2,  // 캠프 침입 시 투입 배율 하한
+  spawnCampRaidMax: 3,  // 캠프 침입 시 투입 배율 상한
   launchCooldown: 1.9,  // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
   launchSpeed: 720,     // 발사 돌진 (px/초). 짧은 버스트 후 진군 테이블로 걸음
   unitAdvanceSpeed: 28, // 진군 테이블이 없을 때 폴백 (px/초)
@@ -144,7 +150,7 @@ export const MONSTERS = {
   goblin:   { name: '고블린',     icon: '고', grade: '1', color: '#3CB371', outline: '#1e5c38', r: 15, hp: 32,    atk: 3,   speed: 2,  score: 10 },
   orc:      { name: '오크',       icon: '오', grade: '2', color: '#6B8E23', outline: '#39510f', r: 20, hp: 110,   atk: 8,   speed: 1,  score: 25 },
   skeleton: { name: '스켈레톤',   icon: '스', grade: '3', color: '#DCDCDC', outline: '#6e6e6e', r: 18, hp: 90,    atk: 8,   speed: 0,  score: 20 },
-  troll:    { name: '동굴 트롤',  icon: '트', grade: '4', color: '#556B2F', outline: '#2c3a14', r: 28, hp: 1200,  atk: 80,  speed: 1,  score: 100, regen: 12 },
+  troll:    { name: '동굴 트롤',  icon: '트', grade: '4', color: '#556B2F', outline: '#2c3a14', r: 28, hp: 280,   atk: 9,   speed: 1,  score: 100, regen: 4 },
   boss:     { name: '오크 워로드', icon: '보스', grade: '보스', color: '#B22222', outline: '#5c0e0e', r: 45, hp: 900,   atk: 12,  speed: 8, score: 500, isBoss: true },
 };
 
@@ -424,6 +430,7 @@ export function rankUnlockLevel(skill, rank) {
 
 export const META_STORAGE_KEY = 'md.knightslide.meta.v1';
 export const BRANDING_STORAGE_KEY = 'md.knightslide.branding.v1';
+export const CHEATS_STORAGE_KEY = 'md.knightslide.cheats.v1';
 
 /** Start overlay / document.title. Admin 패널에서 수정, localStorage에 유지. */
 export const BRANDING = {
