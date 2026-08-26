@@ -177,11 +177,14 @@ function pngSpriteList() {
 }
 
 async function overlayPngSprites(raw) {
+  const loaded = new Set();
   for (const [name, url, opts] of pngSpriteList()) {
     const img = await loadImage(url);
     if (!img) continue;
     raw.set(name, processSprite(img, opts));
+    loaded.add(name);
   }
+  return loaded;
 }
 
 function ellipse(ctx, x, y, rx, ry) {
@@ -1066,11 +1069,16 @@ function bakeEvoBar(unitCanvases) {
 class AssetManager {
   constructor() {
     this._map = new Map();
+    this._png = new Set();
     this.ready = this._init();
   }
 
   get(name) {
     return this._map.get(name) || null;
+  }
+
+  fromPng(name) {
+    return this._png.has(name);
   }
 
   unit(tier) {
@@ -1097,7 +1105,7 @@ class AssetManager {
       raw.set('archer', bakeArcher());
       for (let t = 1; t <= 10; t++) raw.set(`unit_${t}`, bakeUnit(t));
       for (const key of Object.keys(MONSTERS)) raw.set(`monster_${key}`, bakeMonster(key));
-      await overlayPngSprites(raw);
+      this._png = await overlayPngSprites(raw);
       raw.set('evo_bar', bakeEvoBar(raw));
 
       const entries = await Promise.all(

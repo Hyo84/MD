@@ -5,10 +5,11 @@ import {
   BALANCE, UNITS, MONSTERS, HEROES, HERO_MISSION_DAMAGE, HERO_ASCENSION_SLOWMO,
   playfieldExtraInset, BASE_SLOT_COLS,
 } from './config.js';
-import { assets, DIRT_W, FOREST_STRIP_W } from './assets.js';
+import { assets, DIRT_W } from './assets.js';
 import { drawHud } from './hud.js';
 
 const EVO_BAR_H = 36;
+const FOREST_DRAW_H = CANVAS_H;
 
 export function colorAlpha(hex, a) {
   const n = parseInt(String(hex).replace('#', ''), 16);
@@ -16,8 +17,17 @@ export function colorAlpha(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
+/** Uniform scale that fits img inside a maxW×maxH box (no stretch to square). */
+function fitSpriteSize(img, maxW, maxH) {
+  const iw = Math.max(1, img.width || maxW);
+  const ih = Math.max(1, img.height || maxH);
+  const scale = Math.min(maxW / iw, maxH / ih);
+  return { dw: iw * scale, dh: ih * scale };
+}
+
 function drawSprite(ctx, img, x, y, w, h, opts = {}) {
   if (!img) return false;
+  const { dw, dh } = fitSpriteSize(img, w, h);
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
@@ -25,10 +35,25 @@ function drawSprite(ctx, img, x, y, w, h, opts = {}) {
   if (opts.stretchY && opts.stretchY !== 1) {
     ctx.translate(x, y);
     ctx.scale(1 / Math.sqrt(opts.stretchY), opts.stretchY);
-    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
   } else {
-    ctx.drawImage(img, x - w / 2, y - h / 2, w, h);
+    ctx.drawImage(img, x - dw / 2, y - dh / 2, dw, dh);
   }
+  ctx.restore();
+  return true;
+}
+
+/** Full-canvas draw with uniform scale (cover). Dest is always 450×800, never the playable inset. */
+function drawFieldBackground(ctx, img) {
+  if (!img) return false;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  const iw = img.width || CANVAS_W;
+  const ih = img.height || CANVAS_H;
+  const scale = Math.max(CANVAS_W / iw, CANVAS_H / ih);
+  const w = iw * scale;
+  const h = ih * scale;
+  ctx.drawImage(img, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
   ctx.restore();
   return true;
 }
@@ -162,12 +187,10 @@ function drawFlippedStrip(ctx, img, destX, destW, destY, destH) {
   ctx.restore();
 }
 
-function drawDirtPath(ctx, left, right, cols) {
+function drawDirtPath(ctx) {
   const dirt = assets.get('dirt_path');
-  const playW = Math.max(1, right - left);
-  const frac = cols <= 3 ? 0.78 : cols <= 5 ? 0.84 : 0.9;
-  const dirtW = Math.min(DIRT_W, playW * frac);
-  const dx = (left + right) / 2 - dirtW / 2;
+  const dirtW = DIRT_W;
+  const dx = (CANVAS_W - dirtW) / 2;
   const y0 = 72;
   const h = DEFEAT_Y - y0 + 8;
   if (dirt) ctx.drawImage(dirt, dx, y0, dirtW, h);
@@ -182,6 +205,28 @@ function drawLoggedBand(ctx, img, x, w, y, h) {
   ctx.drawImage(img, x, y, w, h);
 }
 
+function forestPanelSize(img) {
+  const ih = Math.max(1, img.height || FOREST_DRAW_H);
+  const iw = Math.max(1, img.width || 120);
+  const h = FOREST_DRAW_H;
+  const w = (iw / ih) * h;
+  return { w, h };
+}
+
+function drawForestPanel(ctx, img, x, y, w, h, flip) {
+  if (!img || w <= 0) return;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  if (flip) {
+    ctx.translate(x + w, y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, 0, 0, w, h);
+  } else {
+    ctx.drawImage(img, x, y, w, h);
+  }
+  ctx.restore();
+}
+
 function drawSideForest(ctx, cols, left, right) {
   const forestPng = assets.get('bg_forest');
   const dense = forestPng || assets.get('forest_dense');
@@ -192,37 +237,16 @@ function drawSideForest(ctx, cols, left, right) {
   const inset3 = playfieldExtraInset(BASE_SLOT_COLS);
   const inset5 = playfieldExtraInset(5);
 
-  // 남은 인셋 = 아직 벌목되지 않은 울창한 소나무 장벽 (PNG 있으면 bg_forest)
-  const drawDense = (destX, destW, flip) => {
-    if (destW <= 0) return;
-    if (dense) {
-      if (flip) {
-        ctx.save();
-        ctx.translate(destX + destW, y0);
-        ctx.scale(-1, 1);
-        if (forestPng) ctx.drawImage(dense, 0, 0, destW, h);
-        else {
-          const iw = dense.width;
-          const ih = dense.height;
-          const srcW = Math.max(1, (destW / FOREST_STRIP_W) * iw);
-          ctx.drawImage(dense, 0, 0, srcW, ih, 0, 0, destW, h);
-        }
-        ctx.restore();
-      } else if (forestPng) {
-        ctx.drawImage(dense, destX, y0, destW, h);
-      } else {
-        const iw = dense.width;
-        const ih = dense.height;
-        const srcW = Math.max(1, (destW / FOREST_STRIP_W) * iw);
-        ctx.drawImage(dense, 0, 0, srcW, ih, destX, y0, destW, h);
-      }
-    } else {
-      ctx.fillStyle = '#143c1c';
-      ctx.fillRect(destX, y0, destW, h);
-    }
-  };
-  drawDense(0, left, false);
-  drawDense(right, CANVAS_W - right, true);
+  // 고정 폭·종횡비. 인셋이 줄면 얇게 찌그러지지 않고 바깥으로 슬라이드.
+  if (dense) {
+    const { w: fw, h: fh } = forestPanelSize(dense);
+    drawForestPanel(ctx, dense, left - fw, 0, fw, fh, false);
+    drawForestPanel(ctx, dense, right, 0, fw, fh, true);
+  } else if (left > 0) {
+    ctx.fillStyle = '#143c1c';
+    ctx.fillRect(0, 0, left, CANVAS_H);
+    ctx.fillRect(right, 0, CANVAS_W - right, CANVAS_H);
+  }
 
   // 3→5 벌목대: 그루터기 + 넘어진 통나무 (5칸에서 선명, 7칸에서는 희미한 잔재)
   if (cols >= 5 && logged) {
@@ -360,8 +384,8 @@ function drawArchers(ctx, game) {
       const len = Math.hypot(dx, dy) || 1;
       const mx = (shot.x1 + shot.x2) / 2;
       const my = (shot.y1 + shot.y2) / 2;
-      const ah = Math.min(28, Math.max(16, len * 0.35));
-      const aw = ah * 0.35;
+      const target = Math.min(28, Math.max(16, len * 0.35));
+      const { dw: aw, dh: ah } = fitSpriteSize(arrow, target, target);
       ctx.imageSmoothingEnabled = false;
       ctx.translate(mx, my);
       ctx.rotate(Math.atan2(dy, dx) + Math.PI / 2);
@@ -651,8 +675,7 @@ class Renderer {
     const innerW = innerR - innerL;
 
     const bg = assets.get('bg_field');
-    if (bg) ctx.drawImage(bg, 0, 0, CANVAS_W, CANVAS_H);
-    else {
+    if (!drawFieldBackground(ctx, bg)) {
       const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
       grad.addColorStop(0, '#4cbf52');
       grad.addColorStop(1, '#2a8234');
@@ -661,7 +684,8 @@ class Renderer {
     }
 
     const cols = game.slotCols || BASE_SLOT_COLS;
-    drawDirtPath(ctx, innerL, innerR, cols);
+    // PNG 필드에 흙길이 이미 들어 있음. 프로시저럴 폴백만 고정 위치로 덧그림 (인셋에 따라 늘리지 않음).
+    if (!assets.fromPng('bg_field')) drawDirtPath(ctx);
 
     const camp = assets.get('camp_top');
     if (camp) ctx.drawImage(camp, 0, 0, CANVAS_W, 90);
