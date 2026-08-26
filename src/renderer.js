@@ -3,7 +3,6 @@
 import {
   CANVAS_W, CANVAS_H, DEFEAT_Y, LAUNCHER_Y, LINE_START_Y,
   BALANCE, UNITS, MONSTERS, HEROES, HERO_MISSION_DAMAGE, HERO_ASCENSION_SLOWMO,
-  playfieldExtraInset, BASE_SLOT_COLS,
 } from './config.js';
 import { assets, DIRT_W } from './assets.js';
 import { drawHud } from './hud.js';
@@ -178,15 +177,6 @@ function drawAimArrow(ctx, game) {
   ctx.restore();
 }
 
-function drawFlippedStrip(ctx, img, destX, destW, destY, destH) {
-  if (!img || destW <= 0) return;
-  ctx.save();
-  ctx.translate(destX + destW, destY);
-  ctx.scale(-1, 1);
-  ctx.drawImage(img, 0, 0, destW, destH);
-  ctx.restore();
-}
-
 function drawDirtPath(ctx) {
   const dirt = assets.get('dirt_path');
   const dirtW = DIRT_W;
@@ -198,11 +188,6 @@ function drawDirtPath(ctx) {
     ctx.fillStyle = 'rgba(214, 170, 92, 0.9)';
     ctx.fillRect(dx, y0, dirtW, h);
   }
-}
-
-function drawLoggedBand(ctx, img, x, w, y, h) {
-  if (!img || w <= 0) return;
-  ctx.drawImage(img, x, y, w, h);
 }
 
 function forestPanelSize(img) {
@@ -227,88 +212,24 @@ function drawForestPanel(ctx, img, x, y, w, h, flip) {
   ctx.restore();
 }
 
-function drawSideForest(ctx, cols, left, right) {
+/** Side forests keep aspect ratio and slide off-canvas as the playable inset shrinks. */
+function drawSideForest(ctx, left, right) {
   const forestPng = assets.get('bg_forest');
   const dense = forestPng || assets.get('forest_dense');
-  const logged = assets.get('forest_logged');
-  const edge = assets.get('forest_edge');
-  const y0 = 70;
-  const h = DEFEAT_Y - y0 + 18;
-  const inset3 = playfieldExtraInset(BASE_SLOT_COLS);
-  const inset5 = playfieldExtraInset(5);
-
-  // 고정 폭·종횡비. 인셋이 줄면 얇게 찌그러지지 않고 바깥으로 슬라이드.
   if (dense) {
     const { w: fw, h: fh } = forestPanelSize(dense);
-    drawForestPanel(ctx, dense, left - fw, 0, fw, fh, false);
-    drawForestPanel(ctx, dense, right, 0, fw, fh, true);
+    if (fw > 0) {
+      for (let x = left - fw; x > -fw; x -= fw) {
+        drawForestPanel(ctx, dense, x, 0, fw, fh, false);
+      }
+      for (let x = right; x < CANVAS_W; x += fw) {
+        drawForestPanel(ctx, dense, x, 0, fw, fh, true);
+      }
+    }
   } else if (left > 0) {
     ctx.fillStyle = '#143c1c';
     ctx.fillRect(0, 0, left, CANVAS_H);
     ctx.fillRect(right, 0, CANVAS_W - right, CANVAS_H);
-  }
-
-  // 3→5 벌목대: 그루터기 + 넘어진 통나무 (5칸에서 선명, 7칸에서는 희미한 잔재)
-  if (cols >= 5 && logged) {
-    const band = inset3 - inset5;
-    ctx.save();
-    ctx.globalAlpha = cols >= 7 ? 0.32 : 1;
-    drawLoggedBand(ctx, logged, inset5, band, y0, h);
-    ctx.translate(CANVAS_W - inset5, y0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(logged, 0, 0, band, h);
-    ctx.restore();
-  }
-  // 5→7 벌목대: 가장자리만 얇은 수목선 + 그루터기
-  if (cols >= 7) {
-    if (logged) {
-      ctx.save();
-      ctx.globalAlpha = 0.72;
-      drawLoggedBand(ctx, logged, 0, inset5, y0, h);
-      ctx.translate(CANVAS_W, y0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(logged, 0, 0, inset5, h);
-      ctx.restore();
-    }
-    if (edge) {
-      ctx.drawImage(edge, 0, y0, 16, h);
-      drawFlippedStrip(ctx, edge, CANVAS_W - 16, 16, y0, h);
-    }
-  }
-
-  ctx.save();
-  ctx.strokeStyle = '#1a140c';
-  ctx.lineWidth = 4;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  if (left > 0) {
-    ctx.moveTo(left + 0.5, y0);
-    ctx.lineTo(left + 0.5, y0 + h);
-  }
-  if (right < CANVAS_W) {
-    ctx.moveTo(right - 0.5, y0);
-    ctx.lineTo(right - 0.5, y0 + h);
-  }
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawEdgeProps(ctx, left, right) {
-  const crate = assets.get('prop_crate');
-  const barrel = assets.get('prop_barrel');
-  if (!crate && !barrel) return;
-  const spots = [
-    [left + 18, 170, true],
-    [left + 22, 310, false],
-    [left + 16, 470, true],
-    [right - 18, 190, false],
-    [right - 22, 350, true],
-    [right - 16, 510, false],
-  ];
-  for (const [x, y, isCrate] of spots) {
-    if (x < 8 || x > CANVAS_W - 8) continue;
-    const img = isCrate ? crate : barrel;
-    if (img) ctx.drawImage(img, x - 16, y - 16, 32, 32);
   }
 }
 
@@ -683,7 +604,6 @@ class Renderer {
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     }
 
-    const cols = game.slotCols || BASE_SLOT_COLS;
     // PNG 필드에 흙길이 이미 들어 있음. 프로시저럴 폴백만 고정 위치로 덧그림 (인셋에 따라 늘리지 않음).
     if (!assets.fromPng('bg_field')) drawDirtPath(ctx);
 
@@ -698,8 +618,7 @@ class Renderer {
       ctx.fillRect(0, DEFEAT_Y, CANVAS_W, CANVAS_H - DEFEAT_Y);
     }
 
-    drawSideForest(ctx, cols, innerL, innerR);
-    drawEdgeProps(ctx, innerL, innerR);
+    drawSideForest(ctx, innerL, innerR);
 
     ctx.save();
     ctx.beginPath();

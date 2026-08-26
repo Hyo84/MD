@@ -12,8 +12,6 @@ const ARCHER_SIZE = 128;
 const INK = '#1a140c';
 const LW = 3.2;
 const FOREST_STRIP_W = 100;
-const LOGGED_STRIP_W = 50;
-const EDGE_STRIP_W = 18;
 const DIRT_W = 340;
 
 function makeCanvas(w, h) {
@@ -444,104 +442,6 @@ function bakeForestDense() {
   }
   ctx.fillStyle = '#163818';
   ctx.fillRect(0, 0, 8, CANVAS_H);
-  return canvas;
-}
-
-function paintStump(ctx, x, y, r, rand) {
-  fillEllipse(ctx, x, y + 3, r * 1.15, r * 0.42, 'rgba(0,0,0,0.28)');
-  fillEllipse(ctx, x, y, r, r * 0.42, '#8a5a2c', INK, 2.6);
-  fillEllipse(ctx, x, y - 1, r * 0.78, r * 0.28, '#d4a060', INK, 2);
-  ctx.strokeStyle = '#6a3e18';
-  ctx.lineWidth = 1.3;
-  for (let i = 1; i <= 2; i++) {
-    ellipse(ctx, x, y - 1, r * (0.22 * i), r * (0.08 * i));
-    ctx.stroke();
-  }
-  if (rand() > 0.45) {
-    ctx.save();
-    ctx.translate(x + r * 0.9, y - 2);
-    ctx.rotate(-0.4 + rand() * 0.8);
-    fillRoundRect(ctx, 0, -5, 16 + rand() * 18, 9, 2, '#7a4a22', INK, 2);
-    ctx.restore();
-  }
-}
-
-function bakeForestLogged() {
-  const w = LOGGED_STRIP_W * BG_SCALE;
-  const h = CANVAS_H * BG_SCALE;
-  const { canvas, ctx } = makeCanvas(w, h);
-  ctx.scale(BG_SCALE, BG_SCALE);
-  const g = ctx.createLinearGradient(0, 0, LOGGED_STRIP_W, 0);
-  g.addColorStop(0, '#3aaa40');
-  g.addColorStop(0.45, '#c49a58');
-  g.addColorStop(1, '#d4b06a');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, LOGGED_STRIP_W, CANVAS_H);
-
-  const rand = rng(0x1066ED);
-  for (let i = 0; i < 16; i++) {
-    paintGrassClump(ctx, 6 + rand() * 38, 40 + i * 46 + rand() * 12, 1, rand);
-  }
-  for (let i = 0; i < 11; i++) {
-    paintStump(ctx, 14 + rand() * 24, 70 + i * 64 + rand() * 18, 8 + rand() * 5, rand);
-  }
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 2.4;
-  ctx.fillStyle = '#7a4a22';
-  for (let i = 0; i < 5; i++) {
-    const y = 120 + i * 130;
-    ctx.save();
-    ctx.translate(8, y);
-    ctx.rotate(-0.15);
-    fillRoundRect(ctx, 0, 0, 38, 11, 3, '#7a4a22', INK, 2.4);
-    ctx.restore();
-  }
-  return canvas;
-}
-
-function bakeForestEdge() {
-  const w = EDGE_STRIP_W * BG_SCALE;
-  const h = CANVAS_H * BG_SCALE;
-  const { canvas, ctx } = makeCanvas(w, h);
-  ctx.scale(BG_SCALE, BG_SCALE);
-  const rand = rng(0xED6E);
-  for (let i = 0; i < 18; i++) {
-    paintPineTree(ctx, 7 + rand() * 5, 30 + i * 44 + rand() * 8, 40 + rand() * 22, i % 2 === 0);
-  }
-  return canvas;
-}
-
-function paintBarrel(ctx, x, y, s) {
-  fillEllipse(ctx, x, y + s * 0.38, s * 0.4, s * 0.14, 'rgba(0,0,0,0.3)');
-  fillRoundRect(ctx, x - s * 0.34, y - s * 0.4, s * 0.68, s * 0.74, s * 0.1, '#b87438', INK, 3);
-  ctx.strokeStyle = '#3a2414';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(x - s * 0.34, y - s * 0.16);
-  ctx.lineTo(x + s * 0.34, y - s * 0.16);
-  ctx.moveTo(x - s * 0.34, y + s * 0.12);
-  ctx.lineTo(x + s * 0.34, y + s * 0.12);
-  ctx.stroke();
-  fillEllipse(ctx, x, y - s * 0.4, s * 0.34, s * 0.11, '#d4944c', INK, 2.4);
-}
-
-function paintCrate(ctx, x, y, s) {
-  fillEllipse(ctx, x, y + s * 0.34, s * 0.42, s * 0.12, 'rgba(0,0,0,0.28)');
-  fillRoundRect(ctx, x - s * 0.36, y - s * 0.32, s * 0.72, s * 0.64, 3, '#c48a40', INK, 3);
-  ctx.strokeStyle = '#5a3418';
-  ctx.lineWidth = 2.4;
-  ctx.beginPath();
-  ctx.moveTo(x - s * 0.36, y);
-  ctx.lineTo(x + s * 0.36, y);
-  ctx.moveTo(x, y - s * 0.32);
-  ctx.lineTo(x, y + s * 0.32);
-  ctx.stroke();
-}
-
-function bakeProp(kind) {
-  const { canvas, ctx } = makeCanvas(64, 64);
-  if (kind === 'barrel') paintBarrel(ctx, 32, 34, 46);
-  else paintCrate(ctx, 32, 34, 46);
   return canvas;
 }
 
@@ -1095,10 +995,6 @@ class AssetManager {
       raw.set('bg_field', bakeBgField());
       raw.set('dirt_path', bakeDirtPath());
       raw.set('forest_dense', bakeForestDense());
-      raw.set('forest_logged', bakeForestLogged());
-      raw.set('forest_edge', bakeForestEdge());
-      raw.set('prop_crate', bakeProp('crate'));
-      raw.set('prop_barrel', bakeProp('barrel'));
       raw.set('wall_bottom', bakeWallBottom());
       raw.set('camp_top', bakeCampTop());
       raw.set('hud_top', bakeHudTop());
@@ -1119,4 +1015,4 @@ class AssetManager {
 }
 
 export const assets = new AssetManager();
-export { UNIT_SIZE, MONSTER_SIZE, BOSS_SIZE, FOREST_STRIP_W, LOGGED_STRIP_W, EDGE_STRIP_W, DIRT_W };
+export { UNIT_SIZE, MONSTER_SIZE, BOSS_SIZE, FOREST_STRIP_W, DIRT_W };
