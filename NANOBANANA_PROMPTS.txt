@@ -5,8 +5,15 @@ KnightSlide (MD) — 중세 슬라이드 & 머지 디펜스
 1. 한 번에 프롬프트 하나만 붙여넣기. (여러 개를 한꺼번에 넣지 말 것)
 2. 각 블록의 PROMPT: 아래 영어 문단만 복사해서 Nano Banana에 붙여넣는다.
 3. 결과 파일명을 아래 FILE 이름으로 저장한다. (예: ally_t01.png)
-4. 유닛(15장)은 투명 배경 PNG. 배경(4장)은 불투명 450x800 PNG.
-5. 아군은 뒤에서 본 뒷모습(위로 진군). 적은 카메라를 보는 정면.
+4. 유닛(15장)은 128x128. 배경이 투명이면 그대로 쓰고, 아니면 순수 마젠타 #FF00FF 로 받아서 나중에 키아웃한다.
+5. 아군은 뒤에서 본 뒷모습만 (카메라에서 멀어지며 위로 진군). 적은 카메라를 보는 정면만.
+6. 배경(4장)은 불투명 450x800 PNG. 유닛/인물 없음. 한 장의 장면이지 콜라주가 아님.
+
+나노바나나가 자주 무시하는 것:
+- 한 이미지에 여러 캐릭터/변형을 그림
+- 1024 컨셉 시트가 됨
+- 흰 배경 (투명 대신)
+해결: 아래 금지 문구를 모든 PROMPT에 포함. 투명 안 되면 배경을 순수 마젠타 #FF00FF 로 달라고 하고 우리가 나중에 키아웃.
 
 총 개수: 유닛 15 + 배경 4 = 19
   - 아군 10: ally_t01.png ~ ally_t10.png  (T1 민병대 → T10 영웅)
@@ -17,134 +24,354 @@ KnightSlide (MD) — 중세 슬라이드 & 머지 디펜스
 -----------------------------------------
 FILE: ally_t01.png
 용도: 아군 T1 뒷모습 (민병대)
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM BEHIND: peasant militia marching away from the camera UP the battlefield, rear view only, back of head, back of tunic, walking pose. Character: cheap medieval militia, tan wheat-colored ragged tunic matching #D2B48C, patched brown trousers, wrapped cloth gaiters, no metal armor, no helmet, short messy brown hair, wooden pitchfork or crude wooden spear on the back/shoulder, small cloth sack, skinny poor farmer-soldier, readable chunky pixels. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one peasant filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three peasants, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of head, back of tunic. Never face, never three-quarter, never side profile.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: cheap medieval militia peasant, tan wheat-colored ragged tunic matching #D2B48C, patched brown trousers, wrapped cloth gaiters, no metal armor, no helmet, short messy brown hair seen from behind, wooden pitchfork or crude wooden spear on the back/shoulder, small cloth sack, skinny poor farmer-soldier, readable chunky pixels.
 
 -----------------------------------------
 FILE: ally_t02.png
 용도: 아군 T2 뒷모습 (신병)
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM BEHIND: army recruit marching away from the camera UP the battlefield, rear view only, back of helmet, back of padded armor, walking pose. Character: medieval recruit, dull tan padded jack matching #C2A679, simple round iron cap helmet, wooden round shield strapped on the back, short spear, leather belt, slightly sturdier than a peasant, no fancy cape. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one recruit filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of helmet, back of padded armor. Never face, never three-quarter, never side profile.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: medieval army recruit, dull tan padded jack matching #C2A679, simple round iron cap helmet seen from behind, wooden round shield strapped on the back, short spear, leather belt, slightly sturdier than a peasant, no fancy cape.
 
 -----------------------------------------
 FILE: ally_t03.png
 용도: 아군 T3 뒷모습 (경보병)
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM BEHIND: light infantryman marching away from the camera UP the battlefield, rear view only, back of bronze helmet, back of leather cuirass, walking pose. Character: medieval light infantry, bronze-brown leather armor matching #CD7F32, bronze nasal helmet, short sword at the hip, small buckler on the back, leather bracers, more professional soldier than a recruit. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one light infantryman filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of bronze helmet, back of leather cuirass. Never face, never three-quarter, never side profile.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: medieval light infantry, bronze-brown leather armor matching #CD7F32, bronze nasal helmet seen from behind, short sword at the hip, small buckler on the back, leather bracers, more professional soldier than a recruit.
 
 -----------------------------------------
 FILE: ally_t04.png
 용도: 아군 T4 뒷모습 (중보병)
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM BEHIND: heavy infantryman marching away from the camera UP the battlefield, rear view only, back of kettle helm, back of chainmail, kite shield on the back, walking pose. Character: medieval heavy infantry, slate-gray chainmail hauberk matching #708090, kettle hat helmet, large kite shield strapped on the back, spear, mail coif, bulky armored silhouette clearly heavier than light infantry. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one heavy infantryman filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of kettle helm, back of chainmail, kite shield on the back. Never face, never three-quarter, never side profile.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: medieval heavy infantry, slate-gray chainmail hauberk matching #708090, kettle hat helmet seen from behind, large kite shield strapped on the back, spear, mail coif, bulky armored silhouette clearly heavier than light infantry.
 
 -----------------------------------------
 FILE: ally_t05.png
 용도: 아군 T5 뒷모습 (기사단원)
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM BEHIND: knight marching away from the camera UP the battlefield, rear view only, back of visored helm, back of plate and tabard, walking pose. Character: medieval knight, steel-blue plate armor matching #4682B4, blue tabard with a simple cross, visored bascinet helmet, heater shield on the back, longsword, knightly capelet, clean noble military silhouette. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one knight filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of visored helm, back of plate and tabard. Never face, never three-quarter, never side profile.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: medieval knight, steel-blue plate armor matching #4682B4, blue tabard with a simple cross on the back, visored bascinet helmet seen from behind, heater shield on the back, longsword, knightly capelet, clean noble military silhouette.
 
 -----------------------------------------
 FILE: ally_t06.png
 용도: 아군 T6 뒷모습 (근위대장)
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM BEHIND: guard captain marching away from the camera UP the battlefield, rear view only, back of crested helm, flowing cape, ornate plate, walking pose. Character: medieval captain of the royal guard, royal-blue ornate plate matching #4169E1, gold trim, long blue officer cape, helmet with a tall plume/crest, decorated pauldrons, command baton or fine sword, taller more impressive silhouette than a regular knight. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one guard captain filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of crested helm, flowing cape, ornate plate. Never face, never three-quarter, never side profile.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: medieval captain of the royal guard, royal-blue ornate plate matching #4169E1, gold trim, long blue officer cape seen from behind, helmet with a tall plume/crest, decorated pauldrons, command baton or fine sword, taller more impressive silhouette than a regular knight.
 
 -----------------------------------------
 FILE: ally_t07.png
 용도: 아군 T7 뒷모습 (성기사)
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM BEHIND: holy paladin marching away from the camera UP the battlefield, rear view only, back of great helm with a cross, white-gold cape, walking pose. Character: medieval paladin, white and gold holy plate armor matching #FFD700 gold, glowing gold cross on the back of the cape, great helm with a cross crest, warhammer or holy longsword, saintly radiant trim in hard pixels not blur, sacred knight silhouette. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one paladin filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of great helm with a cross, white-gold cape. Never face, never three-quarter, never side profile.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: medieval paladin, white and gold holy plate armor matching #FFD700 gold, glowing gold cross on the back of the cape, great helm with a cross crest seen from behind, warhammer or holy longsword, saintly radiant trim in hard pixels not blur, sacred knight silhouette.
 
 -----------------------------------------
 FILE: ally_t08.png
 용도: 아군 T8 뒷모습 (드래곤가디언)
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM BEHIND: dragon guardian marching away from the camera UP the battlefield, rear view only, back of horned dragon helm, dragon-scale armor, huge weapon, walking pose. Character: elite dragon guardian, dark crimson dragon-scale plate matching #8B0000, horned dragon helmet, spined pauldrons like wings, massive two-handed greatsword on the back, ember-red accents in hard pixels, bulky draconic silhouette clearly larger than a paladin. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one dragon guardian filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of horned dragon helm, dragon-scale armor, huge weapon. Never face, never three-quarter, never side profile.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: elite dragon guardian, dark crimson dragon-scale plate matching #8B0000, horned dragon helmet seen from behind, spined pauldrons like wings, massive two-handed greatsword on the back, ember-red accents in hard pixels, bulky draconic silhouette clearly larger than a paladin.
 
 -----------------------------------------
 FILE: ally_t09.png
 용도: 아군 T9 뒷모습 (대원수)
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM BEHIND: field marshal marching away from the camera UP the battlefield, rear view only, back of ornate marshal helm, imperial cloak, walking pose. Character: legendary marshal, deep indigo and purple ornate armor matching #4B0082, gold embroidery, long imperial cloak with a star or eagle emblem on the back, marshal's crested helm, decorated greatsword or marshal baton, commanding oversized silhouette, royal and severe. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one field marshal filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of ornate marshal helm, imperial cloak. Never face, never three-quarter, never side profile.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: legendary marshal, deep indigo and purple ornate armor matching #4B0082, gold embroidery, long imperial cloak with a star or eagle emblem on the back, marshal's crested helm seen from behind, decorated greatsword or marshal baton, commanding oversized silhouette, royal and severe.
 
 -----------------------------------------
 FILE: ally_t10.png
 용도: 아군 T10 뒷모습 (영웅)
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM BEHIND: golden legendary hero marching away from the camera UP the battlefield, rear view only, back of crowned helm, glowing golden cape, walking pose. Character: the ultimate golden hero, shining gold plate armor with orange-red accents matching #FF4500, long fiery golden cape, crowned or laurel hero helmet, mythic two-handed sword on the back, largest thickest silhouette of the ally roster, legendary and unmistakable, hard-pixel gold highlights not blur. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one legendary hero filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM BEHIND. Rear view only. Walking away from the camera UP the battlefield. Back of crowned helm, glowing golden cape. Never face, never three-quarter, never side profile.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: the ultimate golden hero, shining gold plate armor with orange-red accents matching #FF4500, long fiery golden cape seen from behind, crowned or laurel hero helmet, mythic two-handed sword on the back, largest thickest silhouette of the ally roster, legendary and unmistakable, hard-pixel gold highlights not blur.
 
 -----------------------------------------
 FILE: enemy_goblin.png
 용도: 적 고블린 정면
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM THE FRONT: facing the camera, looking at the player, aggressive small-monster pose. Character: goblin, small hunched green-skinned creature matching #3CB371, huge pointed ears, yellow eyes, snaggle teeth, crude rusty dagger or club, ragged brown loincloth, skinny arms, mean and cowardly, clearly smaller than an orc. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one goblin filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three goblins, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM THE FRONT. Facing the camera, looking at the player. Front view only. Aggressive small-monster pose. Never rear view, never three-quarter, never side profile, never a group.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: goblin, small hunched green-skinned creature matching #3CB371, huge pointed ears, yellow eyes, snaggle teeth, crude rusty dagger or club, ragged brown loincloth, skinny arms, mean and cowardly, clearly smaller than an orc.
 
 -----------------------------------------
 FILE: enemy_orc.png
 용도: 적 오크 정면
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM THE FRONT: facing the camera, looking at the player, aggressive warrior pose. Character: orc warrior, bulky olive-green brute matching #6B8E23, tusks, heavy brow, crude iron axe, scraps of leather armor, thick muscular arms, mean grunt, larger and heavier than a goblin, not a warlord. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one orc filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three orcs, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM THE FRONT. Facing the camera, looking at the player. Front view only. Aggressive warrior pose. Never rear view, never three-quarter, never side profile, never a group.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: orc warrior, bulky olive-green brute matching #6B8E23, tusks, heavy brow, crude iron axe, scraps of leather armor, thick muscular arms, mean grunt, larger and heavier than a goblin, not a warlord.
 
 -----------------------------------------
 FILE: enemy_skeleton.png
 용도: 적 스켈레톤 정면
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM THE FRONT: facing the camera, looking at the player, undead idle pose. Character: skeleton warrior, bleached bone matching #DCDCDC, dark empty eye sockets, rusty notched sword, tattered dark-gray rags, ribcage clearly visible, skull facing camera, thin bony limbs, menacing but lighter than an orc. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one skeleton filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three skeletons, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM THE FRONT. Facing the camera, looking at the player. Front view only. Undead idle pose. Never rear view, never three-quarter, never side profile, never a group.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: skeleton warrior, bleached bone matching #DCDCDC, dark empty eye sockets, rusty notched sword, tattered dark-gray rags, ribcage clearly visible, skull facing camera, thin bony limbs, menacing but lighter than an orc.
 
 -----------------------------------------
 FILE: enemy_troll.png
 용도: 적 동굴 트롤 정면
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM THE FRONT: facing the camera, looking at the player, hulking cave-monster pose. Character: cave troll, huge hunched giant matching #556B2F mossy dark olive, warty stone-like skin, tiny mean eyes, massive stone club, moss and rock patches on shoulders, long arms, much larger silhouette than orc or skeleton, cave brute not a boss warlord. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one cave troll filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three trolls, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM THE FRONT. Facing the camera, looking at the player. Front view only. Hulking cave-monster pose. Never rear view, never three-quarter, never side profile, never a group.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: cave troll, huge hunched giant matching #556B2F mossy dark olive, warty stone-like skin, tiny mean eyes, massive stone club, moss and rock patches on shoulders, long arms, much larger silhouette than orc or skeleton, cave brute not a boss warlord.
 
 -----------------------------------------
 FILE: enemy_boss.png
 용도: 적 보스 오크 워로드 정면
-크기: 128x128 pixel art, transparent
+크기: 128x128 pixel art, magenta #FF00FF or transparent
 PROMPT:
-128x128 pixel art 2D game sprite, limited 12-color palette, hard square pixels, no anti-aliasing, no blur, no smooth gradients, no photorealism, no 3D render, nearest-neighbor pixel art, thick readable silhouette, isolated single character, full body centered with a small margin, transparent background, no ground, no drop shadow, no text, no UI, no watermark. VIEW FROM THE FRONT: facing the camera, looking at the player, commanding boss pose. Character: orc warlord boss, massive elite orc matching #B22222 crimson, heavy red-black war plate, horned warlord helmet, huge two-handed battleaxe, tusks, cape of dark fur, widest thickest enemy silhouette, clearly the boss not a normal orc. One character only.
+STRICT OUTPUT: exactly ONE character, ONE pose, ONE sprite. Output MUST be a single 128x128 game sprite of one orc warlord filling MOST of the frame (large centered full-body). Finished in-game asset, not a layout.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, two versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", three bosses, three characters, lineup, reference sheet, concept art layout, 1024 concept sheet, white background, extra figures, duplicate poses, front-and-back pair, left-right-back views.
+
+STYLE: pixel art sprite, 128x128, 1x scale chunky pixels (large visible squares, not tiny HD pixels), limited 12-color palette plus magenta, thick black outline, NO anti-aliasing, NO blur, NO smooth gradients, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+CAMERA: strictly FROM THE FRONT. Facing the camera, looking at the player. Front view only. Commanding boss pose. Never rear view, never three-quarter, never side profile, never a group.
+
+BACKGROUND: solid flat pure magenta #FF00FF filling every non-character pixel (easier than transparency for this model). If the model can do true transparency, transparent is also acceptable. No white. No checkerboard. No ground. No drop shadow. No sky.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Character: orc warlord boss, massive elite orc matching #B22222 crimson, heavy red-black war plate, horned warlord helmet, huge two-handed battleaxe, tusks, cape of dark fur, widest thickest enemy silhouette, clearly the boss not a normal orc.
 
 -----------------------------------------
 FILE: bg_field.png
 용도: 배경 들판 전장
 크기: 450x800 opaque pixel-art scene
 PROMPT:
-pixel art landscape 450x800, portrait 9:16 vertical game background, opaque, no transparency, limited 16-color palette, hard square pixels, no anti-aliasing, no blur, no photorealism, no 3D render, nearest-neighbor pixel art, 2D game scene. Empty vertical battlefield lane: dirt and trampled grass path down the center for units to march, wild grass and low bushes on both sides, distant rolling hills and a pale sky at the TOP, closer packed earth at the BOTTOM (player side). No characters, no soldiers, no archers, no animals, no UI, no text, no watermark, no frame. Medieval merge-defense playfield, readable open lane, chunky pixels.
+STRICT OUTPUT: exactly ONE image, ONE scene, ONE background. A single 450x800 portrait game backdrop filling the whole frame. Not a layout, not a set of variants.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, animals, UI mockup.
+
+STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+NO UNITS. Empty scenery only. Never draw characters.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Scene: dirt and trampled grass path down the CENTER for units to march later, wild grass and low bushes on both sides, distant rolling hills and a pale sky at the TOP, closer packed earth at the BOTTOM (player side). Medieval merge-defense playfield, readable open lane.
 
 -----------------------------------------
 FILE: bg_camp.png
 용도: 배경 아군 진영
 크기: 450x800 opaque pixel-art scene
 PROMPT:
-pixel art landscape 450x800, portrait 9:16 vertical game background, opaque, no transparency, limited 16-color palette, hard square pixels, no anti-aliasing, no blur, no photorealism, no 3D render, nearest-neighbor pixel art, 2D game scene. Army camp looking UP a vertical lane: clustered medieval tents, supply crates, banners, campfire rings and wooden palisade pieces at the BOTTOM (player camp), then an open dirt road going upward through grass toward distant fields and sky at the TOP. Keep the center lane mostly clear for sprites. No people, no soldiers, no archers, no faces, no UI, no text, no watermark. Chunky medieval pixel-art camp.
+STRICT OUTPUT: exactly ONE image, ONE scene, ONE background. A single 450x800 portrait game backdrop filling the whole frame. Not a layout, not a set of variants.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, animals, UI mockup.
+
+STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+NO UNITS. Empty scenery only. Never draw characters. No faces.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Scene: army camp looking UP a vertical lane: clustered medieval tents, supply crates, banners, campfire rings and wooden palisade pieces at the BOTTOM (player camp), then an open dirt road going upward through grass toward distant fields and sky at the TOP. Keep the center lane mostly clear for sprites. Chunky medieval pixel-art camp.
 
 -----------------------------------------
 FILE: bg_wall.png
 용도: 배경 방어벽 (궁수 없음)
 크기: 450x800 opaque pixel-art scene
 PROMPT:
-pixel art landscape 450x800, portrait 9:16 vertical game background, opaque, no transparency, limited 16-color palette, hard square pixels, no anti-aliasing, no blur, no photorealism, no 3D render, nearest-neighbor pixel art, 2D game scene. Stone defensive wall across the LOWER third of the portrait: battlements, merlons, arrow slits, weathered gray masonry, wooden gate hint in the center, empty wall-walk. Beyond the wall (UPPER two-thirds) an open field and distant treeline under sky. NO archers on the wall, no soldiers, no people, no faces, no bows, no UI, no text, no watermark. The wall itself is empty architecture only. Center keep a clear vertical playable gap above the wall.
+STRICT OUTPUT: exactly ONE image, ONE scene, ONE background. A single 450x800 portrait game backdrop filling the whole frame. Not a layout, not a set of variants.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, archers, faces, bows, animals, UI mockup.
+
+STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+NO UNITS. Empty architecture only. Never draw characters. NO archers on the wall.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Scene: stone defensive wall across the LOWER third of the portrait: battlements, merlons, arrow slits, weathered gray masonry, wooden gate hint in the center, empty wall-walk. Beyond the wall (UPPER two-thirds) an open field and distant treeline under sky. Center keep a clear vertical playable gap above the wall.
 
 -----------------------------------------
 FILE: bg_forest.png
 용도: 배경 숲
 크기: 450x800 opaque pixel-art scene
 PROMPT:
-pixel art landscape 450x800, portrait 9:16 vertical game background, opaque, no transparency, limited 16-color palette, hard square pixels, no anti-aliasing, no blur, no photorealism, no 3D render, nearest-neighbor pixel art, 2D game scene. Dense medieval forest with a clear dirt path down the CENTER for units to march. Tall pine and oak trunks and canopy crowding LEFT and RIGHT edges, moss, ferns, fallen logs at the sides, darker woods toward the TOP, slightly more open path at the BOTTOM. Dappled hard-pixel light, no blur. No characters, no soldiers, no archers, no animals, no UI, no text, no watermark. Chunky 2D pixel-art forest lane.
+STRICT OUTPUT: exactly ONE image, ONE scene, ONE background. A single 450x800 portrait game backdrop filling the whole frame. Not a layout, not a set of variants.
+
+FORBIDDEN: character sheet, model sheet, turnaround, three versions, collage, comparison, comparison grid, multiple copies, triptych, "three peasants", split panel, concept art layout, 1024 concept sheet, extra figures, units, soldiers, people, animals, UI mockup.
+
+STYLE: pixel art landscape, 450x800, 1x scale chunky pixels (large visible squares, not tiny HD pixels), portrait 9:16 vertical game background, opaque, limited 16-color palette, thick readable shapes, NO anti-aliasing, NO blur, NO photorealism, NO 3D render, nearest-neighbor pixel art.
+
+NO UNITS. Empty scenery only. Never draw characters.
+
+NO TEXT, NO UI, NO WATERMARK, NO LABELS, NO EXTRA FIGURES.
+
+Scene: dense medieval forest with a clear dirt path down the CENTER for units to march later. Tall pine and oak trunks and canopy crowding LEFT and RIGHT edges, moss, ferns, fallen logs at the sides, darker woods toward the TOP, slightly more open path at the BOTTOM. Dappled hard-pixel light, no blur. Chunky 2D pixel-art forest lane.
 
 -----------------------------------------
