@@ -185,6 +185,8 @@ export function setupAdmin(game) {
     numberRow('최단 스폰 간격 (s)', BALANCE, 'spawnIntervalFloor', 0.05),
     numberRow('캠프 침입 배율 최소', BALANCE, 'spawnCampRaidMin', 0.1),
     numberRow('캠프 침입 배율 최대', BALANCE, 'spawnCampRaidMax', 0.1),
+    numberRow('보스 호위 부하 수', BALANCE, 'bossEscortCount', 1),
+    numberRow('보스전 부하 상한', BALANCE, 'bossMinionCap', 1),
     numberRow('발사 쿨다운 (s)', BALANCE, 'launchCooldown', 0.1),
     numberRow('발사 속도 (px/s)', BALANCE, 'launchSpeed', 10),
     numberAt('진군 R0 (스킬 없음)', BALANCE.advanceSpeedByRank, 0, 1),
@@ -304,6 +306,7 @@ export function setupAdmin(game) {
     e.stopPropagation();
     game.start();
   });
+  btn.addEventListener('click', (e) => e.stopPropagation());
   chromeRight.append(restart, btn);
 
   const toggle = () => panel.classList.toggle('hidden');

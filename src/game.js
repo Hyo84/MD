@@ -596,13 +596,12 @@ export class Game {
     // 실효 배율 = 웨이브 곡선 × 실시간 수동 배율 (HP는 스냅샷, ATK/라인속도는 liveMult 즉시 반영)
     const waveMult = waveMultiplier(this.wave);
     const hp = Math.round(stat.hp * effectiveMult(this.wave, this.liveMult));
-    const slotY = this.lineY - row * SLOT_ROW_H;
-    // 보스는 전열 중앙에 즉시 착지해 라인을 민다. 잡몹은 화면 상단에서 합류.
+    const slotY = isBoss ? this.lineY : (this.lineY - row * SLOT_ROW_H);
     const spawnY = ENEMY_SPAWN_Y;
-    const joining = isBoss ? false : spawnY < slotY - JOIN_ARRIVE_EPS;
+    const joining = spawnY < slotY - JOIN_ARRIVE_EPS;
     const m = {
       key, isBoss, row, col, x: isBoss ? this._playfieldCenterX() : x,
-      y: isBoss ? this.lineY : (joining ? spawnY : slotY),
+      y: joining ? spawnY : slotY,
       joining,
       hp, maxHp: hp, waveMult,
       attackCd: Math.random() * 0.4,
@@ -610,12 +609,9 @@ export class Game {
     };
     this.enemies.push(m);
 
-    if (isBoss) {
-      this._displaceOverlapping(m);
-      this._compactEnemySlots();
-    }
+    if (isBoss) this._compactEnemySlots();
 
-    if (!isBoss) this.waveTrashSpawned = (this.waveTrashSpawned || 0) + 1;
+    if (!isBoss && !this.bossActive) this.waveTrashSpawned = (this.waveTrashSpawned || 0) + 1;
     this.effects.burst(m.x, m.y, stat.color, 8, 2.5, 2.5);
     return m;
   }
@@ -927,13 +923,7 @@ export class Game {
   _updateSpawning(dt) {
     if (this.bossWarnT > 0) {
       this.bossWarnT -= dt;
-      if (this.bossWarnT <= 0) {
-        this._spawnEnemy('boss');
-        this.bossActive = true;
-        this._markBossGather();
-        this.effects.burst(CANVAS_W / 2, ENEMY_SPAWN_Y, '#B22222', 30, 5, 5);
-        this.effects.floatText(CANVAS_W / 2, 330, '보스 출현! 병력 집결!', '#FF9040', 26, 2.0);
-      }
+      if (this.bossWarnT <= 0) this._beginBossArrival();
       return;
     }
 
@@ -941,6 +931,11 @@ export class Game {
       this.bossPending = true;
       this.bossWarnT = 1.6;
       this.effects.floatText(CANVAS_W / 2, 250, '⚠ 보스 출현! ⚠', '#FF3030', 30, 1.6);
+      return;
+    }
+
+    if (this.bossActive) {
+      this._updateBossMinionSpawning(dt);
       return;
     }
 
@@ -954,12 +949,55 @@ export class Game {
     this._spawnEnemy(this._pickMonster());
   }
 
+  _bossMinionCap() {
+    return Math.max(0, Math.round(BALANCE.bossMinionCap ?? 4));
+  }
+
+  _beginBossArrival() {
+    this._spawnEnemy('boss');
+    this.bossActive = true;
+    this._markBossGather();
+    const escort = Math.max(0, Math.round(BALANCE.bossEscortCount ?? 3));
+    const cap = this._bossMinionCap();
+    for (let i = 0; i < escort; i++) {
+      if (this._livingTrashEnemies() >= cap) break;
+      this._spawnEnemy(this._pickMonster());
+    }
+    this.spawnTimer = this._waveSpawnInterval();
+    this.effects.burst(CANVAS_W / 2, ENEMY_SPAWN_Y, '#B22222', 30, 5, 5);
+    this.effects.floatText(CANVAS_W / 2, 330, '보스 출현! 병력 집결!', '#FF9040', 26, 2.0);
+  }
+
+  _updateBossMinionSpawning(dt) {
+    const cap = this._bossMinionCap();
+    if (this._livingTrashEnemies() >= cap) return;
+    this.spawnTimer -= dt * this._campRaidMult();
+    if (this.spawnTimer > 0) return;
+    this.spawnTimer = this._waveSpawnInterval() * (0.82 + Math.random() * 0.36);
+    if (this._livingTrashEnemies() >= cap) return;
+    this._spawnEnemy(this._pickMonster());
+  }
+
+  _dismissBossMinions() {
+    const leftover = this.enemies.filter((m) => !m.dead && !m.isBoss);
+    if (leftover.length === 0) return;
+    for (const m of leftover) {
+      const stat = MONSTERS[m.key];
+      this.effects.burst(m.x, m.y, stat.color, 10, 3, 3);
+      m.dead = true;
+    }
+    this.enemies = this.enemies.filter((m) => !m.dead);
+    this._compactEnemySlots();
+    this.effects.floatText(CANVAS_W / 2, 280, '잔당 도주!', '#c9b48a', 18, 1.2);
+  }
+
   _onEnemyKilled(m) {
     const stat = MONSTERS[m.key];
     this._grantScore(stat.score);
     this.effects.burst(m.x, m.y, stat.color, 12, 3, 3);
     this.effects.floatText(m.x, m.y - 20, `+${stat.score}`, '#ffd', 13, 0.7);
     if (m.isBoss) {
+      this._dismissBossMinions();
       const bonus = Math.round(PROGRESSION.bossXpPerWave * this.wave);
       this._addRunXp(bonus);
       this.effects.floatText(CANVAS_W / 2, 360, `보스 XP +${bonus}`, '#ffd27a', 18, 1.4);

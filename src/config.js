@@ -23,6 +23,8 @@ export const BALANCE = {
   spawnIntervalFloor: 0.9,  // 최단 스폰 간격 (초)
   spawnCampRaidMin: 2,  // 캠프 침입 시 투입 배율 하한
   spawnCampRaidMax: 3,  // 캠프 침입 시 투입 배율 상한
+  bossEscortCount: 3,   // 보스와 함께 캠프에서 내려오는 부하 수
+  bossMinionCap: 4,     // 보스전 중 필드에 유지할 최대 부하 수
   launchCooldown: 1.9,  // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
   launchSpeed: 720,     // 발사 돌진 (px/초). 짧은 버스트 후 진군 테이블로 걸음
   unitAdvanceSpeed: 28, // 진군 테이블이 없을 때 폴백 (px/초)

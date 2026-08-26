@@ -1,18 +1,11 @@
 const STORAGE_KEY = 'md.knightslide.viewScale';
 const BASE_W = 450;
 const BASE_H = 800;
-const CHROME_GAP = 6;
-
-function chromeReserve() {
-  const chrome = document.getElementById('topChrome');
-  const h = chrome ? chrome.offsetHeight : 44;
-  return h + CHROME_GAP;
-}
 
 function maxFitScale() {
   const vv = window.visualViewport;
   const w = vv?.width ?? window.innerWidth;
-  const h = (vv?.height ?? window.innerHeight) - chromeReserve();
+  const h = vv?.height ?? window.innerHeight;
   return Math.max(0.25, Math.min(w / BASE_W, h / BASE_H));
 }
 
@@ -24,8 +17,7 @@ function loadMode() {
 
 export function setupViewScale(onScale) {
   const wrap = document.getElementById('wrap');
-  const chrome = document.getElementById('topChrome');
-  const host = document.getElementById('scaleHost') || chrome || document.body;
+  const host = document.getElementById('scaleHost') || document.getElementById('chromeLeft') || wrap;
   const bar = document.createElement('div');
   bar.id = 'scaleBar';
   bar.setAttribute('aria-label', '화면 크기');
@@ -43,10 +35,8 @@ export function setupViewScale(onScale) {
     wrap.classList.remove('view-fit');
     const want = mode === 'full' ? maxFitScale() : Number(mode);
     const used = Math.min(want, maxFitScale());
-    const boardW = `${BASE_W * used}px`;
-    wrap.style.width = boardW;
+    wrap.style.width = `${BASE_W * used}px`;
     wrap.style.height = `${BASE_H * used}px`;
-    if (chrome) chrome.style.width = boardW;
     onScale?.(used);
     bar.title = mode !== 'full' && used + 0.02 < want
       ? `화면이 작아 ${want}배를 다 넣을 수 없어 ${used.toFixed(2)}배로 맞춥니다.`
@@ -79,7 +69,10 @@ export function setupViewScale(onScale) {
     btn.type = 'button';
     btn.dataset.mode = m.id;
     btn.textContent = m.label;
-    btn.addEventListener('click', () => setMode(m.id));
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setMode(m.id);
+    });
     bar.append(btn);
   }
 

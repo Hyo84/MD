@@ -108,13 +108,14 @@ function requireName(id) {
 
 export function setupSkillsUi(game, meta) {
   const wrap = document.getElementById('wrap');
+  const left = document.getElementById('chromeLeft') || wrap;
 
   const btn = document.createElement('button');
   btn.id = 'skillBtn';
   btn.type = 'button';
   btn.textContent = '스킬';
   btn.title = '스킬 패널 (K)';
-  wrap.appendChild(btn);
+  left.appendChild(btn);
 
   const panel = document.createElement('div');
   panel.id = 'skillPanel';
@@ -240,7 +241,7 @@ export function setupSkillsUi(game, meta) {
 
   const updateBtn = () => {
     const pts = meta.skillPoints;
-    btn.textContent = pts > 0 ? `스킬 · ${pts}` : '스킬';
+    btn.textContent = pts > 0 ? `스킬\n${pts}` : '스킬';
     btn.classList.toggle('has-points', pts > 0);
   };
 
