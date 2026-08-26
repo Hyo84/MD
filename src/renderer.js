@@ -19,6 +19,7 @@ export function colorAlpha(hex, a) {
 function drawSprite(ctx, img, x, y, w, h, opts = {}) {
   if (!img) return false;
   ctx.save();
+  ctx.imageSmoothingEnabled = false;
   if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
   if (opts.flash) ctx.filter = 'brightness(2.4) saturate(0.4)';
   if (opts.stretchY && opts.stretchY !== 1) {
@@ -182,7 +183,8 @@ function drawLoggedBand(ctx, img, x, w, y, h) {
 }
 
 function drawSideForest(ctx, cols, left, right) {
-  const dense = assets.get('forest_dense');
+  const forestPng = assets.get('bg_forest');
+  const dense = forestPng || assets.get('forest_dense');
   const logged = assets.get('forest_logged');
   const edge = assets.get('forest_edge');
   const y0 = 70;
@@ -190,20 +192,28 @@ function drawSideForest(ctx, cols, left, right) {
   const inset3 = playfieldExtraInset(BASE_SLOT_COLS);
   const inset5 = playfieldExtraInset(5);
 
-  // 남은 인셋 = 아직 벌목되지 않은 울창한 소나무 장벽
+  // 남은 인셋 = 아직 벌목되지 않은 울창한 소나무 장벽 (PNG 있으면 bg_forest)
   const drawDense = (destX, destW, flip) => {
     if (destW <= 0) return;
     if (dense) {
-      const iw = dense.width;
-      const ih = dense.height;
-      const srcW = Math.max(1, (destW / FOREST_STRIP_W) * iw);
       if (flip) {
         ctx.save();
         ctx.translate(destX + destW, y0);
         ctx.scale(-1, 1);
-        ctx.drawImage(dense, 0, 0, srcW, ih, 0, 0, destW, h);
+        if (forestPng) ctx.drawImage(dense, 0, 0, destW, h);
+        else {
+          const iw = dense.width;
+          const ih = dense.height;
+          const srcW = Math.max(1, (destW / FOREST_STRIP_W) * iw);
+          ctx.drawImage(dense, 0, 0, srcW, ih, 0, 0, destW, h);
+        }
         ctx.restore();
+      } else if (forestPng) {
+        ctx.drawImage(dense, destX, y0, destW, h);
       } else {
+        const iw = dense.width;
+        const ih = dense.height;
+        const srcW = Math.max(1, (destW / FOREST_STRIP_W) * iw);
         ctx.drawImage(dense, 0, 0, srcW, ih, destX, y0, destW, h);
       }
     } else {
@@ -339,15 +349,31 @@ function drawWallHp(ctx, game, left, right) {
 }
 
 function drawArchers(ctx, game) {
+  const arrow = assets.get('arrow');
   for (const shot of game.archerShots) {
+    const alpha = Math.max(0, shot.life / 0.12);
     ctx.save();
-    ctx.globalAlpha = Math.max(0, shot.life / 0.12);
-    ctx.strokeStyle = '#e8ff9a';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(shot.x1, shot.y1);
-    ctx.lineTo(shot.x2, shot.y2);
-    ctx.stroke();
+    ctx.globalAlpha = alpha;
+    if (arrow) {
+      const dx = shot.x2 - shot.x1;
+      const dy = shot.y2 - shot.y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const mx = (shot.x1 + shot.x2) / 2;
+      const my = (shot.y1 + shot.y2) / 2;
+      const ah = Math.min(28, Math.max(16, len * 0.35));
+      const aw = ah * 0.35;
+      ctx.imageSmoothingEnabled = false;
+      ctx.translate(mx, my);
+      ctx.rotate(Math.atan2(dy, dx) + Math.PI / 2);
+      ctx.drawImage(arrow, -aw / 2, -ah / 2, aw, ah);
+    } else {
+      ctx.strokeStyle = '#e8ff9a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(shot.x1, shot.y1);
+      ctx.lineTo(shot.x2, shot.y2);
+      ctx.stroke();
+    }
     ctx.restore();
   }
   if (!game.wall || game.wall.broken || game.archers.length === 0) return;
@@ -610,6 +636,7 @@ function drawCampSmoke(ctx, left, right) {
 class Renderer {
   draw(game, ctx) {
     game._fx = game._fx || game._effects?.();
+    ctx.imageSmoothingEnabled = false;
     const shaking = (game.shakeT || 0) > 0;
     if (shaking) {
       ctx.save();

@@ -1,5 +1,6 @@
-// 로드 시 HTML5 Canvas로 스프라이트 베이크. 외부 이미지 없음.
-// 콘셉트: 두꺼운 검정 아웃라인, 채도 높은 카툰 중세, 아군 등/적 정면.
+// 로드 시 PNG(`/sprites/...`)를 우선 사용. 404면 캔버스 프로시저럴 베이크로 폴백.
+// 마젠타(#FF00FF 및 근접색) 크로마키. 픽셀아트는 그리기 쪽에서 smoothing off.
+// enemy_skeleton2.png 는 예비 에셋 — 로드하지 않음.
 
 import { CANVAS_W, CANVAS_H, DEFEAT_Y, UNITS, MONSTERS } from './config.js';
 
@@ -66,6 +67,121 @@ async function toBitmap(canvas) {
     }
   }
   return canvas;
+}
+
+function loadImage(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+/** #FF00FF 및 생성/압축 잔여 근접 마젠타. */
+function isNearMagenta(r, g, b) {
+  const dist2 = (r - 255) * (r - 255) + g * g + (b - 255) * (b - 255);
+  if (dist2 <= 48 * 48) return true;
+  return g < 36 && r >= 220 && b >= 210 && Math.abs(r - b) <= 36;
+}
+
+function processSprite(img, opts = {}) {
+  const chroma = opts.chroma !== false;
+  const w = img.width;
+  const h = img.height;
+  const { canvas, ctx } = makeCanvas(w, h);
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0);
+
+  let minX = 0;
+  let minY = 0;
+  let maxX = w - 1;
+  let maxY = h - 1;
+  if (chroma) {
+    const data = ctx.getImageData(0, 0, w, h);
+    const px = data.data;
+    minX = w;
+    minY = h;
+    maxX = -1;
+    maxY = -1;
+    for (let i = 0, p = 0; i < px.length; i += 4, p++) {
+      let a = px[i + 3];
+      if (a >= 8 && isNearMagenta(px[i], px[i + 1], px[i + 2])) {
+        a = 0;
+        px[i + 3] = 0;
+      }
+      if (a > 8) {
+        const x = p % w;
+        const y = (p / w) | 0;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+    ctx.putImageData(data, 0, 0);
+  }
+
+  let cropped = canvas;
+  let cw = w;
+  let ch = h;
+  if (maxX >= minX) {
+    const pad = 2;
+    const sx = Math.max(0, minX - pad);
+    const sy = Math.max(0, minY - pad);
+    cw = Math.min(w, maxX + 1 + pad) - sx;
+    ch = Math.min(h, maxY + 1 + pad) - sy;
+    if (sx !== 0 || sy !== 0 || cw !== w || ch !== h) {
+      const c = makeCanvas(cw, ch);
+      c.ctx.imageSmoothingEnabled = false;
+      c.ctx.drawImage(canvas, sx, sy, cw, ch, 0, 0, cw, ch);
+      cropped = c.canvas;
+    }
+  }
+
+  const limitW = opts.maxW || cw;
+  const limitH = opts.maxH || ch;
+  if (cw > limitW || ch > limitH) {
+    const scale = Math.min(limitW / cw, limitH / ch, 1);
+    const nw = Math.max(1, Math.round(cw * scale));
+    const nh = Math.max(1, Math.round(ch * scale));
+    const o = makeCanvas(nw, nh);
+    o.ctx.imageSmoothingEnabled = false;
+    o.ctx.drawImage(cropped, 0, 0, nw, nh);
+    return o.canvas;
+  }
+  return cropped;
+}
+
+function pngSpriteList() {
+  const list = [];
+  for (let t = 1; t <= 10; t++) {
+    const id = String(t).padStart(2, '0');
+    list.push([`unit_${t}`, `/sprites/ally_t${id}.png`, { chroma: true, maxW: UNIT_SIZE, maxH: UNIT_SIZE }]);
+  }
+  for (const key of ['goblin', 'orc', 'skeleton', 'troll', 'boss']) {
+    const max = key === 'boss' ? BOSS_SIZE : MONSTER_SIZE;
+    list.push([`monster_${key}`, `/sprites/enemy_${key}.png`, { chroma: true, maxW: max, maxH: max }]);
+  }
+  list.push(
+    ['archer', '/sprites/ally_archer.png', { chroma: true, maxW: ARCHER_SIZE, maxH: ARCHER_SIZE }],
+    ['arrow', '/sprites/fx_arrow.png', { chroma: true, maxW: 96, maxH: 96 }],
+    ['bg_field', '/sprites/bg_field.png', { chroma: false, maxW: CANVAS_W * BG_SCALE, maxH: CANVAS_H * BG_SCALE }],
+    ['wall_bottom', '/sprites/bg_wall.png', { chroma: false, maxW: CANVAS_W * BG_SCALE, maxH: (CANVAS_H - DEFEAT_Y) * BG_SCALE }],
+    ['camp_top', '/sprites/bg_camp.png', { chroma: false, maxW: CANVAS_W * BG_SCALE, maxH: 90 * BG_SCALE }],
+    ['bg_forest', '/sprites/bg_forest.png', { chroma: false, maxW: FOREST_STRIP_W * 2 * BG_SCALE, maxH: CANVAS_H * BG_SCALE }],
+  );
+  return list;
+}
+
+async function overlayPngSprites(raw) {
+  for (const [name, url, opts] of pngSpriteList()) {
+    const img = await loadImage(url);
+    if (!img) continue;
+    raw.set(name, processSprite(img, opts));
+  }
 }
 
 function ellipse(ctx, x, y, rx, ry) {
@@ -980,8 +1096,9 @@ class AssetManager {
       raw.set('hud_top', bakeHudTop());
       raw.set('archer', bakeArcher());
       for (let t = 1; t <= 10; t++) raw.set(`unit_${t}`, bakeUnit(t));
-      raw.set('evo_bar', bakeEvoBar(raw));
       for (const key of Object.keys(MONSTERS)) raw.set(`monster_${key}`, bakeMonster(key));
+      await overlayPngSprites(raw);
+      raw.set('evo_bar', bakeEvoBar(raw));
 
       const entries = await Promise.all(
         [...raw.entries()].map(async ([name, canvas]) => [name, await toBitmap(canvas)]),
