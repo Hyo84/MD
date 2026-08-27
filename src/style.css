@@ -15,7 +15,7 @@ body {
   background: radial-gradient(ellipse at center, #2b2118 0%, #14100b 70%, #0a0806 100%);
   display: flex;
   align-items: center;
-  justify-content: safe center;
+  justify-content: center;
   font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
   overflow: hidden;
   touch-action: none;
@@ -30,9 +30,11 @@ body {
 
 #wrap {
   position: relative;
-  width: 450px;
-  height: 800px;
   flex-shrink: 0;
+  --fit-w: min(450px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  --fit-h: min(800px, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)));
+  width: min(var(--fit-w), calc(var(--fit-h) * 450 / 800));
+  height: min(var(--fit-h), calc(var(--fit-w) * 800 / 450));
 }
 
 #chromeLeft,

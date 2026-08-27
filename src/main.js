@@ -26,10 +26,13 @@ const ui = {
   metaStatus: document.getElementById('metaStatus'),
 };
 
+let game = null;
+const applyScale = setupViewScale((s) => game?.setViewScale(s));
+
 await assets.ready;
 loadOverlay?.classList.add('hidden');
 
-const game = new Game(canvas, ui);
+game = new Game(canvas, ui);
+applyScale();
 setupAdmin(game);
 setupSkillsUi(game, meta);
-setupViewScale((s) => game.setViewScale(s));

@@ -4,8 +4,11 @@ const BASE_H = 800;
 
 function maxFitScale() {
   const vv = window.visualViewport;
-  const w = vv?.width ?? window.innerWidth;
-  const h = vv?.height ?? window.innerHeight;
+  let w = vv?.width ?? window.innerWidth;
+  let h = vv?.height ?? window.innerHeight;
+  const cs = getComputedStyle(document.body);
+  w -= (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  h -= (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
   return Math.max(0.25, Math.min(w / BASE_W, h / BASE_H));
 }
 
@@ -99,4 +102,6 @@ export function setupViewScale(onScale) {
 
   if (mode === 'full') setMode('full');
   else apply();
+
+  return apply;
 }

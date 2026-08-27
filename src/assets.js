@@ -524,6 +524,36 @@ function bakeForestDense() {
   return canvas;
 }
 
+function bakeWallBasic() {
+  const hWorld = CANVAS_H - DEFEAT_Y;
+  const w = CANVAS_W * BG_SCALE;
+  const h = hWorld * BG_SCALE;
+  const { canvas, ctx } = makeCanvas(w, h);
+  ctx.scale(BG_SCALE, BG_SCALE);
+  const rand = rng(0xA11E);
+
+  ctx.fillStyle = '#4a3018';
+  ctx.fillRect(0, 22, CANVAS_W, hWorld - 22);
+
+  for (let x = -8; x < CANVAS_W + 10; x += 13) {
+    const logW = 10 + ((x * 7) % 4);
+    const top = 6 + ((x * 5) % 7);
+    const col = mixHex('#8a5a28', '#5a3814', rand() * 0.45);
+    fillRoundRect(ctx, x, top, logW, hWorld - top + 6, 3, col, INK, 2.2);
+    strokePoly(
+      ctx,
+      [[x, top + 8], [x + logW / 2, top - 10], [x + logW, top + 8]],
+      mixHex('#9a6a32', '#6a4018', rand() * 0.3),
+      INK,
+      2,
+    );
+  }
+
+  fillRoundRect(ctx, -2, 58, CANVAS_W + 4, 11, 2, '#6a4420', INK, 2.4);
+  fillRoundRect(ctx, -2, 96, CANVAS_W + 4, 8, 2, '#5a3818', INK, 2.2);
+  return canvas;
+}
+
 function bakeWallBottom() {
   const hWorld = CANVAS_H - DEFEAT_Y;
   const w = CANVAS_W * BG_SCALE;
@@ -1120,6 +1150,7 @@ class AssetManager {
       raw.set('dirt_path', bakeDirtPath());
       raw.set('forest_dense', bakeForestDense());
       raw.set('wall_bottom', bakeWallBottom());
+      raw.set('wall_basic', bakeWallBasic());
       raw.set('camp_top', bakeCampTop());
       raw.set('hud_top', bakeHudTop());
       raw.set('archer', bakeArcher());

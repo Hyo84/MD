@@ -3,5 +3,5 @@ dist
 .DS_Store
 *.local
 .vercel
-sprites/
+/sprites/
 _verify_ui.mjs
