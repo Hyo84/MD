@@ -3,17 +3,18 @@ import {
     CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y, ENEMY_SPAWN_Y,
     CAMP_DEST_Y, CAMP_DRAW_H,
     BALANCE, UNITS, MONSTERS, HEROES,
-    HERO_MISSION_DAMAGE, HERO_MISSION_KILLS, HERO_BOSS_LIMIT, HERO_ASCENSION_ATK_MULT, HERO_ASCENSION_SLOWMO,
-    HERO_ASCENSION_REPLACEMENT_TIER, HERO_ASCENSION_BONUS_SCORE,
+    HERO_MISSION_KILLS, HERO_BOSS_LIMIT, HERO_ASCENSION_ATK_MULT, HERO_ASCENSION_SLOWMO,
+    HERO_ASCENSION_REPLACEMENT_TIER, HERO_ASCENSION_BONUS_SCORE, heroMissionDamage,
     CHARGE_STUTTER_TIME, MERGE_BLAST_RADIUS, MERGE_BLAST_FORCE,
     FRICTION_AIR_UNIT, killsNeeded, waveMultiplier, effectiveMult,
     LIVE_MULT_STEP, clampLiveMult, PROGRESSION,
+    clampRegenPct, clampSpawnRate,
     BASE_SLOT_COLS, MAX_SLOT_COLS, getSlotX, playfieldExtraInset, getPlayfieldInset,
-    CHEATS_STORAGE_KEY,
+    CHEATS_STORAGE_KEY, AUTO_FIRE_STORAGE_KEY, SHOP, SHOP_MIN_TIER, SHOP_MAX_TIER, isShopTier, formatShopGold,
 } from './config.js';
 import { Effects } from './effects.js';
 import { meta } from './meta.js';
-import { renderer, evoBarMetrics } from './renderer.js';
+import { renderer, evoBarMetrics, autoFireRect, bottomHudMetrics } from './renderer.js';
 import { RANGE_MODE_LABELS } from './hud.js';
 
 const { Engine, World, Bodies, Body, Events } = Matter;
@@ -21,15 +22,34 @@ const { Engine, World, Bodies, Body, Events } = Matter;
 const ENGINE_DT_CAP_MS = 33.33;
 const SLOWMO_SCALE = 0.25;
 // Matter Verlet integrates F/m * dt^2. Never feed a px/step impulse through applyForce.
-const MERGE_BLAST_MAX_STEP_PX = 24;
 
 function engineStepMs(dt) {
   return Math.min(dt * 1000, ENGINE_DT_CAP_MS);
 }
 
-/** Matter 속도는 엔진 스텝당 px. px/초를 이번 스텝 변위로 변환. */
-function velFromPxPerSec(pxPerSec, stepMs) {
-  return pxPerSec * stepMs / 1000;
+// Matter 0.20 setVelocity는 px/초가 아니라 「16.67ms당 px」(baseDelta). 프레임 dt를 곱하면
+// timeScale과 이중 스케일이 되어 발사체가 한 프레임에 전장 끝까지 튀기도 한다.
+const MATTER_BASE_MS = 1000 / 60;
+const CAT_ALLY = 0x0001;
+const CAT_SHOT = 0x0002;
+
+function matterVel(pxPerSec) {
+  return (Number(pxPerSec) || 0) * MATTER_BASE_MS / 1000;
+}
+
+function setVelPxS(body, vx, vy) {
+  Body.setVelocity(body, { x: matterVel(vx), y: matterVel(vy) });
+}
+
+function getVelPxS(body) {
+  const v = Body.getVelocity(body);
+  return { x: v.x * (1000 / MATTER_BASE_MS), y: v.y * (1000 / MATTER_BASE_MS) };
+}
+
+function allyCollisionFilter(asShot) {
+  return asShot
+    ? { category: CAT_SHOT, mask: CAT_SHOT, group: 0 }
+    : { category: CAT_ALLY, mask: CAT_ALLY, group: 0 };
 }
 
 // 발사는 짧은 돌진만. 관성이 라인까지 실어다 주면 진격 스킬이 안 보인다.
@@ -52,7 +72,13 @@ export class Game {
     this.mouse = null;
     this.rangeMode = 1; // 0=끄기, 1=아군만, 2=전체 (재시작 후에도 유지)
     this.liveMult = 1;  // 실시간 난이도 배율 (재시작 후에도 유지)
+    this.spawnRateMult = 1; // 적 리스폰 속도 배율 (재시작 후에도 유지)
+    this.autoFire = false;
+    try { this.autoFire = localStorage.getItem(AUTO_FIRE_STORAGE_KEY) === '1'; } catch { /* ignore */ }
+    this.holdingFire = false;
     this.onLiveMultChange = null;
+    this.onSpawnRateChange = null;
+    this.onRegenChange = null;
     this.skillPanelOpen = false;
     this._fx = meta.getEffects();
     this._rangeToggleRect = { x: 0, y: 0, w: 0, h: 0 };
@@ -61,8 +87,8 @@ export class Game {
     this._evoBarRect = evoBarMetrics();
     this.cheatsEnabled = false;
     try { this.cheatsEnabled = localStorage.getItem(CHEATS_STORAGE_KEY) === '1'; } catch { /* ignore */ }
-    this.cheatTier = 0; // 0=random, 1–10 sticky launch cheat (restarts keep it)
     this.onCheatsChange = null;
+    this.onGoldChange = null;
     this._cssScale = 1;
     this._drawScale = 1;
 
@@ -123,7 +149,11 @@ export class Game {
     this.kills = 0;
     this.waveTrashSpawned = 0;
     this.score = 0;
+    this.gold = 0;
+    this.mergeCombo = 0;
+    this._resetShopBuys();
     this.spawnTimer = BALANCE.spawnInterval * 0.75;
+    this.holdingFire = false;
     this.bossActive = false;
     this.bossPending = false;
     this.bossWarnT = 0;
@@ -131,14 +161,15 @@ export class Game {
     this.launchCd = 0;
     this.aimX = CANVAS_W / 2;
     this.dragging = false;
-    this.currentTier = (this.cheatsEnabled && this.cheatTier) ? this.cheatTier : this._rollTier();
-    this.nextTier = (this.cheatsEnabled && this.cheatTier) ? this.cheatTier : this._rollTier();
+    this.currentTier = this._rollTier();
+    this.nextTier = this._rollTier();
 
     this.effects = new Effects();
     this.wall = null;
     this.archers = [];
     this.archerShots = [];
     this._fx = meta.getEffects();
+    this.gold = this._fx.startGold || 0;
     this._syncPlayfieldFromMeta();
     this._syncDefenseFromMeta(true);
 
@@ -251,11 +282,9 @@ export class Game {
       const x = u.body.position.x;
       if (x < minX || x > maxX) {
         Body.setPosition(u.body, { x: Math.max(minX, Math.min(maxX, x)), y: u.body.position.y });
-        const vx = u.body.velocity.x;
-        Body.setVelocity(u.body, {
-          x: (x < minX && vx < 0) || (x > maxX && vx > 0) ? 0 : vx,
-          y: u.body.velocity.y,
-        });
+        const v = getVelPxS(u.body);
+        if ((x < minX && v.x < 0) || (x > maxX && v.x > 0)) v.x = 0;
+        setVelPxS(u.body, v.x, v.y);
       }
     }
   }
@@ -323,15 +352,17 @@ export class Game {
     if (panel) panel.classList.add('hidden');
     this.skillPanelOpen = false;
     this._reset();
+    this.onGoldChange?.();
     this.state = 'playing';
     this.ui.startOverlay.classList.add('hidden');
     this.ui.gameoverOverlay.classList.add('hidden');
   }
 
   _gameOver() {
+    this.holdingFire = false;
     this.state = 'gameover';
     this.ui.finalScore.textContent =
-      `점수: ${this.score} · 웨이브 ${this.wave} · 레벨 ${meta.level}`;
+      `점수: ${this.score} · 골드 ${Math.floor(this.gold)} · 웨이브 ${this.wave} · 레벨 ${meta.level}`;
     this.ui.gameoverOverlay.classList.remove('hidden');
   }
 
@@ -371,12 +402,19 @@ export class Game {
         this.adjustLiveMult(LIVE_MULT_STEP);
         return;
       }
-      if (this._tryEvoCheat(p)) return;
+      if (this._hitRect(p, autoFireRect())) {
+        this.setAutoFire(!this.autoFire);
+        return;
+      }
+      if (this._tryShopBar(p)) return;
+      if (this._hitDockHud(p)) return;
       if (this.skillPanelOpen) return;
       if (this.state !== 'playing') return;
       this.dragging = true;
+      this.holdingFire = true;
       this.aimX = this._clampAimX(p.x);
       this.canvas.setPointerCapture(e.pointerId);
+      this._tickAutoFire();
     }, { passive: false });
     this.canvas.addEventListener('pointermove', (e) => {
       const p = toCanvas(e);
@@ -387,17 +425,20 @@ export class Game {
         if (this._hitRect(p, this._diffMinusRect)) return;
         if (this._hitRect(p, this._diffPlusRect)) return;
         if (this._hitRect(p, this._evoBarRect)) return;
+        if (this._hitDockHud(p)) return;
       }
       this.aimX = this._clampAimX(p.x);
     });
     this.canvas.addEventListener('pointerup', (e) => {
       if (!this.dragging) return;
       this.dragging = false;
+      this.holdingFire = false;
       this.aimX = this._clampAimX(toCanvas(e).x);
-      if (this.skillPanelOpen || this.state !== 'playing' || this.launchCd > 0) return;
-      this._launchUnit();
     });
-    this.canvas.addEventListener('pointercancel', () => { this.dragging = false; });
+    this.canvas.addEventListener('pointercancel', () => {
+      this.dragging = false;
+      this.holdingFire = false;
+    });
 
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', (e) => {
@@ -408,6 +449,11 @@ export class Game {
         } else if (e.key === '-' || e.key === '_' || e.key === '[' || e.code === 'NumpadSubtract') {
           this.adjustLiveMult(-LIVE_MULT_STEP);
           e.preventDefault();
+        } else if (e.code === 'Space' || e.key === ' ') {
+          if (this.state === 'playing' && !this.skillPanelOpen) {
+            this.setAutoFire(!this.autoFire);
+            e.preventDefault();
+          }
         }
       });
     }
@@ -429,6 +475,66 @@ export class Game {
     return this.setLiveMult(this.liveMult + delta);
   }
 
+  _hitDockHud(p) {
+    const m = bottomHudMetrics();
+    return this._hitRect(p, m.gold) || this._hitRect(p, m.next) || this._hitRect(p, m.auto);
+  }
+
+  setAutoFire(on) {
+    const next = !!on;
+    if (next === this.autoFire) return this.autoFire;
+    this.autoFire = next;
+    try { localStorage.setItem(AUTO_FIRE_STORAGE_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+    if (this.state === 'playing' && this.effects) {
+      this.effects.floatText(CANVAS_W / 2, 72, next ? '자동발사 ON' : '자동발사 OFF', '#7ec8ff', 16, 0.7);
+    }
+    return this.autoFire;
+  }
+
+  _tickAutoFire() {
+    if (this.state !== 'playing' || this.skillPanelOpen) return;
+    if (this.launchCd > 0) return;
+    if (this.autoFire || this.holdingFire) this._launchUnit();
+  }
+
+  trollRegenPct() {
+    return clampRegenPct(MONSTERS.troll?.regenPct);
+  }
+
+  setTrollRegenPct(v) {
+    const next = clampRegenPct(v);
+    if (!MONSTERS.troll) return next;
+    if (next === clampRegenPct(MONSTERS.troll.regenPct)) {
+      MONSTERS.troll.regenPct = next;
+      return next;
+    }
+    MONSTERS.troll.regenPct = next;
+    if (this.state === 'playing' && this.effects) {
+      this.effects.floatText(CANVAS_W / 2, 72, `트롤 재생 ${Math.round(next * 100)}%/s`, '#7CFC00', 16, 0.7);
+    }
+    this.onRegenChange?.();
+    return next;
+  }
+
+  adjustTrollRegenPct(delta) {
+    return this.setTrollRegenPct(this.trollRegenPct() + delta);
+  }
+
+  setSpawnRateMult(v) {
+    const next = clampSpawnRate(v);
+    if (next === this.spawnRateMult) return this.spawnRateMult;
+    this.spawnRateMult = next;
+    if (this.state === 'playing' && this.effects) {
+      this.effects.floatText(CANVAS_W / 2, 72, `리스폰 ×${next.toFixed(1)}`, '#7ec8ff', 16, 0.7);
+    }
+    this.onSpawnRateChange?.();
+    return this.spawnRateMult;
+  }
+
+  adjustSpawnRateMult(delta) {
+    return this.setSpawnRateMult(this.spawnRateMult + delta);
+  }
+
   _rescaleEnemiesForLiveMult(next) {
     for (const m of this.enemies) {
       if (m.dead) continue;
@@ -446,24 +552,71 @@ export class Game {
 
   _launchUnit() {
     const u = this._spawnUnit(this.currentTier, this.aimX, LAUNCHER_Y);
-    const stepMs = this._stepMs || (1000 / 60);
-    Body.setVelocity(u.body, { x: 0, y: -velFromPxPerSec(BALANCE.launchSpeed, stepMs) });
+    u.fromLaunch = true;
+    u.body.collisionFilter = allyCollisionFilter(true);
+    setVelPxS(u.body, 0, -BALANCE.launchSpeed);
     this.launchCd = this._launchCooldown();
     this.currentTier = this.nextTier;
-    this.nextTier = (this.cheatsEnabled && this.cheatTier) ? this.cheatTier : this._rollTier();
+    this.nextTier = this._rollTier();
   }
 
   setCheatsEnabled(on) {
     const next = !!on;
     this.cheatsEnabled = next;
     try { localStorage.setItem(CHEATS_STORAGE_KEY, next ? '1' : '0'); } catch { /* ignore */ }
-    if (!next && this.cheatTier) {
-      this.cheatTier = 0;
-      this.currentTier = this._rollTier();
-      this.nextTier = this._rollTier();
-    }
     this.onCheatsChange?.();
     return this.cheatsEnabled;
+  }
+
+  addGold(n) {
+    const amt = Number(n);
+    if (!Number.isFinite(amt) || amt === 0) return this.gold;
+    this.gold = Math.max(0, this.gold + amt);
+    this.onGoldChange?.();
+    return this.gold;
+  }
+
+  setGold(n) {
+    const v = Number(n);
+    this.gold = Number.isFinite(v) ? Math.max(0, v) : 0;
+    this.onGoldChange?.();
+    return this.gold;
+  }
+
+  _resetShopBuys() {
+    this.waveShopBuys = {};
+    for (let t = SHOP_MIN_TIER; t <= SHOP_MAX_TIER; t++) this.waveShopBuys[t] = 0;
+  }
+
+  shopView(tier) {
+    const t = Math.floor(Number(tier) || 0);
+    const cheat = !!this.cheatsEnabled;
+    const buyable = isShopTier(t);
+    const fx = this._effects();
+    const maxTier = cheat ? SHOP_MAX_TIER : (fx.shopMaxTier || 3);
+    const def = SHOP[t];
+    const price = def?.price ?? 0;
+    const limit = def?.limit ?? 0;
+    const used = this.waveShopBuys?.[t] || 0;
+    const unlimited = limit < 0;
+    const remaining = unlimited ? Infinity : Math.max(0, limit - used);
+    const locked = !buyable || (!cheat && t > maxTier);
+    const soldOut = buyable && !cheat && !unlimited && remaining <= 0;
+    const broke = buyable && !cheat && !locked && !soldOut && this.gold < price;
+    const dim = !buyable || locked || soldOut || broke;
+    const canBuy = buyable && !locked && !soldOut && (cheat || this.gold >= price);
+    return { tier: t, buyable, locked, soldOut, broke, dim, canBuy, price, limit, used, remaining, unlimited, maxTier, cheat };
+  }
+
+  _grantGold(n, x, y) {
+    const amt = Math.max(0, Number(n) || 0);
+    if (amt <= 0) return 0;
+    this.gold += amt;
+    this.onGoldChange?.();
+    if (this.effects && Number.isFinite(x) && Number.isFinite(y)) {
+      this.effects.floatText(x, y, `+${Math.round(amt)}G`, '#ffd27a', 13, 0.75);
+    }
+    return amt;
   }
 
   _playfieldCenterX() {
@@ -471,24 +624,44 @@ export class Game {
     return (left + right) / 2;
   }
 
-  /** Sticky T1–T10 cheat. Same slot again clears back to random. Consumes the click (no launch). */
-  _tryEvoCheat(p) {
+  /** 하단 티어표: 구매 후 발사대(currentTier)에 장전. 클릭은 항상 소비(발사 없음). */
+  _tryShopBar(p) {
     const bar = this._evoBarRect || evoBarMetrics();
     if (!this._hitRect(p, bar)) return false;
-    if (!this.cheatsEnabled) return true;
+    if (this.state !== 'playing') return true;
     const { startX, slot, count } = evoBarMetrics();
     const i = Math.floor((p.x - startX) / slot);
     if (i < 0 || i >= count) return true;
-    const tier = i + 1;
-    if (this.cheatTier === tier) {
-      this.cheatTier = 0;
-      this.currentTier = this._rollTier();
-      this.nextTier = this._rollTier();
-    } else {
-      this.cheatTier = tier;
-      this.currentTier = tier;
-      this.nextTier = tier;
+    this._tryBuyTier(i + 1);
+    return true;
+  }
+
+  _tryBuyTier(tier) {
+    const view = this.shopView(tier);
+    if (!view.buyable) {
+      this.effects?.floatText(this.aimX, LAUNCHER_Y - 48, tier === 10 ? '합성 전용' : '무료 발사', '#c9b48a', 14, 0.7);
+      return false;
     }
+    if (view.locked) {
+      this.effects?.floatText(this.aimX, LAUNCHER_Y - 48, '용병술 필요', '#c9b48a', 14, 0.8);
+      return false;
+    }
+    if (view.soldOut) {
+      this.effects?.floatText(this.aimX, LAUNCHER_Y - 48, '이번 웨이브 한도', '#ff8080', 14, 0.8);
+      return false;
+    }
+    if (view.broke) {
+      this.effects?.floatText(this.aimX, LAUNCHER_Y - 48, '골드 부족', '#ff8080', 14, 0.8);
+      return false;
+    }
+    if (!view.cheat) {
+      this.gold -= view.price;
+      this.waveShopBuys[tier] = (this.waveShopBuys[tier] || 0) + 1;
+      this.onGoldChange?.();
+    }
+    this.currentTier = tier;
+    const paid = view.cheat ? '치트 장전' : `${formatShopGold(view.price)}G`;
+    this.effects?.floatText(this.aimX, LAUNCHER_Y - 48, `T${tier} 장전 (${paid})`, '#ffd27a', 15, 0.85);
     return true;
   }
 
@@ -499,6 +672,7 @@ export class Game {
       frictionAir: FRICTION_AIR_UNIT,
       restitution: 0.3,
       friction: 0.05,
+      collisionFilter: allyCollisionFilter(false),
     });
     Body.setMass(body, stat.mass);
     World.add(this.engine.world, body);
@@ -514,7 +688,7 @@ export class Game {
       heroType,
       missionDamage: 0,
       bossKills: 0,
-      targetDamage: heroType ? HERO_MISSION_DAMAGE : 0,
+      targetDamage: heroType ? heroMissionDamage(this.wave) : 0,
       targetKills: heroType ? HERO_MISSION_KILLS : 0,
       gatherToBoss: false,
       firstHit: false,
@@ -605,7 +779,7 @@ export class Game {
       joining,
       hp, maxHp: hp, waveMult,
       attackCd: Math.random() * 0.4,
-      stunT: 0, burn: null, flashT: 0, dead: false,
+      stunT: 0, burn: null, flashT: 0, lastHitT: 999, dead: false,
     };
     this.enemies.push(m);
 
@@ -826,12 +1000,23 @@ export class Game {
         this._applyMergeShock(pos.x, pos.y, spawned);
         this.mergeBlastQueue.push({ x: pos.x, y: pos.y, exclude: spawned });
       }
+      this._onProjectileMerge(a, b, pos.x, pos.y);
       this._grantScore(newTier * 5);
     }
     this.mergeQueue.length = 0;
     for (const u of this.units) {
       if (u.isMerging) u.isMerging = false;
     }
+  }
+
+  _onProjectileMerge(a, b, x, y) {
+    const projectile = (a && a.fromLaunch && !a.settled) || (b && b.fromLaunch && !b.settled);
+    if (!projectile) return;
+    this.mergeCombo = (this.mergeCombo || 0) + 1;
+    if (this.mergeCombo < 2) return;
+    const refund = Math.max(0, Math.min(1, BALANCE.mergeComboCdRefund ?? 0.5));
+    this.launchCd *= (1 - refund);
+    this.effects.floatText(x, y - 52, `Combo x${this.mergeCombo}!`, '#ffd27a', 20, 0.95);
   }
 
   _applyMergeShock(x, y, unit) {
@@ -867,9 +1052,9 @@ export class Game {
 
   // ---------- 웨이브 / 스폰 ----------
   _monsterPool() {
-    const pool = [['goblin', this.wave <= 1 ? 78 : 55], ['orc', this.wave <= 1 ? 12 : 25]];
-    if (this.wave >= 2) pool.push(['skeleton', 20]);
-    if (this.wave >= 3) pool.push(['troll', 8]);
+    const pool = [['goblin', this.wave <= 1 ? 78 : 55], ['skeleton', this.wave <= 1 ? 12 : 25]];
+    if (this.wave >= 2) pool.push(['orc', 20]);
+    if (this.wave >= 3) pool.push(['troll', 4]);
     return pool;
   }
 
@@ -896,13 +1081,57 @@ export class Game {
     const campBot = CAMP_DEST_Y + CAMP_DRAW_H;
     let n = 0;
     for (const u of this.units) {
-      if (u.kind !== 'ally' || u.launching || u.dying || u.ascended) continue;
-      if (u.y >= campTop && u.y <= campBot) n++;
+      if (u.dead || !u.body || !u.settled) continue;
+      const y = u.body.position.y;
+      if (y >= campTop && y <= campBot) n++;
     }
     if (n <= 0) return 1;
     const min = BALANCE.spawnCampRaidMin ?? 2;
     const max = BALANCE.spawnCampRaidMax ?? 3;
     return Math.min(max, min + (n - 1) * ((max - min) / 2));
+  }
+
+  // 0 = 아군이 캠프에서 멂(또는 없음), 1 = 전열이 캠프 하단에 닿음.
+  // 웨이브라인은 시작부터 캠프에 있어서 라인 기준이면 초반부터 러시가 걸린다.
+  _allyCampProximity() {
+    const range = BALANCE.spawnCampApproachRange ?? 200;
+    if (!(range > 0)) return 0;
+    const campBot = LINE_START_Y;
+    const slack = 28;
+    let best = Infinity;
+    for (const u of this.units) {
+      if (u.dead || !u.body || !u.settled) continue;
+      const y = u.body.position.y;
+      if (y < best) best = y;
+    }
+    if (!Number.isFinite(best)) return 0;
+    const dist = Math.max(0, best - campBot);
+    if (dist <= slack) return 1;
+    return Math.max(0, Math.min(1, 1 - dist / range));
+  }
+
+  /** 아군-캠프 근접 타이머 배율. ease-in이라 멀리선 약하고 캠프 앞에서 급가속. */
+  _campApproachTimerMult() {
+    const prox = this._allyCampProximity();
+    const k = BALANCE.spawnCampApproachEase ?? 1.5;
+    const touch = Math.max(1, BALANCE.spawnCampTouchMult ?? 6);
+    return 1 + (prox ** k) * (touch - 1);
+  }
+
+  /**
+   * 스폰 타이머 소진 속도. 접근 배율 × (있으면) 캠프 침입 배율 × 리스폰 배율.
+   * 캠프 러시 플로어는 배율 1 기준이고, spawnRateMult가 그 위에 곱해진다.
+   */
+  _spawnTimerSpeed() {
+    const speed = this._campRaidMult() * this._campApproachTimerMult();
+    const interval = this._waveSpawnInterval();
+    const floor = BALANCE.spawnCampRushFloor ?? 0.32;
+    let capped = speed;
+    if (floor > 0 && interval > 0) {
+      capped = Math.min(speed, interval / floor);
+    }
+    const rate = Number.isFinite(this.spawnRateMult) ? this.spawnRateMult : 1;
+    return capped * Math.max(0, rate);
   }
 
   _livingTrashEnemies() {
@@ -941,7 +1170,7 @@ export class Game {
 
     if (this._waveQuotaFull()) return;
 
-    this.spawnTimer -= dt * this._campRaidMult();
+    this.spawnTimer -= dt * this._spawnTimerSpeed();
     if (this.spawnTimer > 0) return;
     const jitter = 0.82 + Math.random() * 0.36;
     this.spawnTimer = this._waveSpawnInterval() * jitter;
@@ -957,9 +1186,15 @@ export class Game {
     this._spawnEnemy('boss');
     this.bossActive = true;
     this._markBossGather();
-    const escort = Math.max(0, Math.round(BALANCE.bossEscortCount ?? 3));
     const cap = this._bossMinionCap();
-    for (let i = 0; i < escort; i++) {
+    const knights = Math.max(0, Math.round(BALANCE.bossKnightEscorts ?? 2));
+    const escort = Math.max(0, Math.round(BALANCE.bossEscortCount ?? 4));
+    for (let i = 0; i < knights; i++) {
+      if (this._livingTrashEnemies() >= cap) break;
+      this._spawnEnemy('skelknight');
+    }
+    const extra = Math.max(0, escort - knights);
+    for (let i = 0; i < extra; i++) {
       if (this._livingTrashEnemies() >= cap) break;
       this._spawnEnemy(this._pickMonster());
     }
@@ -971,7 +1206,7 @@ export class Game {
   _updateBossMinionSpawning(dt) {
     const cap = this._bossMinionCap();
     if (this._livingTrashEnemies() >= cap) return;
-    this.spawnTimer -= dt * this._campRaidMult();
+    this.spawnTimer -= dt * this._spawnTimerSpeed();
     if (this.spawnTimer > 0) return;
     this.spawnTimer = this._waveSpawnInterval() * (0.82 + Math.random() * 0.36);
     if (this._livingTrashEnemies() >= cap) return;
@@ -994,6 +1229,8 @@ export class Game {
   _onEnemyKilled(m) {
     const stat = MONSTERS[m.key];
     this._grantScore(stat.score);
+    const goldGain = (stat.gold ?? 0) * (this._effects().bountyMult || 1);
+    this._grantGold(goldGain, m.x, m.y - 34);
     this.effects.burst(m.x, m.y, stat.color, 12, 3, 3);
     this.effects.floatText(m.x, m.y - 20, `+${stat.score}`, '#ffd', 13, 0.7);
     if (m.isBoss) {
@@ -1008,6 +1245,7 @@ export class Game {
       this.waveTrashSpawned = 0;
       this.spawnTimer = this._waveSpawnInterval() * 0.7;
       this._refillArcherAmmo();
+      this._resetShopBuys();
       this.effects.floatText(CANVAS_W / 2, 300, `웨이브 ${this.wave} 시작!`, '#7CFC00', 26, 2.0);
       this._onBossSlain();
     } else {
@@ -1021,6 +1259,7 @@ export class Game {
     const dealt = Math.min(Math.max(0, dmg), m.hp);
     m.hp -= dmg;
     m.flashT = 0.12;
+    if (dealt > 0) m.lastHitT = 0;
     if (source && source.heroType && !source.dead) {
       source.missionDamage = (source.missionDamage || 0) + dealt;
     }
@@ -1039,10 +1278,27 @@ export class Game {
     return m.y + JOIN_ARRIVE_EPS >= this._enemySlotY(m);
   }
 
-  // 전열 접촉만. 뒷열·합류·라인 위 구멍에 떠 있는 적은 라인 속도에 안 넣음.
+  _enemyFrontRow(m) {
+    return !!(m && (m.isBoss || (Number(m.row) || 0) === 0));
+  }
+
+  // 전열 접촉만. 뒷열·합류·라인에 안 닿은 적은 라인 속도에 안 넣음.
+  // joining 플래그가 꺼져 있어도 중심이 라인에 닿기 전에는 밀지 않음.
   _enemyOccupiesLine(m) {
     if (!m || m.dead || m.joining) return false;
-    return Math.abs(m.y - this.lineY) <= LINE_CONTACT_EPS;
+    if (!this._enemyFrontRow(m)) return false;
+    if (m.y + JOIN_ARRIVE_EPS < this.lineY) return false;
+    if (m.y > this.lineY + LINE_CONTACT_EPS) return false;
+    return true;
+  }
+
+  // 슬롯/라인보다 위에 있으면 합류 중. occupy 전에 호출해 플래그 구멍을 막음.
+  _refreshJoinFlags() {
+    for (const m of this.enemies) {
+      if (m.dead) continue;
+      if (m.y + JOIN_ARRIVE_EPS < this._enemySlotY(m)) m.joining = true;
+      if (this._enemyFrontRow(m) && m.y + JOIN_ARRIVE_EPS < this.lineY) m.joining = true;
+    }
   }
 
   joinedEnemies() {
@@ -1055,7 +1311,7 @@ export class Game {
     const { x, y } = u.body.position;
     for (const m of joined) {
       const er = MONSTERS[m.key].r;
-      if (Math.hypot(m.x - x, m.y - y) <= range + er) return true;
+      if (this._meleeGap(x, y, u.r, m.x, m.y, er) <= range) return true;
     }
     return false;
   }
@@ -1077,6 +1333,7 @@ export class Game {
 
   _updateLine(dt) {
     this.chargeStutterT = Math.max(0, (this.chargeStutterT || 0) - dt);
+    this._refreshJoinFlags();
     // 돌격 저지력: firstHit 동안 라인 순속도 0 (빈 라인 푸시 포함)
     if (this.chargeStutterT > 0) {
       this.netSpeed = 0;
@@ -1110,6 +1367,10 @@ export class Game {
       if (u.engaged) stopping += this._unitStop(u);
     }
     this.netSpeed = advance - stopping;
+    // 착지한 보스만. joining 중이면 occupied가 아니라 여기 안 옴(빈 라인 분기로 감).
+    if (joined.some((m) => m.isBoss)) {
+      this.netSpeed = Math.max(this.netSpeed, BALANCE.bossMinAdvance);
+    }
     this.lineY += this.netSpeed * dt;
     if (this.lineY < LINE_START_Y) this.lineY = LINE_START_Y;
     if (this.lineY >= DEFEAT_Y) {
@@ -1128,23 +1389,28 @@ export class Game {
     return this.lineY - (Number(m.row) || 0) * SLOT_ROW_H;
   }
 
-  // 합류 중: 슬롯을 향해 내려감. 착지 후: 라인에 고정.
+  // 합류 중: 슬롯이 아래면 내려감. 착지 후: 슬롯에 고정.
+  // destY가 현재 y보다 위인 채로 y를 더하면 "도착"으로 오인되어 라인에 안 붙은 채 joining이 꺼진다.
   _syncEnemyY(dt) {
     const baseJoin = Number.isFinite(BALANCE.enemyJoinSpeed) ? Math.max(0, BALANCE.enemyJoinSpeed) : 80;
     const descent = Math.max(0, this.netSpeed || 0);
     const join = Math.max(baseJoin, descent + JOIN_CATCHUP_BONUS);
     const step = dt || 0;
-    // 한 프레임 라인 이동보다 훨씬 위에 있으면 joining이 일찍 꺼진 구멍으로 보고 다시 행군.
-    const rejoinSlack = Math.max(12, descent * step + 8);
     for (const m of this.enemies) {
       if (m.dead) continue;
       const slotY = this._enemySlotY(m);
-      if (!m.joining && m.y < slotY - rejoinSlack) m.joining = true;
+      if (m.y + JOIN_ARRIVE_EPS < slotY) m.joining = true;
       if (m.joining) {
         this._ensureJoinSlotClear(m);
         const destY = this._enemySlotY(m);
-        m.y += join * step;
-        if (m.y + JOIN_ARRIVE_EPS >= destY) {
+        if (m.y + JOIN_ARRIVE_EPS < destY) {
+          m.y = Math.min(destY, m.y + join * step);
+          if (m.y + JOIN_ARRIVE_EPS >= destY) {
+            m.y = destY;
+            m.joining = false;
+            if (m.isBoss) this._displaceOverlapping(m);
+          }
+        } else {
           m.y = destY;
           m.joining = false;
           if (m.isBoss) this._displaceOverlapping(m);
@@ -1176,32 +1442,36 @@ export class Game {
 
   // ---------- 아군 유닛: 착지 후 전진, 실제 교전 시(사거리 내 적) 정지 ----------
   _updateUnitAdvance(dt) {
-    const stepMs = this._stepMs || engineStepMs(dt);
     const fx = this._effects();
     const advPx = Number.isFinite(fx.advanceSpeed)
       ? fx.advanceSpeed
       : BALANCE.unitAdvanceSpeed * (fx.advanceMult || 1);
-    const advTick = velFromPxPerSec(advPx, stepMs);
-    // body.speed는 px/스텝. 고정 숫자 2는 fps에 따라 의미가 달라진다.
-    const settleSpeed = velFromPxPerSec(Math.max(advPx * 1.25, 24), stepMs);
+    const settleSpeed = Math.max(advPx * 1.25, 24);
+    const launchMax = BALANCE.launchSpeed;
     for (const u of this.units) {
       u.age += dt;
+      const v = getVelPxS(u.body);
+      const spd = Math.hypot(v.x, v.y);
       if (!u.settled && (
         u.age >= LAUNCH_BURST_MAX_S
-        || (u.age >= LAUNCH_BURST_MIN_S && u.body.speed <= settleSpeed)
+        || (u.age >= LAUNCH_BURST_MIN_S && spd <= settleSpeed)
       )) {
+        if (u.fromLaunch) this.mergeCombo = 0;
         u.settled = true;
+        u.fromLaunch = false;
+        u.body.collisionFilter = allyCollisionFilter(false);
+      }
+      if (!u.settled && spd > launchMax && spd > 0) {
+        setVelPxS(u.body, v.x / spd * launchMax, v.y / spd * launchMax);
       }
       const pos = u.body.position;
-      // 모든 유닛은 근접 파이터: 사거리와 무관하게 라인 바로 앞까지 전진
-      // (사거리는 공격 도달 거리로만 사용 — 전진 중에도 사거리 내 적을 공격)
       const minHoldY = this.lineY + 20 + u.r;
       if (pos.y <= minHoldY) {
-        if (u.body.velocity.y < 0) {
-          Body.setVelocity(u.body, { x: u.body.velocity.x, y: 0 });
-        }
+        const v = getVelPxS(u.body);
+        if (v.y < 0) setVelPxS(u.body, v.x, 0);
       } else if (u.settled) {
-        Body.setVelocity(u.body, { x: u.body.velocity.x * 0.9, y: -advTick });
+        const v = getVelPxS(u.body);
+        setVelPxS(u.body, v.x * 0.9, -advPx);
       }
     }
   }
@@ -1220,16 +1490,15 @@ export class Game {
     if (!boss) return;
 
     const engagedAlsoGather = strength > 0.7;
-    const stepMs = this._stepMs || engineStepMs(dt);
-    const maxVxTick = velFromPxPerSec(BALANCE.gatherSpeed * strength, stepMs);
+    const maxVx = BALANCE.gatherSpeed * strength;
 
     for (const u of this.units) {
       if (!u.settled || !u.gatherToBoss) continue;
       if (!engagedAlsoGather && u.engaged) continue;
       const dx = boss.x - u.body.position.x;
       if (Math.abs(dx) < 24) continue; // 보스 열 근처면 정지
-      const vx = Math.sign(dx) * maxVxTick;
-      Body.setVelocity(u.body, { x: vx, y: u.body.velocity.y });
+      const v = getVelPxS(u.body);
+      setVelPxS(u.body, Math.sign(dx) * maxVx, v.y);
     }
   }
 
@@ -1240,8 +1509,9 @@ export class Game {
       const { minX, maxX } = this._friendlyXRange(u.r);
       let x = u.body.position.x;
       let y = u.body.position.y;
-      let vx = u.body.velocity.x;
-      let vy = u.body.velocity.y;
+      const v = getVelPxS(u.body);
+      let vx = v.x;
+      let vy = v.y;
       let moved = false;
       if (y < minY) {
         y = minY;
@@ -1259,7 +1529,7 @@ export class Game {
       }
       if (moved) {
         Body.setPosition(u.body, { x, y });
-        Body.setVelocity(u.body, { x: vx, y: vy });
+        setVelPxS(u.body, vx, vy);
       }
     }
   }
@@ -1279,6 +1549,11 @@ export class Game {
     return false;
   }
 
+  // 표면 간 거리. 근접 공격은 이 값이 사거리 이하면 적중 (대각선도 동일).
+  _meleeGap(ax, ay, ar, bx, by, br) {
+    return Math.hypot(bx - ax, by - ay) - ar - br;
+  }
+
   _updateCombat(dt) {
     // 아군 → 적
     for (const u of [...this.units]) {
@@ -1291,7 +1566,7 @@ export class Game {
       for (const m of this.enemies) {
         if (m.dead || !this._enemyArrived(m)) continue;
         const er = MONSTERS[m.key].r;
-        const d = Math.hypot(m.x - x, m.y - y) - er;
+        const d = this._meleeGap(x, y, u.r, m.x, m.y, er);
         if (d <= stat.range && d < best) { best = d; target = m; }
       }
       if (!target) continue;
@@ -1328,10 +1603,11 @@ export class Game {
       m.attackCd -= dt;
       if (m.attackCd > 0) continue;
       const stat = MONSTERS[m.key];
-      const reach = stat.r + BALANCE.enemyReach;
+      const reach = BALANCE.enemyReach;
       let target = null, best = Infinity;
       for (const u of this.units) {
-        const d = Math.hypot(u.body.position.x - m.x, u.body.position.y - m.y) - u.r;
+        if (u.dead) continue;
+        const d = this._meleeGap(m.x, m.y, stat.r, u.body.position.x, u.body.position.y, u.r);
         if (d <= reach && d < best) { best = d; target = u; }
       }
       if (!target) continue;
@@ -1357,8 +1633,13 @@ export class Game {
         if (m.burn && m.burn.t <= 0) m.burn = null;
       }
       const stat = MONSTERS[m.key];
-      if (stat.regen && m.hp < m.maxHp) {
-        m.hp = Math.min(m.maxHp, m.hp + stat.regen * dt);
+      m.lastHitT = (m.lastHitT ?? 999) + dt;
+      if (m.hp < m.maxHp) {
+        const delay = stat.regenDelay ?? 0;
+        if (m.lastHitT >= delay) {
+          if (stat.regenPct) m.hp = Math.min(m.maxHp, m.hp + m.maxHp * stat.regenPct * dt);
+          else if (stat.regen) m.hp = Math.min(m.maxHp, m.hp + stat.regen * dt);
+        }
       }
       m.flashT = Math.max(0, m.flashT - dt);
     }
@@ -1483,7 +1764,7 @@ export class Game {
 
   _checkHeroMission(u) {
     if (!u || u.dead || !u.heroType || u._ascending) return;
-    const quota = u.targetDamage || HERO_MISSION_DAMAGE;
+    const quota = u.targetDamage || heroMissionDamage(this.wave);
     if ((u.missionDamage || 0) >= quota) {
       this._ascendHero(u);
       return;
@@ -1562,27 +1843,27 @@ export class Game {
     const { minX, maxX } = this._friendlyXRange(u.r);
     const maxY = CANVAS_H - u.r - 4;
     const { x, y } = u.body.position;
+    const maxStep = 60;
     if (vy < 0) {
       const room = y - minY;
-      vy = room <= 0 ? 0 : Math.max(vy, -room);
+      vy = room <= 0 ? 0 : Math.max(vy, -room * maxStep);
     } else if (vy > 0) {
       const room = maxY - y;
-      vy = room <= 0 ? 0 : Math.min(vy, room);
+      vy = room <= 0 ? 0 : Math.min(vy, room * maxStep);
     }
     if (vx < 0) {
       const room = x - minX;
-      vx = room <= 0 ? 0 : Math.max(vx, -room);
+      vx = room <= 0 ? 0 : Math.max(vx, -room * maxStep);
     } else if (vx > 0) {
       const room = maxX - x;
-      vx = room <= 0 ? 0 : Math.min(vx, room);
+      vx = room <= 0 ? 0 : Math.min(vx, room * maxStep);
     }
     return { x: vx, y: vy };
   }
 
   _applyMergeBlasts() {
     if (!this.mergeBlastQueue.length) return;
-    const stepMs = this._stepMs || (1000 / 60);
-    const maxImpulse = Math.min(velFromPxPerSec(MERGE_BLAST_FORCE, stepMs), MERGE_BLAST_MAX_STEP_PX);
+    const maxImpulse = MERGE_BLAST_FORCE;
     for (const blast of this.mergeBlastQueue) {
       for (const u of this.units) {
         if (u.dead || u.isMerging || u === blast.exclude) continue;
@@ -1593,8 +1874,9 @@ export class Game {
         const mag = maxImpulse * (1 - dist / MERGE_BLAST_RADIUS);
         const nx = dx / dist;
         const ny = dy / dist;
-        const vel = Body.getVelocity(u.body);
-        Body.setVelocity(u.body, this._clampBlastVelocity(u, vel.x + nx * mag, vel.y + ny * mag));
+        const vel = getVelPxS(u.body);
+        const clamped = this._clampBlastVelocity(u, vel.x + nx * mag, vel.y + ny * mag);
+        setVelPxS(u.body, clamped.x, clamped.y);
       }
     }
     this.mergeBlastQueue.length = 0;
@@ -1622,12 +1904,16 @@ export class Game {
     this._fx = meta.getEffects();
     if (this.slotCols !== this._fx.slotCols) this._syncPlayfieldFromMeta();
     this.launchCd = Math.max(0, this.launchCd - dt);
+    this._tickAutoFire();
+    const tax = this._effects().taxPerSec || 0;
+    if (tax > 0) this.gold += tax * dt;
 
-    // Matter 속도는 스텝당 px. 이번 엔진 스텝과 같은 stepMs로 px/초를 변환한다.
+    // Matter 속도는 스텝당 px. 이번 엔진 스텝과 같은 stepMs로 적분한다.
     this._stepMs = engineStepMs(dt);
     Engine.update(this.engine, this._stepMs);
     this._processMerges();
     this._updateSpawning(dt);
+    this._refreshJoinFlags();
     this._computeEngagement();
     this._updateChargeHits();
     this._updateLine(dt);

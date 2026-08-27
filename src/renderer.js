@@ -4,12 +4,14 @@ import {
   CANVAS_W, CANVAS_H, DEFEAT_Y, LAUNCHER_Y, LINE_START_Y,
   CAMP_DEST_Y, CAMP_DRAW_H,
   BALANCE, UNITS, MONSTERS, HEROES, HERO_MISSION_DAMAGE, HERO_BOSS_LIMIT,
-  HERO_ASCENSION_SLOWMO,
+  HERO_ASCENSION_SLOWMO, formatShopGold,
 } from './config.js';
 import { assets, DIRT_W } from './assets.js';
 import { drawHud } from './hud.js';
 
-const EVO_BAR_H = 36;
+const EVO_ICON_H = 36;
+const EVO_LABEL_H = 22;
+const EVO_BAR_H = EVO_ICON_H + EVO_LABEL_H;
 const EVO_SLOT_W = 40;
 const EVO_SLOT_COUNT = 10;
 const FOREST_DRAW_H = CANVAS_H;
@@ -19,7 +21,35 @@ export function evoBarMetrics() {
   const y = CANVAS_H - EVO_BAR_H;
   const slot = EVO_SLOT_W;
   const startX = (CANVAS_W - slot * EVO_SLOT_COUNT) / 2;
-  return { x: 0, y, w: CANVAS_W, h: EVO_BAR_H, slot, startX, count: EVO_SLOT_COUNT };
+  return {
+    x: 0, y, w: CANVAS_W, h: EVO_BAR_H, slot, startX, count: EVO_SLOT_COUNT,
+    labelH: EVO_LABEL_H, iconY: y + EVO_LABEL_H, iconH: EVO_ICON_H,
+  };
+}
+
+const DOCK_H = 44;
+const DOCK_GAP = 5;
+const DOCK_PAD = 8;
+
+/** 상점 바 바로 위 우측. 자동 / 다음 / 골드를 같은 높이의 카드로 맞춤. 중앙 발사대와 겹치지 않게 오른쪽 정렬. */
+export function bottomHudMetrics() {
+  const evo = evoBarMetrics();
+  const y = evo.y - DOCK_H - 6;
+  const goldW = 78;
+  const nextW = 44;
+  const autoW = 44;
+  const gold = { x: CANVAS_W - DOCK_PAD - goldW, y, w: goldW, h: DOCK_H };
+  const next = { x: gold.x - DOCK_GAP - nextW, y, w: nextW, h: DOCK_H };
+  const auto = { x: next.x - DOCK_GAP - autoW, y, w: autoW, h: DOCK_H };
+  return { y, h: DOCK_H, gold, next, auto };
+}
+
+export function goldIndicatorRect() {
+  return bottomHudMetrics().gold;
+}
+
+export function autoFireRect() {
+  return bottomHudMetrics().auto;
 }
 
 export function colorAlpha(hex, a) {
@@ -153,18 +183,23 @@ function drawMotionStreaks(ctx, x, y, r, color) {
   ctx.restore();
 }
 
-function fillWoodFrame(ctx, x, y, w, h) {
+function fillWoodFrame(ctx, x, y, w, h, opts = {}) {
   ctx.save();
   ctx.lineJoin = 'round';
-  ctx.fillStyle = '#6a4324';
+  ctx.fillStyle = opts.active ? '#7a5428' : '#6a4324';
   ctx.strokeStyle = '#1a140c';
   ctx.lineWidth = 3;
+  if (opts.active) {
+    ctx.shadowColor = 'rgba(255, 210, 80, 0.4)';
+    ctx.shadowBlur = 8;
+  }
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(x, y, w, h, 6);
   else ctx.rect(x, y, w, h);
   ctx.fill();
   ctx.stroke();
-  ctx.strokeStyle = '#e8c56a';
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = opts.active ? '#ffe08a' : '#e8c56a';
   ctx.lineWidth = 1.6;
   ctx.strokeRect(x + 4, y + 3, w - 8, h - 6);
   ctx.restore();
@@ -175,17 +210,17 @@ function drawAimArrow(ctx, game) {
   const x = game.aimX;
   const y0 = LAUNCHER_Y - 22;
   const y1 = Math.min(LAUNCHER_Y - 36, Math.max(game.lineY + 24, LINE_START_Y + 20));
-  const dragging = game.dragging;
+  const armed = game.dragging || game.autoFire;
   ctx.save();
-  ctx.strokeStyle = dragging ? 'rgba(255, 220, 90, 0.85)' : 'rgba(255, 230, 140, 0.42)';
-  ctx.lineWidth = dragging ? 3 : 2;
-  ctx.setLineDash(dragging ? [] : [7, 8]);
+  ctx.strokeStyle = armed ? 'rgba(255, 220, 90, 0.85)' : 'rgba(255, 230, 140, 0.42)';
+  ctx.lineWidth = armed ? 3 : 2;
+  ctx.setLineDash(armed ? [] : [7, 8]);
   ctx.beginPath();
   ctx.moveTo(x, y0);
   ctx.lineTo(x, y1);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = dragging ? 'rgba(255, 220, 80, 0.95)' : 'rgba(255, 230, 140, 0.55)';
+  ctx.fillStyle = armed ? 'rgba(255, 220, 80, 0.95)' : 'rgba(255, 230, 140, 0.55)';
   ctx.beginPath();
   ctx.moveTo(x, y1 - 2);
   ctx.lineTo(x - 7, y1 + 14);
@@ -271,14 +306,14 @@ function drawCampFieldSeam(ctx, left, right) {
 }
 
 /** Cached source rect: skip empty top of the wall PNG so stone fills Maginot→bottom. */
-let _wallStoneSrc = null;
-let _wallStoneKey = null;
+const _wallStoneSrc = new Map();
 
-function wallStoneSource(wall) {
+function wallStoneSource(wall, id) {
   const iw = Math.max(1, wall.width || CANVAS_W);
   const ih = Math.max(1, wall.height || (CANVAS_H - DEFEAT_Y));
-  const key = `${iw}x${ih}`;
-  if (_wallStoneSrc && _wallStoneKey === key) return _wallStoneSrc;
+  const key = `${id}:${iw}x${ih}`;
+  const cached = _wallStoneSrc.get(key);
+  if (cached) return cached;
 
   let sy = 0;
   try {
@@ -288,45 +323,74 @@ function wallStoneSource(wall) {
     const pctx = probe.getContext('2d', { willReadFrequently: true });
     pctx.drawImage(wall, 0, 0);
     const { data } = pctx.getImageData(0, 0, iw, ih);
-    const er = data[0];
-    const eg = data[1];
-    const eb = data[2];
-    const thresh = iw * 0.08;
-    for (let y = 0; y < ih; y++) {
+    const distAt = (i) => data[i + 3];
+    const rowHits = (y, stopAt) => {
       let hits = 0;
       const row = y * iw * 4;
       for (let x = 0; x < iw; x++) {
-        const i = row + x * 4;
-        if (Math.abs(data[i] - er) + Math.abs(data[i + 1] - eg) + Math.abs(data[i + 2] - eb) > 48) {
+        if (data[row + x * 4 + 3] > 24) {
           hits++;
-          if (hits > thresh) {
-            sy = y;
-            y = ih;
-            break;
-          }
+          if (hits > stopAt) break;
         }
       }
+      return hits;
+    };
+    // 8% trips on dither in the empty PNG pad (~90px early on bg_wall).
+    // Need a real merlon/stone band, then skip leftover near-empty rows.
+    const solid = iw * 0.2;
+    let run = 0;
+    let band = 0;
+    for (let y = 0; y < ih; y++) {
+      if (rowHits(y, solid) > solid) {
+        if (run === 0) band = y;
+        run++;
+        if (run >= 3) {
+          sy = band;
+          break;
+        }
+      } else {
+        run = 0;
+      }
+    }
+    if (!sy) {
+      const loose = iw * 0.08;
+      for (let y = 0; y < ih; y++) {
+        if (rowHits(y, loose) > loose) {
+          sy = y;
+          break;
+        }
+      }
+    }
+    const step = Math.max(1, Math.floor(iw / 80));
+    while (sy + 1 < ih) {
+      let acc = 0;
+      let n = 0;
+      const row = sy * iw * 4;
+      for (let x = 0; x < iw; x += step) {
+        acc += distAt(row + x * 4);
+        n++;
+      }
+      if (n === 0 || acc / n >= 24) break;
+      sy++;
     }
   } catch {
     sy = 0;
   }
   if (sy > ih * 0.7) sy = 0;
-  _wallStoneKey = key;
-  _wallStoneSrc = { sx: 0, sy, sw: iw, sh: Math.max(1, ih - sy) };
-  return _wallStoneSrc;
+  const src = { sx: 0, sy, sw: iw, sh: Math.max(1, ih - sy) };
+  _wallStoneSrc.set(key, src);
+  return src;
 }
 
-/** Castle wall: dest covers Maginot (DEFEAT_Y) to canvas bottom. Crop empty PNG top. */
-function drawCastleWall(ctx) {
+/** Maginot 구간(DEFEAT_Y→하단). 건설 후면 성벽, 그 전에는 기본 성벽 PNG. */
+function drawCastleWall(ctx, game) {
   const destY = DEFEAT_Y;
   const destH = CANVAS_H - DEFEAT_Y;
-  const wall = assets.get('wall_bottom');
-  if (!wall) {
-    ctx.fillStyle = 'rgba(90, 90, 96, 0.9)';
-    ctx.fillRect(0, destY, CANVAS_W, destH);
-    return;
-  }
-  const { sx, sy, sw, sh } = wallStoneSource(wall);
+  const built = !!game.wall;
+  const name = built ? 'wall_bottom' : 'wall_basic';
+  const wall = assets.get(name);
+  if (!wall) return;
+  const { sx, sy, sw, sh } = wallStoneSource(wall, name);
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(wall, sx, sy, sw, sh, 0, destY, CANVAS_W, destH);
@@ -379,18 +443,29 @@ function drawWallHp(ctx, game, left, right) {
   if (!game.wall || game.wall.broken) return;
   const w = right - left;
   const ratio = game.wall.maxHp > 0 ? game.wall.hp / game.wall.maxHp : 0;
-  const barPad = Math.max(16, Math.min(40, w * 0.09));
-  const barY = DEFEAT_Y + 36;
+  const barPad = Math.max(18, Math.min(44, w * 0.1));
+  const barW = w - barPad * 2;
+  const barH = 7;
+  const barY = DEFEAT_Y - 20;
+  const plateY = barY - 15;
   ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(left + barPad, barY, w - barPad * 2, 6);
-  ctx.fillStyle = ratio > 0.35 ? '#8ec8ff' : '#ff8866';
-  ctx.fillRect(left + barPad, barY, (w - barPad * 2) * ratio, 6);
-  ctx.fillStyle = '#dce8f4';
-  ctx.font = "11px 'Malgun Gothic', sans-serif";
+  ctx.fillStyle = 'rgba(10, 8, 6, 0.58)';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(left + barPad - 6, plateY, barW + 12, 26, 5);
+  else ctx.rect(left + barPad - 6, plateY, barW + 12, 26);
+  ctx.fill();
+  ctx.fillStyle = ratio > 0.35 ? '#dce8f4' : '#ffc0b0';
+  ctx.font = "bold 10px 'Malgun Gothic', sans-serif";
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.fillText(`방어벽 ${game.wall.hp} / ${game.wall.maxHp}`, (left + right) / 2, barY + 8);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`방어벽 ${game.wall.hp} / ${game.wall.maxHp}`, (left + right) / 2, plateY + 8);
+  ctx.fillStyle = 'rgba(0,0,0,0.62)';
+  ctx.fillRect(left + barPad, barY, barW, barH);
+  ctx.fillStyle = ratio > 0.35 ? '#8ec8ff' : '#ff8866';
+  ctx.fillRect(left + barPad, barY, barW * ratio, barH);
+  ctx.strokeStyle = 'rgba(232, 197, 106, 0.55)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(left + barPad, barY, barW, barH);
   ctx.restore();
 }
 
@@ -449,7 +524,7 @@ function drawRangeIndicators(ctx, game) {
       const { x, y } = u.body.position;
       ctx.strokeStyle = colorAlpha(u.color, 0.7);
       ctx.beginPath();
-      ctx.arc(x, y, game._unitStat(u).range, 0, Math.PI * 2);
+      ctx.arc(x, y, game._unitStat(u).range + u.r, 0, Math.PI * 2);
       ctx.stroke();
     }
     if (game.wall && !game.wall.broken) {
@@ -489,7 +564,7 @@ function drawEnemies(ctx, game) {
       fallbackCircle(
         ctx, m.x, m.y, stat.r,
         flash ? '#ffffff' : stat.color, stat.outline, stat.grade || stat.icon,
-        m.key === 'skeleton' ? '#333' : '#fff',
+        m.key === 'skeleton' || m.key === 'skelknight' ? '#333' : '#fff',
       );
     }
     if (m.stunT > 0) {
@@ -503,6 +578,15 @@ function drawEnemies(ctx, game) {
       ctx.beginPath();
       ctx.arc(m.x + stat.r * 0.5, m.y - stat.r * 0.5, 4 + Math.sin(t * 8) * 0.6, 0, Math.PI * 2);
       ctx.fill();
+    }
+    const regenOn = (stat.regenPct || stat.regen)
+      && m.hp < m.maxHp
+      && (m.lastHitT ?? 0) >= (stat.regenDelay ?? 0);
+    if (regenOn) {
+      ctx.fillStyle = '#7CFC00';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('+', m.x + stat.r * 0.55, m.y - stat.r * 0.15 + Math.sin(t * 5) * 1.5);
     }
     drawHpBar(ctx, m.x, m.y - stat.r - 16, stat.r * 2, m.hp / m.maxHp, '#e74c3c');
     drawGradeBadge(ctx, m.x, m.y - stat.r - 4, stat.grade || stat.icon, stat.r);
@@ -635,18 +719,24 @@ function fillAura(ctx, x, y, r) {
   ctx.fill();
 }
 
-function drawLauncher(ctx, game, innerR) {
+function drawLauncher(ctx, game) {
   if (game.state !== 'playing') return;
   const stat = UNITS[game.currentTier - 1];
   const drawR = unitDrawR(stat);
   const ready = game.launchCd <= 0;
   const maxCd = Math.max(0.001, game._launchCooldown());
   const spr = assets.unit(game.currentTier);
+  const autoOn = !!game.autoFire || !!game.holdingFire;
   ctx.save();
   ctx.globalAlpha = ready ? 1 : 0.38;
+  if (autoOn && ready) {
+    ctx.shadowColor = '#7ec8ff';
+    ctx.shadowBlur = 12;
+  }
   if (!drawSprite(ctx, spr, game.aimX, LAUNCHER_Y, drawR * 2.4, drawR * 2.4)) {
     fallbackCircle(ctx, game.aimX, LAUNCHER_Y, drawR, stat.color, 'rgba(255,255,255,0.5)', String(game.currentTier));
   }
+  ctx.shadowBlur = 0;
   drawGradeBadge(ctx, game.aimX, LAUNCHER_Y - drawR - 4, String(game.currentTier), drawR);
   ctx.restore();
 
@@ -657,53 +747,151 @@ function drawLauncher(ctx, game, innerR) {
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.fillRect(bx, by, barW, barH);
-  ctx.fillStyle = ready ? '#6fe08a' : '#e8c878';
+  ctx.fillStyle = ready ? (autoOn ? '#7ec8ff' : '#6fe08a') : '#e8c878';
   ctx.fillRect(bx, by, barW * (ready ? 1 : 1 - game.launchCd / maxCd), barH);
   ctx.restore();
+}
 
-  const nstat = UNITS[game.nextTier - 1];
-  const nextX = innerR - 55;
-  const nspr = assets.unit(game.nextTier);
-  ctx.save();
-  ctx.globalAlpha = ready ? 0.95 : 0.45;
-  fillWoodFrame(ctx, nextX - 22, CANVAS_H - EVO_BAR_H - 52, 44, 46);
-  ctx.fillStyle = '#f0e6d2';
-  ctx.font = "bold 11px 'Malgun Gothic', sans-serif";
+function drawDockLabel(ctx, r, title, yOff = 11) {
+  ctx.fillStyle = '#c9b48a';
+  ctx.font = "bold 10px 'Malgun Gothic', sans-serif";
   ctx.textAlign = 'center';
-  ctx.fillText('다음', nextX, CANVAS_H - EVO_BAR_H - 44);
-  if (!drawSprite(ctx, nspr, nextX, CANVAS_H - EVO_BAR_H - 18, 28, 28)) {
-    fallbackCircle(ctx, nextX, CANVAS_H - EVO_BAR_H - 18, 14, nstat.color, 'rgba(255,255,255,0.35)', String(game.nextTier));
+  ctx.textBaseline = 'middle';
+  ctx.fillText(title, r.x + r.w / 2, r.y + yOff);
+}
+
+function drawBottomDock(ctx, game) {
+  if (game.state !== 'playing') return;
+  const { gold, next, auto } = bottomHudMetrics();
+  const ready = game.launchCd <= 0;
+  const nstat = UNITS[game.nextTier - 1];
+  const nspr = assets.unit(game.nextTier);
+
+  fillWoodFrame(ctx, auto.x, auto.y, auto.w, auto.h, { active: !!game.autoFire });
+  ctx.save();
+  drawDockLabel(ctx, auto, '자동');
+  ctx.fillStyle = game.autoFire ? '#7ec8ff' : '#8a7a60';
+  ctx.font = "bold 13px 'Malgun Gothic', sans-serif";
+  ctx.fillText(game.autoFire ? 'ON' : 'OFF', auto.x + auto.w / 2, auto.y + 29);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = ready ? 0.98 : 0.55;
+  fillWoodFrame(ctx, next.x, next.y, next.w, next.h);
+  drawDockLabel(ctx, next, '다음');
+  if (!drawSprite(ctx, nspr, next.x + next.w / 2, next.y + 29, 22, 22)) {
+    fallbackCircle(ctx, next.x + next.w / 2, next.y + 29, 10, nstat.color, 'rgba(255,255,255,0.35)', String(game.nextTier));
   }
-  drawGradeBadge(ctx, nextX, CANVAS_H - EVO_BAR_H - 8, String(game.nextTier), 12);
+  drawGradeBadge(ctx, next.x + next.w / 2, next.y + 18, String(game.nextTier), 10);
+  ctx.restore();
+
+  fillWoodFrame(ctx, gold.x, gold.y, gold.w, gold.h);
+  ctx.save();
+  drawDockLabel(ctx, gold, '골드');
+  ctx.fillStyle = '#ffe08a';
+  ctx.font = "bold 16px 'Malgun Gothic', sans-serif";
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(Math.floor(game.gold || 0)), gold.x + gold.w / 2, gold.y + 29);
+  ctx.restore();
+}
+
+function drawLockIcon(ctx, x, y, s = 10) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = '#e8c878';
+  ctx.fillStyle = 'rgba(18, 14, 9, 0.82)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-s * 0.38, -s * 0.02, s * 0.76, s * 0.58, 1.6);
+  else ctx.rect(-s * 0.38, -s * 0.02, s * 0.76, s * 0.58);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, -s * 0.06, s * 0.22, Math.PI, 0);
+  ctx.stroke();
   ctx.restore();
 }
 
 function drawEvoBar(ctx, game) {
   const m = evoBarMetrics();
   game._evoBarRect = { x: m.x, y: m.y, w: m.w, h: m.h };
-  const bar = assets.get('evo_bar');
-  if (bar) ctx.drawImage(bar, 0, m.y, CANVAS_W, EVO_BAR_H);
-  else {
-    ctx.fillStyle = 'rgba(40, 28, 14, 0.85)';
-    ctx.fillRect(0, m.y, CANVAS_W, EVO_BAR_H);
-  }
-  const cheat = game.cheatTier | 0;
-  const mark = cheat || game.currentTier;
-  const bx = m.startX + (mark - 1) * m.slot + 2;
-  const by = m.y + 3;
-  const bw = m.slot - 4;
-  const bh = EVO_BAR_H - 6;
   ctx.save();
-  if (cheat) {
-    ctx.fillStyle = 'rgba(255, 210, 50, 0.42)';
-    ctx.fillRect(bx, by, bw, bh);
-    ctx.strokeStyle = 'rgba(255, 230, 90, 1)';
-    ctx.lineWidth = 2.6;
-  } else {
-    ctx.strokeStyle = 'rgba(255, 220, 100, 0.85)';
-    ctx.lineWidth = 2;
+  ctx.fillStyle = 'rgba(22, 16, 10, 0.88)';
+  ctx.fillRect(0, m.y, CANVAS_W, EVO_BAR_H);
+  const bar = assets.get('evo_bar');
+  if (bar) ctx.drawImage(bar, 0, m.iconY, CANVAS_W, m.iconH);
+  ctx.restore();
+
+  const mark = game.currentTier | 0;
+  for (let i = 0; i < m.count; i++) {
+    const tier = i + 1;
+    const sx = m.startX + i * m.slot;
+    const view = typeof game.shopView === 'function'
+      ? game.shopView(tier)
+      : { buyable: tier >= 2 && tier <= 9, dim: true, locked: true, price: 0, remaining: 0, unlimited: false };
+
+    ctx.save();
+    ctx.font = "bold 10px 'Malgun Gothic', sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const lx = sx + m.slot / 2;
+    if (!view.buyable) {
+      ctx.fillStyle = '#c9b48a';
+      ctx.fillText(tier === 1 ? '발사' : '합성', lx, m.y + m.labelH / 2);
+    } else {
+      const price = view.cheat ? '무료' : `${formatShopGold(view.price)}G`;
+      const stock = (view.cheat || view.unlimited) ? '∞' : `${Number.isFinite(view.remaining) ? view.remaining : 0}/${view.limit}`;
+      ctx.fillStyle = view.broke ? '#ff8080' : (view.locked || view.soldOut ? '#8a7a60' : '#ffd27a');
+      ctx.fillText(price, lx, m.y + 8);
+      ctx.font = "bold 9px 'Malgun Gothic', sans-serif";
+      ctx.fillText(stock, lx, m.y + 17);
+    }
+    ctx.restore();
+
+    if (!bar) {
+      const spr = assets.unit(tier);
+      const cx = sx + m.slot / 2;
+      const cy = m.iconY + m.iconH / 2;
+      if (!drawSprite(ctx, spr, cx, cy, 28, 28)) {
+        fallbackCircle(ctx, cx, cy, 12, UNITS[tier - 1].color, 'rgba(0,0,0,0.4)', String(tier));
+      }
+    }
+
+    if (view.dim) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(8, 6, 4, 0.55)';
+      ctx.fillRect(sx + 1, m.iconY + 1, m.slot - 2, m.iconH - 2);
+      ctx.restore();
+    }
+    if (view.locked) {
+      drawLockIcon(ctx, sx + m.slot / 2, m.iconY + m.iconH / 2, 11);
+    }
+
+    if (mark === tier) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 220, 100, 0.95)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx + 2, m.y + 1, m.slot - 4, m.h - 2);
+      ctx.restore();
+    }
   }
-  ctx.strokeRect(bx, by, bw, bh);
+}
+
+function drawGoldIndicator(ctx, game) {
+  // 하단 독(drawBottomDock)에서 골드·다음·자동을 같이 그림
+  if (game.state === 'playing') return;
+  const r = goldIndicatorRect();
+  fillWoodFrame(ctx, r.x, r.y, r.w, r.h);
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#c9b48a';
+  ctx.font = "bold 10px 'Malgun Gothic', sans-serif";
+  ctx.fillText('골드', r.x + r.w / 2, r.y + 12);
+  ctx.fillStyle = '#ffe08a';
+  ctx.font = "bold 16px 'Malgun Gothic', sans-serif";
+  ctx.fillText(String(Math.floor(game.gold || 0)), r.x + r.w / 2, r.y + 28);
   ctx.restore();
 }
 
@@ -896,7 +1084,7 @@ class Renderer {
     drawSideForest(ctx, innerL, innerR);
     drawForestFieldSeam(ctx, innerL, innerR);
 
-    if (game.wall) drawCastleWall(ctx);
+    drawCastleWall(ctx, game);
 
     ctx.save();
     ctx.beginPath();
@@ -919,7 +1107,7 @@ class Renderer {
     drawWallHp(ctx, game, innerL, innerR);
     drawArchers(ctx, game);
     drawAimArrow(ctx, game);
-    drawLauncher(ctx, game, innerR);
+    drawLauncher(ctx, game);
 
     game.effects.draw(ctx, CANVAS_W);
     ctx.restore();
@@ -935,6 +1123,8 @@ class Renderer {
 
     drawHud(game, ctx);
     drawEvoBar(ctx, game);
+    drawBottomDock(ctx, game);
+    drawGoldIndicator(ctx, game);
 
     if ((game.ascendFlashT || 0) > 0) {
       const a = Math.max(0, game.ascendFlashT / HERO_ASCENSION_SLOWMO);

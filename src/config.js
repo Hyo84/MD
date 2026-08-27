@@ -11,21 +11,30 @@ export const SLOT_EDGE_PAD = 40;      // 슬롯을 내면에서 한 칸 더 안�
 export const DEFEAT_Y = 660;      // 마지노선
 export const CAMP_DEST_Y = 64;   // 적 캠프 그리기·아군 침입 판정
 export const CAMP_DRAW_H = 164;
-export const LINE_START_Y = CAMP_DEST_Y + CAMP_DRAW_H / 2; // 웨이브라인 상한 = 캠프 절반 (146)
+export const LINE_START_Y = CAMP_DEST_Y + CAMP_DRAW_H; // 웨이브라인 상한 = 캠프 이미지 하단 (228)
 export const ENEMY_SPAWN_Y = CAMP_DEST_Y; // 캠프 상단에서 합류. 라인이 상한이어도 내려오며 착지
 export const LAUNCHER_Y = 700;
 
 // 전역 밸런스 (어드민 패널에서 실시간 조정)
 export const BALANCE = {
-  baseLineSpeed: 4,     // 웨이브라인 기본 전진 속도 (px/초)
-  spawnInterval: 3.5,   // 1웨이브 적 스폰 간격 (초). 웨이브가 오를수록 짧아짐
-  spawnIntervalAccel: 0.22, // interval = base / (1 + (wave-1)*accel)
-  spawnIntervalFloor: 0.9,  // 최단 스폰 간격 (초)
-  spawnCampRaidMin: 2,  // 캠프 침입 시 투입 배율 하한
+  baseLineSpeed: 8,     // 웨이브라인 기본 전진 속도 (px/초). 스킬 없이 W11 압박용
+  // 착지한 보스(_enemyOccupiesLine)가 있을 때 netSpeed 하한. joining 캠프 행군에는 적용 안 함.
+  bossMinAdvance: 18,
+  spawnInterval: 2.3,   // 1웨이브 적 스폰 간격 (초). 웨이브가 오를수록 짧아짐
+  spawnIntervalAccel: 0.30, // interval = base / (1 + (wave-1)*accel)
+  spawnIntervalFloor: 0.55,  // 웨이브 곡선 최단 스폰 간격 (초). 캠프 러시는 spawnCampRushFloor
+  spawnCampRaidMin: 2,  // 캠프 침입 시 투입 배율 하한 (아군이 캠프 스프라이트 안)
   spawnCampRaidMax: 3,  // 캠프 침입 시 투입 배율 상한
-  bossEscortCount: 3,   // 보스와 함께 캠프에서 내려오는 부하 수
-  bossMinionCap: 4,     // 보스전 중 필드에 유지할 최대 부하 수
-  launchCooldown: 1.9,  // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
+  // 전열 아군이 캠프에 가까워질수록 스폰 타이머가 빨리 줄어듦 (라인 기준이면 시작부터 러시)
+  spawnCampApproachRange: 200, // 캠프 하단에서 아군까지 이 거리(px) 안에서 가속. 밖·아군 없음이면 배율 1
+  spawnCampTouchMult: 6,       // 아군이 캠프 하단에 닿을 때 타이머 소진 배율. W1 2.3s → ~0.38s
+  spawnCampApproachEase: 1.5,  // proximity^k. 1=선형, >1이면 캠프 근처에서 급가속
+  spawnCampRushFloor: 0.28,    // 러시 실효 최단 간격 (초). 우르르지만 적당히
+  bossEscortCount: 4,   // 보스 등장 시 총 부하 수 (해골기사 기본 포함)
+  bossKnightEscorts: 2, // 그중 해골기사 기본 수. 나머지는 일반 풀
+  bossMinionCap: 5,     // 보스전 중 필드에 유지할 최대 부하 수
+  launchCooldown: 1.35, // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
+  mergeComboCdRefund: 0.5, // 발사체 연속 머지 2회+ 시 남은 발사 쿨 감소 비율
   launchSpeed: 720,     // 발사 돌진 (px/초). 짧은 버스트 후 진군 테이블로 걸음
   unitAdvanceSpeed: 28, // 진군 테이블이 없을 때 폴백 (px/초)
   // 진군 절대 속도 (px/초). 인덱스 0 = 스킬 없음, 1–5 = 진격 랭크
@@ -36,10 +45,11 @@ export const BALANCE = {
   attackCooldown: 0.8,  // 공격 틱 간격 (초)
   enemyReach: 12,       // 적 근접 공격 사거리 보정 (px). 실제 거리 = 적.r + 12
 
-  // 웨이브 난이도 곡선 (적 HP/ATK 배율, 스폰 시점에 적용)
-  gentleRate: 0.10,     // 완만 구간: 웨이브당 +10% (웨이브 10 ≈ 1.9배)
-  steepStartWave: 11,   // 가파른 구간 시작 웨이브
-  steepFactor: 1.3,     // 가파른 구간: 웨이브당 ×1.3 누적
+  // 웨이브 난이도 곡선. 스킬 0 기준 W11 ≈ 8.4배, 마지노(W11)에서 게임오버 목표
+  gentleRate: 0.20,     // 완만 구간: 웨이브당 +20% (W5=1.80, W10=2.80)
+  steepStartWave: 11,   // 가파른 구간 시작 — 마지노(W11) 클리프
+  steepFactor: 3.0,     // 첫 가파른 웨이브 배율. W11 ≈ 8.4배
+  steepContinue: 1.45,  // 클리프 이후 웨이브당 배율 (W12≈12.2배). 미설정 시 steepFactor와 동일
 
   // 적 없는 라인: 전열 아군 저지력으로 시작 위치까지 밀어올림
   emptyLinePushScale: 1,  // 저지력 배율 (1 = 교전 저지력과 동일)
@@ -95,12 +105,38 @@ export function clampLiveMult(v) {
   return Math.max(LIVE_MULT_MIN, Math.min(LIVE_MULT_MAX, stepped));
 }
 
-// 웨이브별 적 스탯 배율: 1~(steepStart-1) 완만 선형, 이후 가파른 지수 증가
+// 트롤 비전투 재생 (% of maxHp / 초). HUD·어드민에서 실시간 조절.
+export const REGEN_PCT_MIN = 0;
+export const REGEN_PCT_MAX = 0.40;
+export const REGEN_PCT_STEP = 0.02;
+
+export function clampRegenPct(v) {
+  const stepped = Math.round((Number(v) || 0) / REGEN_PCT_STEP) * REGEN_PCT_STEP;
+  return Math.max(REGEN_PCT_MIN, Math.min(REGEN_PCT_MAX, Number(stepped.toFixed(2))));
+}
+
+// 적 리스폰 속도 배율. 1 = 기본, 2 = 두 배 빠름(간격 절반). HUD·어드민에서 실시간 조절.
+export const SPAWN_RATE_MIN = 0.2;
+export const SPAWN_RATE_MAX = 5.0;
+export const SPAWN_RATE_STEP = 0.1;
+
+export function clampSpawnRate(v) {
+  const n = Number(v);
+  const base = Number.isFinite(n) ? n : 1;
+  const stepped = Math.round(base * 10) / 10;
+  return Math.max(SPAWN_RATE_MIN, Math.min(SPAWN_RATE_MAX, stepped));
+}
+
+// 웨이브별 적 스탯 배율: 1~(steepStart-1) 완만 선형, steepStart에서 클리프 후 steepContinue로 증가
 export function waveMultiplier(wave) {
-  const gentleWaves = Math.min(wave, BALANCE.steepStartWave - 1);
+  const start = BALANCE.steepStartWave;
+  const gentleWaves = Math.min(wave, start - 1);
   let mult = 1 + (gentleWaves - 1) * BALANCE.gentleRate;
-  if (wave >= BALANCE.steepStartWave) {
-    mult *= Math.pow(BALANCE.steepFactor, wave - BALANCE.steepStartWave + 1);
+  if (wave >= start) {
+    const n = wave - start + 1;
+    const cliff = BALANCE.steepFactor;
+    const cont = Number.isFinite(BALANCE.steepContinue) ? BALANCE.steepContinue : cliff;
+    mult *= cliff * Math.pow(cont, n - 1);
   }
   return mult;
 }
@@ -138,7 +174,17 @@ export const HEROES = {
 };
 
 // T10 사명: 피해 쿼터를 채우면 명예로운 승천. HP로 죽으면 승천 없음.
-export const HERO_MISSION_DAMAGE = 80000; // 기본 게이지 (이 영웅 바디가 적에게 가한 피해)
+// 쿼터 = max(min, base + wave * perWave). W1=20000, W13=80000.
+export const HERO_MISSION = {
+  min: 20000,
+  base: 15000,
+  perWave: 5000,
+};
+export function heroMissionDamage(wave) {
+  const w = Math.max(1, Math.floor(Number(wave) || 1));
+  return Math.max(HERO_MISSION.min, HERO_MISSION.base + w * HERO_MISSION.perWave);
+}
+export const HERO_MISSION_DAMAGE = HERO_MISSION.min; // 폴백 (스폰 시 heroMissionDamage(wave) 사용)
 export const HERO_MISSION_KILLS = 25;     // 미사용 대안 쿼터 (킬 모드 스위치 없음)
 export const HERO_BOSS_LIMIT = 3;         // 영웅 생존 중 보스 처치 이 횟수면 퇴장 (사명보다 먼저면 승천 없음)
 export const HERO_ASCENSION_ATK_MULT = 1.5;
@@ -149,17 +195,57 @@ export const HERO_ASCENSION_BONUS_SCORE = 400;
 // 적 (웨이브라인에 부착되는 개체)
 // speed = 라인 전진 가속 기여 (px/초, 0이면 라인을 밀지 않음)
 export const MONSTERS = {
-  goblin:   { name: '고블린',     icon: '고', grade: '1', color: '#3CB371', outline: '#1e5c38', r: 15, hp: 32,    atk: 3,   speed: 2,  score: 10 },
-  orc:      { name: '오크',       icon: '오', grade: '2', color: '#6B8E23', outline: '#39510f', r: 20, hp: 110,   atk: 8,   speed: 1,  score: 25 },
-  skeleton: { name: '스켈레톤',   icon: '스', grade: '3', color: '#DCDCDC', outline: '#6e6e6e', r: 18, hp: 90,    atk: 8,   speed: 0,  score: 20 },
-  troll:    { name: '동굴 트롤',  icon: '트', grade: '4', color: '#556B2F', outline: '#2c3a14', r: 28, hp: 280,   atk: 9,   speed: 1,  score: 100, regen: 4 },
-  boss:     { name: '오크 워로드', icon: '보스', grade: '보스', color: '#B22222', outline: '#5c0e0e', r: 45, hp: 900,   atk: 12,  speed: 8, score: 500, isBoss: true },
+  goblin:     { name: '고블린',     icon: '고', grade: '1',    color: '#3CB371', outline: '#1e5c38', r: 15, hp: 48,   atk: 5,  speed: 4, score: 10,  gold: 6 },
+  skeleton:   { name: '스켈레톤',   icon: '스', grade: '2',    color: '#DCDCDC', outline: '#6e6e6e', r: 16, hp: 150,  atk: 12, speed: 1, score: 20,  gold: 12, sprite: 'skeleton2' },
+  orc:        { name: '오크',       icon: '오', grade: '3',    color: '#6B8E23', outline: '#39510f', r: 22, hp: 185,  atk: 14, speed: 2, score: 30,  gold: 18 },
+  troll:      { name: '동굴 트롤',  icon: '트', grade: '4',    color: '#556B2F', outline: '#2c3a14', r: 28, hp: 430,  atk: 15, speed: 3, score: 100, gold: 50, regenDelay: 1.2, regenPct: 0.08 },
+  skelknight: { name: '해골기사',   icon: '기', grade: '5',    color: '#C0C0C0', outline: '#4a4a4a', r: 24, hp: 280,  atk: 21, speed: 3, score: 80,  gold: 40, sprite: 'skeleton', bossOnly: true },
+  boss:       { name: '오크 워로드', icon: '보스', grade: '보스', color: '#B22222', outline: '#5c0e0e', r: 45, hp: 1350, atk: 17, speed: 12, score: 500, gold: 150, isBoss: true },
 };
+
+// ---------- 골드 / 하단 티어 상점 ----------
+export const ECONOMY = {
+  startGold: 0,       // 런 시작 기본 골드 (스킬 startGold와 합산)
+  taxPerSec: 0,       // 초당 세금 기본값 (스킬 taxRate와 합산)
+  bountyMult: 1,      // 처치 골드 전역 배율 (스킬 bountyGold는 가산 %)
+  shopBaseTier: 2,    // 용병술 0랭크일 때 구매 가능 최대 티어 (스킬 없으면 T2만)
+};
+
+export const SHOP_MIN_TIER = 2;
+export const SHOP_MAX_TIER = 9;
+export const SHOP_UNLIMITED = -1; // 웨이브 한도. -1 = 무제한
+
+/** T2–T9 구매. T1은 무료 발사 전용, T10은 T9+T9 합성 전용. limit -1 = ∞ */
+export const SHOP = {
+  2: { price: 80,    limit: 2 },
+  3: { price: 200,   limit: 2 },
+  4: { price: 380,   limit: 2 },
+  5: { price: 600,   limit: 2 },
+  6: { price: 1400,  limit: 2 },
+  7: { price: 3000,  limit: 1 },
+  8: { price: 6500,  limit: 1 },
+  9: { price: 14000, limit: 1 },
+};
+
+export function isShopTier(tier) {
+  const t = Math.floor(Number(tier) || 0);
+  return t >= SHOP_MIN_TIER && t <= SHOP_MAX_TIER && !!SHOP[t];
+}
+
+export function formatShopGold(n) {
+  const v = Math.abs(Math.floor(Number(n) || 0));
+  if (v >= 10000) return `${Math.round(v / 1000)}k`;
+  if (v >= 1000) {
+    const k = v / 1000;
+    return `${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}k`;
+  }
+  return String(v);
+}
 
 export const FRICTION_AIR_UNIT = 0.03;
 
 export function killsNeeded(wave) {
-  return 8 + wave * 2;
+  return 12 + wave * 2;
 }
 
 // ---------- 메타 진행 (XP / 레벨 / 스킬) ----------
@@ -244,6 +330,7 @@ export const SKILL_TREES = [
   { id: 'combat', name: '전투' },
   { id: 'frontline', name: '전열' },
   { id: 'merge', name: '머지' },
+  { id: 'economy', name: '경제' },
   { id: 'wall', name: '방어벽' },
   { id: 'archer', name: '궁수' },
 ];
@@ -262,7 +349,7 @@ export const SKILLS = [
     unlockLevel: 1,
     rankLevelStep: 2,
     requires: null,
-    perRank: 0.32, // 초 감소. 기본 1.9 → R5 ≈ 0.30
+    perRank: 0.32, // 초 감소. 기본 1.35 → R5는 하한에 근접
   },
   {
     id: 'advance',
@@ -410,6 +497,49 @@ export const SKILLS = [
     requires: 'archer',
     perRank: 4, // 웨이브당 발수
   },
+  {
+    id: 'startGold',
+    name: '초기 자금',
+    desc: '게임 시작 시 골드를 추가로 지급합니다.',
+    tree: 'economy',
+    maxRank: 10,
+    cost: 1,
+    unlockLevel: 1,
+    requires: null,
+    perRank: 50,
+  },
+  {
+    id: 'taxRate',
+    name: '세금 징수',
+    desc: '초당 골드를 자동으로 획득합니다.',
+    tree: 'economy',
+    maxRank: 10,
+    cost: 1,
+    unlockLevel: 2,
+    requires: null,
+    perRank: 1.5,
+  },
+  {
+    id: 'bountyGold',
+    name: '바운티 헌터',
+    desc: '적 처치 시 획득 골드가 늘어납니다.',
+    tree: 'economy',
+    maxRank: 10,
+    cost: 1,
+    unlockLevel: 3,
+    requires: null,
+    perRank: 0.10,
+  },
+  {
+    id: 'mercenary',
+    name: '용병술',
+    desc: '하단 티어표에서 구매할 수 있는 최대 티어를 해금합니다. 기본 T2.',
+    tree: 'economy',
+    maxRank: 6,
+    cost: 1,
+    unlockLevel: 4,
+    requires: null,
+  },
 ];
 
 export const SKILL_BY_ID = Object.fromEntries(SKILLS.map((s) => [s.id, s]));
@@ -433,6 +563,7 @@ export function rankUnlockLevel(skill, rank) {
 export const META_STORAGE_KEY = 'md.knightslide.meta.v1';
 export const BRANDING_STORAGE_KEY = 'md.knightslide.branding.v1';
 export const CHEATS_STORAGE_KEY = 'md.knightslide.cheats.v1';
+export const AUTO_FIRE_STORAGE_KEY = 'md.knightslide.autofire.v1';
 
 /** Start overlay / document.title. Admin 패널에서 수정, localStorage에 유지. */
 export const BRANDING = {

@@ -1,8 +1,8 @@
 // 메타 진행: 레벨/XP/스킬 포인트. localStorage에 저장되어 게임오버·새로고침에도 유지.
 
 import {
-  PROGRESSION, SKILLS, SKILL_BY_ID, xpToNextLevel, META_STORAGE_KEY, BALANCE,
-  rankUnlockLevel, advanceSpeedForRank, slotColsForRank, launchTierChances,
+  PROGRESSION, SKILLS, SKILL_BY_ID, xpToNextLevel, META_STORAGE_KEY, BALANCE, ECONOMY,
+  rankUnlockLevel, advanceSpeedForRank, slotColsForRank, launchTierChances, SHOP_MAX_TIER,
 } from './config.js';
 
 function emptyRanks() {
@@ -154,6 +154,13 @@ export class Meta {
     const archerCount = hasArcher
       ? Math.min(PROGRESSION.archerMax, 1 + extra)
       : 0;
+    const startGold = (ECONOMY.startGold ?? 0) + r('startGold') * (SKILL_BY_ID.startGold?.perRank ?? 50);
+    const taxPerSec = (ECONOMY.taxPerSec ?? 0) + r('taxRate') * (SKILL_BY_ID.taxRate?.perRank ?? 1.5);
+    const bountyMult = (ECONOMY.bountyMult ?? 1) * (1 + r('bountyGold') * (SKILL_BY_ID.bountyGold?.perRank ?? 0.1));
+    const shopMaxTier = Math.min(
+      SHOP_MAX_TIER,
+      Math.max(1, Math.floor((ECONOMY.shopBaseTier ?? 2) + r('mercenary'))),
+    );
     return {
       launchCooldown: launchCd,
       advanceSpeed: advanceSpeedForRank(r('advance')),
@@ -175,6 +182,10 @@ export class Meta {
       archerAtk: PROGRESSION.archerBaseAtk + r('archerAtk') * SKILL_BY_ID.archerAtk.perRank,
       archerAmmo: PROGRESSION.archerBaseAmmo + r('archerAmmo') * SKILL_BY_ID.archerAmmo.perRank,
       slotCols: slotColsForRank(r('boardWidth')),
+      startGold,
+      taxPerSec,
+      bountyMult,
+      shopMaxTier,
     };
   }
 

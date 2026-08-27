@@ -48,18 +48,20 @@
 
 | 키 | 기본값 | 단위/설명 |
 |----|--------|-----------|
-| `baseLineSpeed` | **6** | 웨이브라인 기본 전진 px/초 |
+| `baseLineSpeed` | **8** | 웨이브라인 기본 전진 px/초 |
+| `bossMinAdvance` | **18** | 착지 보스 occupy 시 netSpeed 하한 px/초. joining에는 미적용 |
 | `spawnInterval` | **2.3** | 적 스폰 기본 간격(초). 웨이브에 따라 감소 |
 | `launchCooldown` | **1.15** | 발사 쿨다운(초). 스킬로 감소, 하한 `PROGRESSION.launchCdFloor` |
-| `launchSpeed` | **1080** | 발사 속도 px/초. `vel.y = -(launchSpeed * stepMs / 1000)` (`stepMs = min(dt*1000, 33.33)`) |
+| `launchSpeed` | **720** | 발사 돌진 px/초. Matter `setVelocity`는 baseDelta(16.67ms)당 px라 `vel = launchSpeed / 60`. 발사체는 정착 아군과 물리 충돌하지 않음 |
 | `unitAdvanceSpeed` | **18** | 착지 후 아군 전진 px/초. `vel.y = -(unitAdvanceSpeed * advanceMult * stepMs / 1000)` |
 | `bossGatherStrength` | **0.6** | 보스 집결 강도 0~1. **0.7 초과**여야 교전 중 유닛도 집결. 기본 0.6이므로 교전 유닛은 집결하지 않음 |
 | `gatherSpeed` | **40** | 집결 최대 가로 이동 px/초. `maxVxTick = gatherSpeed * strength * stepMs / 1000` |
 | `attackCooldown` | **0.8** | 아군·적 기본 공격 틱 간격(초) |
 | `enemyReach` | **50** | 적 근접 사거리 보정 px. 실제 사거리 = `적.r + 50` |
-| `gentleRate` | **0.10** | 완만 구간: 웨이브당 +10% |
-| `steepStartWave` | **11** | 가파른 구간 시작 웨이브 |
-| `steepFactor` | **1.3** | 가파른 구간: 웨이브당 ×1.3 누적 |
+| `gentleRate` | **0.20** | 완만 구간: 웨이브당 +20% |
+| `steepStartWave` | **11** | 가파른 구간 시작 웨이브 (마지노 클리프) |
+| `steepFactor` | **3.0** | 첫 가파른 웨이브 배율 (W11 클리프) |
+| `steepContinue` | **1.45** | 클리프 이후 웨이브당 배율. 없으면 `steepFactor`와 동일 |
 | `emptyLinePushScale` | **1** | 빈 라인 푸시 시 저지력 배율 (1 = 교전과 동일) |
 | `emptyLinePushSlack` | **32** | 라인 홀드 위치에서 이 거리(px) 안이면 전열로 취급 |
 
@@ -150,11 +152,16 @@ else → 티어 1
 advance = baseLineSpeed + Σ (stunT<=0 인 적) MONSTERS[key].speed * liveMult
 stopping = Σ (engaged 아군) unit.stop * stopMult
 netSpeed = advance - stopping          // +아래 / −위
+// 착지한 살아있는 보스가 라인을 occupy할 때만 (joining 캠프 행군 제외)
+if living boss occupies line:
+  netSpeed = max(netSpeed, BALANCE.bossMinAdvance)  // 기본 18 px/s
 lineY += netSpeed * dt
 lineY = max(lineY, LINE_START_Y)
 if lineY >= DEFEAT_Y → 벽 충격 시도, 실패 시 패배
 적 y = lineY - row * SLOT_ROW_H
 ```
+
+`bossMinAdvance`: 저지력이 이겨도 보스전 중 라인을 완전히 멈추거나 밀어올릴 수 없음. 돌격 `chargeStutterT`는 기존처럼 짧게 netSpeed=0 후 플로어가 재개. 보스 사망 즉시 해제. 빈 라인 상향 푸시는 occupy 중에는 타지 않음.
 
 중요: **적 라인 가속 `speed`에는 `waveMultiplier`가 곱해지지 않는다.** `liveMult`만 곱한다. HP/ATK와 다르다.
 
@@ -230,21 +237,22 @@ if lineY <= LINE_START_Y → lineY = LINE_START_Y, netSpeed = 0
 
 | key | 이름 | icon | color | outline | r | HP | ATK | speed | score | 기타 |
 |-----|------|------|-------|---------|---|----|-----|-------|-------|------|
-| goblin | 고블린 | 고 | `#3CB371` | `#1e5c38` | 15 | 40 | 4 | 3 | 10 | |
-| orc | 오크 | 오 | `#6B8E23` | `#39510f` | 20 | 180 | 18 | 1.5 | 25 | |
-| skeleton | 스켈레톤 | 스 | `#DCDCDC` | `#6e6e6e` | 18 | 120 | 14 | **0** | 20 | 아이콘 글자색 `#333` |
-| troll | 동굴 트롤 | 트 | `#556B2F` | `#2c3a14` | 28 | 1200 | 80 | 1 | 100 | `regen: 12` (**초당 +12 HP**, 배율 미적용) |
-| boss | 오크 워로드 | 보 | `#B22222` | `#5c0e0e` | 45 | 2300 | 85 | **38** | 500 | `isBoss: true` |
+| goblin | 고블린 | 고 | `#3CB371` | `#1e5c38` | 15 | 48 | 5 | 4 | 10 | gold 6 |
+| skeleton | 스켈레톤 | 스 | `#DCDCDC` | `#6e6e6e` | 16 | 150 | 12 | 1 | 20 | gold 12, grade 2, `sprite: skeleton2` (`enemy_skeleton2.png`), 아이콘 글자색 `#333` |
+| orc | 오크 | 오 | `#6B8E23` | `#39510f` | 22 | 185 | 14 | 2 | 30 | gold 18, grade 3 |
+| troll | 동굴 트롤 | 트 | `#556B2F` | `#2c3a14` | 28 | 430 | 15 | 3 | 100 | gold 50, `regenDelay: 1.2`, `regenPct: 0.08` (피격 후 1.2초 동안 재생 없음, 이후 **maxHp의 8%/초**, HUD·어드민 실시간 조절) |
+| skelknight | 해골기사 | 기 | `#C0C0C0` | `#4a4a4a` | 24 | 280 | 21 | 3 | 80 | gold 40, grade 5, `sprite: skeleton` (`enemy_skeleton.png`), `bossOnly: true` |
+| boss | 오크 워로드 | 보 | `#B22222` | `#5c0e0e` | 45 | 1350 | 17 | **12** | 500 | gold 150, `isBoss: true` |
 
 ### 4.1 스폰 가중치 (`_monsterPool`)
 
-가중치 배열에 넣은 뒤 `total`로 롤.
+가중치 배열에 넣은 뒤 `total`로 롤. `bossOnly` 유닛은 풀에 없음.
 
 | 웨이브 | 풀 | 합 | 확률 |
 |--------|----|----|------|
-| 1 | goblin 55, orc 25 | 80 | 고 68.75%, 오 31.25% |
-| 2 | + skeleton 20 | 100 | 고 55%, 오 25%, 스 20% |
-| ≥3 | + troll 8 | 108 | 고 55/108≈50.93%, 오 25/108≈23.15%, 스 20/108≈18.52%, 트 8/108≈7.41% |
+| 1 | goblin 78, skeleton 12 | 90 | 고 86.67%, 스 13.33% |
+| 2 | + orc 20 | 100 | 고 55%, 스 25%, 오 20% |
+| ≥3 | + troll 4 | 104 | 고 52.88%, 스 24.04%, 오 19.23%, 트 3.85% |
 
 보스는 풀에 없음. 킬 조건으로만 등장.
 
@@ -259,21 +267,21 @@ if lineY <= LINE_START_Y → lineY = LINE_START_Y, netSpeed = 0
 ### 5.1 킬 목표
 
 ```
-killsNeeded(wave) = 10 + wave * 3
+killsNeeded(wave) = 12 + wave * 2
 ```
 
 | W | 필요 킬 | W | 필요 킬 |
 |---|---------|---|---------|
-| 1 | 13 | 11 | 43 |
-| 2 | 16 | 12 | 46 |
-| 3 | 19 | 13 | 49 |
-| 4 | 22 | 14 | 52 |
-| 5 | 25 | 15 | 55 |
-| 6 | 28 | 16 | 58 |
-| 7 | 31 | 17 | 61 |
-| 8 | 34 | 18 | 64 |
-| 9 | 37 | 19 | 67 |
-| 10 | 40 | 20 | 70 |
+| 1 | 14 | 11 | 34 |
+| 2 | 16 | 12 | 36 |
+| 3 | 18 | 13 | 38 |
+| 4 | 20 | 14 | 40 |
+| 5 | 22 | 15 | 42 |
+| 6 | 24 | 16 | 44 |
+| 7 | 26 | 17 | 46 |
+| 8 | 28 | 18 | 48 |
+| 9 | 30 | 19 | 50 |
+| 10 | 32 | 20 | 52 |
 
 일반 적만 `kills++`. 보스는 킬 카운트에 넣지 않고 웨이브를 올린다.
 
@@ -281,53 +289,67 @@ killsNeeded(wave) = 10 + wave * 3
 
 보스 경고(`bossWarnT>0`) 중에는 스폰 로직이 조기 return → **일반 스폰 정지**.
 
-그 외, 매 프레임 `spawnTimer -= dt`. 0 이하가 되면:
+기본 간격:
 
 ```
-interval = Math.max(0.7, BALANCE.spawnInterval - this.wave * 0.15)
-         * (this.bossActive ? 1.8 : 1)
-spawnTimer = interval * (0.7 + Math.random() * 0.6)   // × [0.7, 1.3)
-_spawnEnemy(_pickMonster())
+interval = max(spawnIntervalFloor, spawnInterval / (1 + (wave-1)*spawnIntervalAccel))
 ```
 
-기본 `2.3 - wave*0.15`, 바닥 **0.7초**. 보스 전투 중 ×**1.8**.
+기본 `spawnInterval=2.3`, `accel=0.30`, `floor=0.55`. 한 번에 한 마리. 리셋 시 `interval * (0.82 + random*0.36)` 지터.
 
-| W | 기본 interval (보스 전) | 보스 중 |
-|---|-------------------------|---------|
-| 1 | 2.15 | 3.87 |
-| 2 | 2.00 | 3.60 |
-| 5 | 1.55 | 2.79 |
-| 10 | 0.80 | 1.44 |
-| ≥11 | 0.70 | 1.26 |
+매 프레임 `spawnTimer -= dt * spawnTimerSpeed`. 속도는 **전열 아군–캠프** 근접이 주 드라이버 (웨이브라인은 시작부터 캠프에 있어 라인 기준이면 초반부터 러시):
 
-실제 다음 스폰은 위 값 × 0.7~1.3.
+```
+allyY = min(settled living unit body.y)  // 발사 중 제외. 없으면 proximity 0
+proximity = 1 if allyY <= LINE_START_Y + 28
+          = clamp(1 - (allyY - LINE_START_Y) / spawnCampApproachRange, 0, 1)
+timerDtMult = 1 + proximity^spawnCampApproachEase * (spawnCampTouchMult - 1)
+capped = min(timerDtMult * campRaidMult, interval / spawnCampRushFloor)
+spawnTimerSpeed = capped * spawnRateMult   // 라이브 리스폰 배율. 1=기본, 2=두 배 빠름
+```
+
+| 키 | 기본 | 의미 |
+|----|------|------|
+| `spawnCampApproachRange` | **200** | 캠프 하단에서 아군까지 이 px 안일 때만 가속. 아군 없음/마지노는 배율 1 |
+| `spawnCampTouchMult` | **6** | 아군이 캠프 하단에 닿을 때 타이머 소진 배율. W1 2.3s → 실효 ~0.38s |
+| `spawnCampApproachEase` | **1.5** | ease-in. 멀리선 약하고 캠프 앞에서 급가속 |
+| `spawnCampRushFloor` | **0.28** | 실효 최단 간격(초). 쿼터를 한 프레임에 안 쏟음 |
+| `spawnCampRaidMin/Max` | **2 / 3** | 아군이 캠프 스프라이트 안일 때 추가 배율 |
+
+W1 아군 없음·마지노: 간격 2.3s (지터 1.89–3.13). W1 아군이 캠프 접촉: ~0.38s. 후반 웨이브는 곡선으로 더 빨라지되 0.28s 클램프. `spawnRateMult`는 그 위에 곱해지므로 ×2면 러시 플로어보다도 빨라질 수 있다.
+
+보스전 부하 스폰(`_updateBossMinionSpawning`)도 같은 아군 근접 배율 × `spawnRateMult`. 상한은 `bossMinionCap`.
+
+`spawnRateMult`는 HUD 왼쪽 「리스폰」 −/+ 와 어드민 「실시간 리스폰」에서 0.1 단위 (min 0.2, max 5.0). `liveMult`처럼 `start()`/`_reset()`에서 초기화하지 않음. 변경 시 플로팅 `리스폰 ×N.N`.
 
 ### 5.3 2단 난이도 곡선
 
 ```
 waveMultiplier(wave):
-  gentleWaves = min(wave, steepStartWave - 1)     // min(wave, 10)
-  mult = 1 + (gentleWaves - 1) * gentleRate       // 1 + (gentleWaves-1)*0.10
-  if wave >= steepStartWave:                      // >= 11
-    mult *= steepFactor ^ (wave - steepStartWave + 1)
-         // 1.3^(wave - 10)
+  start = steepStartWave                          // 11
+  gentleWaves = min(wave, start - 1)              // min(wave, 10)
+  mult = 1 + (gentleWaves - 1) * gentleRate       // 1 + (gentleWaves-1)*0.20
+  if wave >= start:
+    n = wave - start + 1
+    cont = steepContinue if set else steepFactor  // 1.45
+    mult *= steepFactor * cont^(n - 1)            // W11: ×3.0, 이후 ×1.45/웨이브
   return mult
 ```
 
-주석: 웨이브 10 ≈ 1.9배.
+스킬 0 기준 마지노(W11)에서 게임오버가 목표. W10까지는 완만, W11에서 클리프.
 
 | W | waveMultiplier | W | waveMultiplier |
 |---|----------------|---|----------------|
-| 1 | 1.00 | 11 | 2.47 |
-| 2 | 1.10 | 12 | 3.211 |
-| 3 | 1.20 | 13 | 4.1743 |
-| 4 | 1.30 | 14 | 5.42659 |
-| 5 | 1.40 | 15 | 7.054567 |
-| 6 | 1.50 | 16 | 9.1709371 |
-| 7 | 1.60 | 17 | 11.92221823 |
-| 8 | 1.70 | 18 | 15.498883699 |
-| 9 | 1.80 | 19 | 20.1485488087 |
-| 10 | 1.90 | 20 | 26.19311345131 |
+| 1 | 1.00 | 11 | 8.40 |
+| 2 | 1.20 | 12 | 12.18 |
+| 3 | 1.40 | 13 | 17.661 |
+| 4 | 1.60 | 14 | 25.60845 |
+| 5 | 1.80 | 15 | 37.1322525 |
+| 6 | 2.00 | 16 | 53.841766125 |
+| 7 | 2.20 | 17 | 78.07056088125 |
+| 8 | 2.40 | 18 | 113.2023132778 |
+| 9 | 2.60 | 19 | 164.1433542528 |
+| 10 | 2.80 | 20 | 238.0078636666 |
 
 ### 5.4 `effectiveMult` 적용 (스냅샷 vs 라이브)
 
@@ -349,7 +371,7 @@ hp = round(stat.hp * effectiveMult(wave, liveMult))  // HP는 스폰 스냅샷
 | **HP / maxHp** | 스폰 스냅샷 | `round(baseHp * waveMult * liveMult_at_spawn)`. `setLiveMult` 시 **기존 적만** 재계산 |
 | **ATK** | 라이브 | `baseAtk * m.waveMult * this.liveMult` (`_enemyAtk`) |
 | **라인 speed** | 라이브, **waveMult 없음** | `baseSpeed * this.liveMult` |
-| **트롤 regen** | 고정 | `+12 HP/초`, 배율 없음 |
+| **트롤 regen** | 비전투 | 피격 후 `regenDelay`(1.2초)가 지나야 `maxHp * regenPct`(기본 8%/초, 어드민 적 스탯). 웨이브 배율은 maxHp에 이미 들어감 |
 
 `setLiveMult(next)` → `_rescaleEnemiesForLiveMult`:
 
@@ -364,7 +386,7 @@ hp = max(1, round(maxHp * ratio))
 
 신규 스폰은 그때의 `liveMult`로 HP를 찍는다. 어드민이 `MONSTERS[].hp` 테이블을 바꾸면 주석대로 **신규 개체부터** (이미 나온 적은 `m.waveMult`와 현재 테이블로 리스케일 시에만 반영).
 
-`liveMult`·`rangeMode`는 `start()`/`_reset()`에서 초기화하지 않음.
+`liveMult`·`spawnRateMult`·`rangeMode`는 `start()`/`_reset()`에서 초기화하지 않음.
 
 ---
 
@@ -448,10 +470,11 @@ HP 2300, ATK 85, speed 38, r 45, score 500.
 2. `bossPending=true`, `bossWarnT=1.6`, 경고 텍스트 「⚠ 보스 출현! ⚠」
 3. 경고 동안 일반 스폰 중지. 적이 없으면 빈 라인 푸시 가능
 4. `bossWarnT<=0` → `_spawnEnemy('boss')`, `bossActive=true`, 「보스 출현! 병력 집결!」
-5. 보스는 슬롯을 점유하지 않음. 초기 `x=CANVAS_W/2`(225), `y=lineY`, `row=0`,`col=-1`
-6. 착지 시 겹치는 기존 적을 `_findSpawnSpot`으로 재배치
-7. 보스 생존 중 일반 몹은 계속 스폰 (간격 ×1.8)
-8. 보스 처치: 점수 500 + XP 보너스 `round(bossXpPerWave * wave)` = **`200 * 현재 웨이브`** (증가 전). 그 다음 `wave++`, `kills=0`, 궁수 탄약 재충전, 「웨이브 N 시작!」
+5. 직후 호위: `bossKnightEscorts`(2)마리 해골기사 + (`bossEscortCount` − 기사 수)마리 일반 풀. 총합은 상한 `bossMinionCap`
+6. 보스는 슬롯을 점유하지 않음. 초기 `x=CANVAS_W/2`(225), `y=lineY`, `row=0`,`col=-1`
+7. 착지 시 겹치는 기존 적을 `_findSpawnSpot`으로 재배치
+8. 보스 생존 중 부하는 `bossMinionCap`까지 일반 풀에서 **같은 캠프 근접 배율**로 스폰 (해골기사는 재충전하지 않음, 한 프레임 몰아넣기 없음)
+9. 보스 처치: 점수 500 + XP 보너스 `round(bossXpPerWave * wave)` = **`200 * 현재 웨이브`** (증가 전). 그 다음 `wave++`, `kills=0`, 궁수 탄약 재충전, 「웨이브 N 시작!」
 
 ### 7.3 집결
 
@@ -833,12 +856,13 @@ healPct = rank * 0.04
 섹션·필드:
 
 1. **실시간 난이도**: 수동 배율 0.1 단위 stepper, min 0.5 max 5.0. 살아있는 적 HP/ATK/라인 가속 즉시 반영. 기본 HP 테이블은 신규부터(노트 문구).
-2. **전역 설정**: `baseLineSpeed`, `spawnInterval`, `launchCooldown`, `launchSpeed`, `unitAdvanceSpeed`, `bossGatherStrength`, `gatherSpeed`, `attackCooldown`, `enemyReach`, `gentleRate`, `steepStartWave`, `steepFactor`, `emptyLinePushScale`, `emptyLinePushSlack`
-3. **메타 진행 / 방어**: `bossXpPerWave`, `launchCdFloor`, `regenNearSlack`, `wallBaseHp`, `wallDmgPerHit`, `wallBaseKnockback`, `archerMax`, `archerBaseRange`, `archerBaseAtk`, `archerBaseAmmo`, `archerInterval`
-4. **레벨 XP 곡선**: `XP_TO_NEXT[1]`…`[9]` (Lv1→2 … Lv9→10). `XP_AFTER_TABLE`은 어드민에 없음
-5. **스킬 수치 (랭크당)**: 각 스킬 해금 Lv / rankLevelStep / maxRank 표시. maxRank>1이면 `rankLevelStep` 편집. 편집 키: `perRank`, `t2PerRank`, `t3PerRank`, `t3StartRank`, `dmgPerRank`, `radiusBase`, `radiusPerRank`, `knockbackPerRank`, `healPctPerRank`, `hpPerRank`, `kbPerRank`, `extraPerRank`
-6. **적 스탯**: 각 몬스터 HP, ATK, 라인 가속(speed)
-7. **아군 스탯**: 각 티어 HP, ATK, 저지력, 사거리 (mass·r·name·color는 없음)
+2. **실시간 리스폰**: 적 스폰 타이머 속도 배율 0.1 단위 stepper, min 0.2 max 5.0. 화면 왼쪽 「리스폰」 −/+ 와 동기화. 재시작해도 유지.
+3. **전역 설정**: `baseLineSpeed`, `spawnInterval`, `spawnIntervalAccel`, `spawnIntervalFloor`, `spawnCampRaidMin/Max`, `spawnCampApproachRange`, `spawnCampTouchMult`, `spawnCampApproachEase`, `spawnCampRushFloor`, `launchCooldown`, `launchSpeed`, `unitAdvanceSpeed`, `bossMinAdvance`, `bossEscortCount`, `bossKnightEscorts`, `bossMinionCap`, `bossGatherStrength`, `gatherSpeed`, `attackCooldown`, `enemyReach`, `gentleRate`, `steepStartWave`, `steepFactor`, `steepContinue`, `emptyLinePushScale`, `emptyLinePushSlack`
+4. **메타 진행 / 방어**: `bossXpPerWave`, `launchCdFloor`, `regenNearSlack`, `wallBaseHp`, `wallDmgPerHit`, `wallBaseKnockback`, `archerMax`, `archerBaseRange`, `archerBaseAtk`, `archerBaseAmmo`, `archerInterval`
+5. **레벨 XP 곡선**: `XP_TO_NEXT[1]`…`[9]` (Lv1→2 … Lv9→10). `XP_AFTER_TABLE`은 어드민에 없음
+6. **스킬 수치 (랭크당)**: 각 스킬 해금 Lv / rankLevelStep / maxRank 표시. maxRank>1이면 `rankLevelStep` 편집. 편집 키: `perRank`, `t2PerRank`, `t3PerRank`, `t3StartRank`, `dmgPerRank`, `radiusBase`, `radiusPerRank`, `knockbackPerRank`, `healPctPerRank`, `hpPerRank`, `kbPerRank`, `extraPerRank`
+7. **적 스탯**: 각 몬스터 HP, ATK, 라인 가속(speed). 트롤은 `regenDelay`·`regenPct`
+8. **아군 스탯**: 각 티어 HP, ATK, 저지력, 사거리 (mass·r·name·color는 없음)
 
 ### 13.6 라이브 난이도 조작
 
@@ -846,6 +870,12 @@ healPct = rank * 0.04
 - 키보드 `+` `=` `]` NumpadAdd / `-` `_` `[` NumpadSubtract
 - 어드민 stepper·직접 입력
 - 변경 시 플로팅 `난이도 ×N.N`
+
+### 13.7 라이브 리스폰 조작
+
+- 화면 왼쪽 크롬 「리스폰」 −/+ (`#liveSpawnBar`)
+- 어드민 「실시간 리스폰」 stepper·직접 입력
+- 변경 시 플로팅 `리스폰 ×N.N`
 
 ---
 
@@ -856,9 +886,9 @@ healPct = rank * 0.04
 1. **README는 슬링샷 당김**을 말하지만, 구현은 하단 X 조준 + **수직 등속 발사**. 각도 조준 없음. 드래그 시작은 `y>560`.
 2. **머지 만피 요구 없음.** 감혈 유닛도 동티어 충돌 시 합성. (리뷰 체크리스트에 “만피 머지”가 있다면 현재 코드와 다름.)
 3. README 패배 조건은 「마지노선 접촉 즉시 게임오버」. **벽 스킬 해금 시** 접촉은 충격·밀치기이고, 파괴 후 다음 접촉이 게임오버.
-4. README는 적 수에 따른 라인 가속만 설명. 구현은 `speed` 합 + `liveMult`이며, **스켈레톤 speed=0**, **보스는 38로 압도**.
+4. README는 적 수에 따른 라인 가속만 설명. 구현은 `speed` 합 + `liveMult`이며, **스켈레톤 speed=1**, **보스는 12**.
 5. **라인 가속에 `waveMultiplier` 미적용.** HP/ATK만 웨이브 곡선. 후반 라인 압박은 보스 speed·개체 수·liveMult 중심.
-6. **트롤 regen 12는 난이도 배율과 무관.** 후반엔 상대적으로 약해짐.
+6. **트롤 재생은 maxHp 비율**이라 웨이브가 올라도 비전투 회복 체감이 유지됨. 맞는 중에는 재생하지 않음.
 7. 궁수 「웨이브 솔로 불가」는 주석 의도일 뿐, 사격 자체는 라인/아군과 독립.
 8. T5–T9 특수·영웅 스킬 수치는 `UNITS[].special` / `HEROES` 테이블. T2 기본 확률은 `LAUNCH_T2_BASE`.
 9. T2 기본 25%는 `_rollTier`에서 `LAUNCH_T2_BASE`를 읽음.
@@ -877,7 +907,7 @@ healPct = rank * 0.04
 - W1 보스(HP 2300, speed 38) vs 조기 T1/T2만으로 마지노선(570px 여유) 전에 처치 가능한지. speed 38이 `baseLineSpeed` 6을 압도함.
 - W11부터 HP/ATK ×1.3 누적 vs 아군은 머지·메타만으로 성장. 라인 speed는 웨이브 배율을 안 받으므로 “스탯은 폭증, 라인은 보스·머릿수” 구조가 의도인지.
 - 스켈레톤(speed 0) 비중 증가 시 라인은 느린데 DPS 체크만 길어지는지.
-- 트롤 1200 HP + 비확대 regen 12가 W3에서 전열을 막는지, 후반엔 고블린보다 약한 몸인지.
+- 트롤 비전투 재생(피격 1.2초 후 maxHp 18%/초)이 전열을 막는지, 계속 때리면 재생이 꺼지는지.
 - 영웅 사명 80000 vs T10 기본 6500/0.8s·아서 광역. 승천 시 라인 리셋 + T5. HP 사망 시 보상 없음.
 - 빈 라인 푸시: 전열 T1 stop 4px/s로 라인을 90까지 올리는 시간이 보스 경고 1.6초와 맞물리는지.
 - 궁수 기본 7 dmg / 1.05s / 10발 vs W1 고블린 40HP — 주석대로 웨이브 솔로가 정말 안 되는지, 탄약·사거리 올리면 우회되는지.
@@ -906,7 +936,7 @@ healPct = rank * 0.04
 - 벽 파괴 시 궁수 삭제. 벽 강화만으로는 파괴된 벽 미복구.
 - 보스 처치가 탄약 리필의 유일한 웨이브 리필(런 시작 제외). 보스를 오래 못 잡으면 궁수 침묵.
 - XP=점수라 저티어 양산 킬 파밍 vs `bossXpPerWave*wave` 200 보너스 비중.
-- `gentleRate`/`steepFactor`를 어드민에서 바꾸면 이미 나온 적의 `waveMult` 스냅샷은 그대로, 신규만 새 곡선.
+- `gentleRate`/`steepFactor`/`steepContinue`를 어드민에서 바꾸면 이미 나온 적의 `waveMult` 스냅샷은 그대로, 신규만 새 곡선.
 
 ---
 

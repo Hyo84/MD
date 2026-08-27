@@ -141,11 +141,50 @@ function report(tag) {
   const w5n = trials({ wave: 5, army: WAVE5_ARMY, trash: ['goblin', 'goblin', 'orc', 'skeleton'], keepLaunching: false });
   const w5y = trials({ wave: 5, army: WAVE5_ARMY, trash: ['goblin', 'goblin', 'orc', 'skeleton'], keepLaunching: true });
   const w1weak = trials({ wave: 1, army: [1, 1, 1, 1, 1, 1, 1, 1, 2, 2], trash: ['goblin', 'goblin', 'goblin'], keepLaunching: true });
+  const w11n = trials({
+    wave: 11,
+    army: [1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5],
+    trash: ['skelknight', 'skelknight', 'goblin', 'skeleton'],
+    keepLaunching: true,
+    maxT: 90,
+  });
+  const w11strong = trials({
+    wave: 11,
+    army: [2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5],
+    trash: ['skelknight', 'skelknight', 'orc', 'skeleton', 'troll'],
+    keepLaunching: true,
+    maxT: 90,
+  });
+  const w8n = trials({
+    wave: 8,
+    army: [1, 1, 2, 2, 2, 3, 3, 4, 4, 5],
+    trash: ['skelknight', 'skelknight', 'goblin', 'skeleton'],
+    keepLaunching: true,
+    maxT: 90,
+  });
+  const w10n = trials({
+    wave: 10,
+    army: [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5],
+    trash: ['skelknight', 'skelknight', 'goblin', 'skeleton'],
+    keepLaunching: true,
+    maxT: 90,
+  });
+  const w5typical = trials({
+    wave: 5,
+    army: [1, 1, 1, 1, 2, 2, 2, 2, 3, 3],
+    trash: ['goblin', 'goblin', 'orc', 'skeleton'],
+    keepLaunching: true,
+  });
   console.log('W1 click   :', fmt(w1y));
   console.log('W1 no-click:', fmt(w1n));
   console.log('W1 weak+clk:', fmt(w1weak));
   console.log('W5 click   :', fmt(w5y));
   console.log('W5 no-click:', fmt(w5n));
+  console.log('W5 typical :', fmt(w5typical));
+  console.log('W8 no-skill-ish click:', fmt(w8n));
+  console.log('W10 no-skill-ish click:', fmt(w10n));
+  console.log('W11 no-skill-ish click:', fmt(w11n));
+  console.log('W11 strong no-skill:', fmt(w11strong));
 }
 
 report('현재값');

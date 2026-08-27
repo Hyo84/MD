@@ -1,6 +1,6 @@
 // 스킬 패널 (스킬 버튼 / K). 구매는 즉시 현재 런에 반영.
 
-import { SKILLS, SKILL_TREES, SKILL_BY_ID, BALANCE, PROGRESSION, rankUnlockLevel, advanceSpeedForRank, slotColsForRank, launchTierChances } from './config.js';
+import { SKILLS, SKILL_TREES, SKILL_BY_ID, BALANCE, PROGRESSION, ECONOMY, rankUnlockLevel, advanceSpeedForRank, slotColsForRank, launchTierChances } from './config.js';
 
 function fmtPct(v) {
   return `${(v * 100).toFixed(v * 100 % 1 === 0 ? 0 : 1)}%`;
@@ -97,6 +97,23 @@ function effectLine(skill, rank) {
       const v = (r) => PROGRESSION.archerBaseAmmo + r * skill.perRank;
       return `웨이브당 ${v(rank)}발` + (rank < skill.maxRank ? ` → ${v(rank + 1)}발` : '');
     }
+    case 'startGold': {
+      const v = (r) => (r * skill.perRank);
+      return `시작 골드 +${v(rank)}G` + (rank < skill.maxRank ? ` → +${v(rank + 1)}G` : '');
+    }
+    case 'taxRate': {
+      const v = (r) => r * skill.perRank;
+      const fmt = (n) => (Math.abs(n % 1) < 0.05 ? n.toFixed(0) : n.toFixed(1));
+      return `초당 ${fmt(v(rank))}G` + (rank < skill.maxRank ? ` → ${fmt(v(rank + 1))}G` : '');
+    }
+    case 'bountyGold':
+      return `처치 골드 +${fmtPct(rank * skill.perRank)}` +
+        (rank < skill.maxRank ? ` → +${fmtPct((rank + 1) * skill.perRank)}` : '');
+    case 'mercenary': {
+      const maxT = (r) => Math.min(9, (ECONOMY.shopBaseTier ?? 2) + r);
+      return `구매 가능 T${maxT(rank)}까지` +
+        (rank < skill.maxRank ? ` → T${maxT(rank + 1)}` : '');
+    }
     default:
       return '';
   }
@@ -122,6 +139,21 @@ export function setupSkillsUi(game, meta) {
   panel.classList.add('hidden');
   wrap.appendChild(panel);
 
+  const head = document.createElement('div');
+  head.className = 'skill-head';
+  const title = document.createElement('h2');
+  title.textContent = '스킬';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'popup-close';
+  close.textContent = '닫기';
+  close.title = '스킬 닫기';
+  head.append(title, close);
+
+  const body = document.createElement('div');
+  body.className = 'skill-body-scroll';
+  panel.append(head, body);
+
   const setOpen = (open) => {
     panel.classList.toggle('hidden', !open);
     game.skillPanelOpen = open;
@@ -130,6 +162,10 @@ export function setupSkillsUi(game, meta) {
 
   const toggle = () => setOpen(panel.classList.contains('hidden'));
   btn.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
+  close.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setOpen(false);
+  });
 
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -141,24 +177,12 @@ export function setupSkillsUi(game, meta) {
 
   function render() {
     const { level, xp, skillPoints, xpNeeded } = meta;
-    panel.innerHTML = '';
-
-    const head = document.createElement('div');
-    head.className = 'skill-head';
-    const title = document.createElement('h2');
-    title.textContent = '스킬';
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'skill-close';
-    close.textContent = '닫기';
-    close.addEventListener('click', () => setOpen(false));
-    head.append(title, close);
-    panel.appendChild(head);
+    body.innerHTML = '';
 
     const info = document.createElement('p');
     info.className = 'skill-info';
     info.textContent = `레벨 ${level}  ·  XP ${xp} / ${xpNeeded}  ·  남은 포인트 ${skillPoints}`;
-    panel.appendChild(info);
+    body.appendChild(info);
 
     const reset = document.createElement('button');
     reset.type = 'button';
@@ -171,7 +195,7 @@ export function setupSkillsUi(game, meta) {
       game.onSkillsChanged?.();
       render();
     });
-    panel.appendChild(reset);
+    body.appendChild(reset);
 
     for (const tree of SKILL_TREES) {
       const sec = document.createElement('section');
@@ -235,7 +259,7 @@ export function setupSkillsUi(game, meta) {
         row.append(body, buy);
         sec.appendChild(row);
       }
-      panel.appendChild(sec);
+      body.appendChild(sec);
     }
   }
 

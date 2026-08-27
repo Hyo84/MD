@@ -1,6 +1,6 @@
 // 로드 시 PNG(`/sprites/...`)를 우선 사용. 404면 캔버스 프로시저럴 베이크로 폴백.
 // 마젠타(#FF00FF 및 근접색) 크로마키. 픽셀아트는 그리기 쪽에서 smoothing off.
-// enemy_skeleton2.png 는 예비 에셋 — 로드하지 않음.
+// 스켈레톤(T2)=enemy_skeleton2.png, 해골기사(T5)=enemy_skeleton.png.
 
 import { CANVAS_W, CANVAS_H, DEFEAT_Y, UNITS, MONSTERS } from './config.js';
 
@@ -88,8 +88,62 @@ function isNearMagenta(r, g, b) {
   return g < 36 && r >= 220 && b >= 210 && Math.abs(r - b) <= 36;
 }
 
+/** 가장자리와 같은 납작한 배경색만 투명. 성벽 회색 패드용 (돌 텍스처는 유지). */
+function knockoutEdgeBackground(px, w, h, thresh = 26) {
+  const at = (x, y) => (y * w + x) * 4;
+  const samples = [at(0, 0), at(w - 1, 0), at(0, h - 1), at(w - 1, h - 1)];
+  let sr = 0;
+  let sg = 0;
+  let sb = 0;
+  let n = 0;
+  for (const i of samples) {
+    if (px[i + 3] < 8) continue;
+    sr += px[i];
+    sg += px[i + 1];
+    sb += px[i + 2];
+    n++;
+  }
+  if (n === 0) return;
+  sr = Math.round(sr / n);
+  sg = Math.round(sg / n);
+  sb = Math.round(sb / n);
+  const match = (i) => {
+    if (px[i + 3] < 8) return true;
+    return Math.abs(px[i] - sr) + Math.abs(px[i + 1] - sg) + Math.abs(px[i + 2] - sb) <= thresh;
+  };
+  const seen = new Uint8Array(w * h);
+  const stack = [];
+  const push = (x, y) => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const p = y * w + x;
+    if (seen[p]) return;
+    if (!match(at(x, y))) return;
+    seen[p] = 1;
+    stack.push(p);
+  };
+  for (let x = 0; x < w; x++) {
+    push(x, 0);
+    push(x, h - 1);
+  }
+  for (let y = 0; y < h; y++) {
+    push(0, y);
+    push(w - 1, y);
+  }
+  while (stack.length) {
+    const p = stack.pop();
+    px[p * 4 + 3] = 0;
+    const x = p % w;
+    const y = (p / w) | 0;
+    push(x - 1, y);
+    push(x + 1, y);
+    push(x, y - 1);
+    push(x, y + 1);
+  }
+}
+
 function processSprite(img, opts = {}) {
   const chroma = opts.chroma !== false;
+  const knockoutBg = !!opts.knockoutBg;
   const w = img.width;
   const h = img.height;
   const { canvas, ctx } = makeCanvas(w, h);
@@ -101,20 +155,21 @@ function processSprite(img, opts = {}) {
   let minY = 0;
   let maxX = w - 1;
   let maxY = h - 1;
-  if (chroma) {
+  if (chroma || knockoutBg) {
     const data = ctx.getImageData(0, 0, w, h);
     const px = data.data;
+    if (chroma) {
+      for (let i = 0; i < px.length; i += 4) {
+        if (px[i + 3] >= 8 && isNearMagenta(px[i], px[i + 1], px[i + 2])) px[i + 3] = 0;
+      }
+    }
+    if (knockoutBg) knockoutEdgeBackground(px, w, h);
     minX = w;
     minY = h;
     maxX = -1;
     maxY = -1;
     for (let i = 0, p = 0; i < px.length; i += 4, p++) {
-      let a = px[i + 3];
-      if (a >= 8 && isNearMagenta(px[i], px[i + 1], px[i + 2])) {
-        a = 0;
-        px[i + 3] = 0;
-      }
-      if (a > 8) {
+      if (px[i + 3] > 8) {
         const x = p % w;
         const y = (p / w) | 0;
         if (x < minX) minX = x;
@@ -164,15 +219,17 @@ function pngSpriteList() {
     const id = String(t).padStart(2, '0');
     list.push([`unit_${t}`, `/sprites/ally_t${id}.png`, { chroma: true, maxW: UNIT_SIZE, maxH: UNIT_SIZE }]);
   }
-  for (const key of ['goblin', 'orc', 'skeleton', 'troll', 'boss']) {
-    const max = key === 'boss' ? BOSS_SIZE : MONSTER_SIZE;
-    list.push([`monster_${key}`, `/sprites/enemy_${key}.png`, { chroma: true, maxW: max, maxH: max }]);
+  for (const key of Object.keys(MONSTERS)) {
+    const file = MONSTERS[key].sprite || key;
+    const max = MONSTERS[key].isBoss ? BOSS_SIZE : MONSTER_SIZE;
+    list.push([`monster_${key}`, `/sprites/enemy_${file}.png`, { chroma: true, maxW: max, maxH: max }]);
   }
   list.push(
     ['archer', '/sprites/ally_archer.png', { chroma: true, maxW: ARCHER_SIZE, maxH: ARCHER_SIZE }],
     ['arrow', '/sprites/fx_arrow.png', { chroma: true, maxW: 96, maxH: 96 }],
     ['bg_field', '/sprites/bg_field.png', { chroma: false, maxW: CANVAS_W * BG_SCALE, maxH: CANVAS_H * BG_SCALE }],
-    ['wall_bottom', '/sprites/bg_wall.png', { chroma: false, maxW: CANVAS_W * BG_SCALE, maxH: 220 * BG_SCALE }],
+    ['wall_bottom', '/sprites/bg_wall.png', { chroma: true, knockoutBg: true, maxW: CANVAS_W * BG_SCALE, maxH: 220 * BG_SCALE }],
+    ['wall_basic', '/sprites/bg_basicwall.png', { chroma: true, knockoutBg: true, maxW: CANVAS_W * BG_SCALE, maxH: 220 * BG_SCALE }],
     ['camp_top', '/sprites/bg_camp.png', { chroma: false, maxW: CANVAS_W * BG_SCALE, maxH: 200 * BG_SCALE }],
     ['bg_forest', '/sprites/bg_forest.png', { chroma: false, maxW: FOREST_STRIP_W * 2 * BG_SCALE, maxH: CANVAS_H * BG_SCALE }],
   );
@@ -247,8 +304,9 @@ function strokePoly(ctx, pts, fill, stroke, lw = LW) {
   }
 }
 
-function paintWoodPanel(ctx, w, h, gold = true) {
-  fillRoundRect(ctx, 2, 2, w - 4, h - 4, 7, '#6e4524', INK, 4.2);
+function paintWoodPanel(ctx, w, h, gold = true, slim = false) {
+  const inset = slim ? 3 : 2;
+  fillRoundRect(ctx, inset, inset, w - inset * 2, h - inset * 2, slim ? 6 : 7, '#6e4524', INK, slim ? 2.6 : 4.2);
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, '#8a5a30');
   g.addColorStop(0.45, '#6a4324');
@@ -276,13 +334,18 @@ function paintWoodPanel(ctx, w, h, gold = true) {
   }
   if (gold) {
     ctx.strokeStyle = '#e8c56a';
-    ctx.lineWidth = Math.max(2.4, h * 0.055);
-    ctx.strokeRect(7, 6, w - 14, h - 12);
+    ctx.lineWidth = slim ? 1.6 : Math.max(2.4, h * 0.055);
+    const go = slim ? 5 : 7;
+    ctx.strokeRect(go, slim ? 4 : 6, w - go * 2, h - (slim ? 8 : 12));
     ctx.strokeStyle = 'rgba(255, 230, 150, 0.55)';
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(10, 9, w - 20, h - 18);
+    ctx.lineWidth = slim ? 0.9 : 1.2;
+    const gi = slim ? 8 : 10;
+    ctx.strokeRect(gi, slim ? 6 : 9, w - gi * 2, h - (slim ? 12 : 18));
     ctx.fillStyle = '#c9a050';
-    for (const [nx, ny] of [[14, 12], [w - 14, 12], [14, h - 12], [w - 14, h - 12]]) {
+    const nails = slim
+      ? [[10, 8], [w - 10, 8], [10, h - 8], [w - 10, h - 8]]
+      : [[14, 12], [w - 14, 12], [14, h - 12], [w - 14, h - 12]];
+    for (const [nx, ny] of nails) {
       ellipse(ctx, nx, ny, 2.4, 2.4);
       ctx.fill();
       ctx.strokeStyle = INK;
@@ -571,7 +634,7 @@ function bakeHudTop() {
   const h = 72 * BG_SCALE;
   const { canvas, ctx } = makeCanvas(w, h);
   ctx.scale(BG_SCALE, BG_SCALE);
-  paintWoodPanel(ctx, CANVAS_W, 72, true);
+  paintWoodPanel(ctx, CANVAS_W, 72, true, true);
   return canvas;
 }
 
@@ -884,6 +947,35 @@ function paintMonster(ctx, size, key) {
     ctx.strokeStyle = INK;
     ctx.lineWidth = 2.2;
     ctx.stroke();
+    ctx.restore();
+  } else if (key === 'skelknight') {
+    fillRoundRect(ctx, -15, 8, 12, 28, 3, '#d8d8d0', INK, 2.6);
+    fillRoundRect(ctx, 3, 8, 12, 28, 3, '#c8c8c0', INK, 2.6);
+    fillRoundRect(ctx, -20, -14, 40, 28, 6, '#8a9098', INK, 3.2);
+    ctx.strokeStyle = '#e8e8e0';
+    ctx.lineWidth = 3.2;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-14, -8 + i * 8);
+      ctx.lineTo(14, -8 + i * 8);
+      ctx.stroke();
+    }
+    fillEllipse(ctx, 0, -32, 17, 15, '#f4f4ec', INK, 3.2);
+    fillRoundRect(ctx, -16, -48, 32, 14, 4, '#9aa0a8', INK, 2.8);
+    ctx.fillStyle = '#1a1a18';
+    ellipse(ctx, -6.5, -33, 4.2, 5); ctx.fill();
+    ellipse(ctx, 6.5, -33, 4.2, 5); ctx.fill();
+    ctx.fillRect(-3, -24, 6, 3);
+    ctx.save();
+    ctx.translate(-22, 4);
+    fillEllipse(ctx, 0, 0, 14, 18, '#7a8088', INK, 2.8);
+    fillEllipse(ctx, 0, 0, 8, 11, '#c8ccd0', INK, 2.2);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(22, -2);
+    ctx.rotate(0.35);
+    fillRoundRect(ctx, -4, -36, 8, 52, 2, '#b8bcc0', INK, 2.4);
+    strokePoly(ctx, [[0, -42], [10, -22], [-10, -22]], '#d0d4d8', INK, 2.4);
     ctx.restore();
   } else if (key === 'troll') {
     fillRoundRect(ctx, -22, 8, 18, 32, 5, shade(col, -0.12), INK, 3);
