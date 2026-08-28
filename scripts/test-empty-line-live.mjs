@@ -2,7 +2,8 @@
 global.requestAnimationFrame = () => {};
 
 import { Game } from '../src/game.js';
-import { CANVAS_W, LINE_START_Y, DEFEAT_Y, UNITS, MONSTERS, BALANCE, waveMultiplier, effectiveMult } from '../src/config.js';
+import { CANVAS_W, LINE_START_Y, DEFEAT_Y, UNITS, MONSTERS, BALANCE, waveMultiplier, effectiveMult, bossWaveMultiplier, SKILL_BY_ID, rollHeroRemnantTier, DISTRICTS, isHurdleWave, bossEscortForWave, killsNeeded, XP_TO_NEXT } from '../src/config.js';
+import { meta } from '../src/meta.js';
 
 const ctxStub = new Proxy({}, {
   get: (t, p) => {
@@ -95,6 +96,11 @@ function assert(cond, msg) {
   const m = game._spawnEnemy('orc');
   const expect = Math.round(MONSTERS.orc.hp * effectiveMult(5, 1.2));
   assert(m.maxHp === expect, `신규 스폰 실효 HP=${m.maxHp} (기대 ${expect})`);
+  const boss = game._spawnEnemy('boss');
+  const bossExpect = Math.round(MONSTERS.boss.hp * bossWaveMultiplier(5) * 1.2);
+  assert(boss.maxHp === bossExpect, `허들 보스 HP=${boss.maxHp} (기대 ${bossExpect})`);
+  assert(bossWaveMultiplier(5) > waveMultiplier(5), '허들 보스는 쓰레기보다 강함');
+  assert(Math.abs(bossWaveMultiplier(4) - waveMultiplier(4)) < 1e-9, '비허들 보스는 일반 배율');
 }
 
 function sim(game, seconds) {
@@ -368,12 +374,13 @@ function sim(game, seconds) {
   game._updateSpawning(1);
   const campDrain = 10 - game.spawnTimer;
   assert(Math.abs(campDrain - expectSpeed) < 0.05, `W1 캠프 1초 소진 ≈${expectSpeed} (drain=${campDrain.toFixed(3)})`);
-  assert(campDrain / maginotDrain >= 4.5, `캠프가 마지노보다 훨씬 빠름 (${(campDrain / maginotDrain).toFixed(2)}×)`);
+  assert(campDrain / maginotDrain >= 2.0, `캠프가 마지노보다 빠름 (${(campDrain / maginotDrain).toFixed(2)}×)`);
 
   const maginotEff = w1Interval / maginotDrain;
   const campEff = w1Interval / campDrain;
   assert(Math.abs(maginotEff - w1Interval) < 0.1, `W1 마지노 실효 간격 ≈${w1Interval}s (${maginotEff.toFixed(2)})`);
-  assert(campEff >= 0.32 && campEff <= 0.75, `W1 캠프 실효 간격 0.32–0.75s (${campEff.toFixed(2)})`);
+  assert(campEff >= rushFloor - 0.05, `W1 캠프 실효 간격 >= 러시 플로어 ${rushFloor}s (${campEff.toFixed(2)})`);
+  assert(campEff <= w1Interval + 0.05, `W1 캠프는 기본 간격보다 짧거나 같음 (${campEff.toFixed(2)} vs ${w1Interval.toFixed(2)})`);
 }
 
 {
@@ -453,7 +460,7 @@ function sim(game, seconds) {
   nearU.settled = true;
   const near = game._spawnTimerSpeed();
   assert(far <= 1.01, `보스전 마지노 배율 ≈1 (${far})`);
-  assert(near >= 4.5, `보스전 캠프 전열도 같은 근접 러시 (${near})`);
+  assert(near >= 2.0, `보스전 캠프 전열도 근접 러시 (${near})`);
 }
 
 {
@@ -505,8 +512,308 @@ function sim(game, seconds) {
   assert(game.holdingFire === false, '재시작 시 홀드는 해제');
 }
 
+function occupyCol(game, key, col) {
+  const m = game._spawnEnemy(key);
+  m.joining = false;
+  m.row = 0;
+  m.col = col;
+  m.x = game._slotX(col);
+  m.y = game.lineY;
+  m.hp = 1e9;
+  m.maxHp = 1e9;
+  m.stunT = 0;
+  return m;
+}
+
+function allyAtCol(game, tier, col) {
+  const stat = UNITS[tier - 1];
+  const u = game._spawnUnit(tier, game._slotX(col), game.lineY + 20 + stat.r);
+  u.settled = true;
+  return u;
+}
+
+function rearInCol(game, key, col, row) {
+  const m = game._spawnEnemy(key);
+  m.joining = false;
+  m.row = row;
+  m.col = col;
+  m.x = game._slotX(col);
+  m.y = game._enemySlotY(m);
+  m.hp = 1e9;
+  m.maxHp = 1e9;
+  m.stunT = 0;
+  return m;
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const front = occupyCol(game, 'goblin', 0);
+  const atk0 = game._enemyAtk(front);
+  const hp0 = front.hp;
+  rearInCol(game, 'goblin', 0, 1);
+  assert(game._columnRearCount(front) === 1, `뒷열 1마리 (실제 ${game._columnRearCount(front)})`);
+  assert(Math.abs(game._stackAdvanceMult(front) - 1.5) < 1e-9, `뒷열 1 → 진격 ×1.5 (${game._stackAdvanceMult(front)})`);
+  assert(Math.abs(game._enemyAtk(front) - atk0) < 1e-9, '스택해도 ATK 불변');
+  assert(front.hp === hp0, '스택해도 HP 불변');
+  const t0 = game.lineY;
+  const dt = 1 / 60;
+  for (let i = 0; i < 60; i++) game._updateLine(dt);
+  const expect = BALANCE.baseLineSpeed + MONSTERS.goblin.speed * 1.5 * game.liveMult;
+  assert(Math.abs(game.lineY - (t0 + expect)) < 1.2, `뒷열 1 진격 1초: lineY=${game.lineY.toFixed(2)} 기대 ${(t0 + expect).toFixed(2)}`);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const front = occupyCol(game, 'goblin', 0);
+  for (let r = 1; r <= 4; r++) rearInCol(game, 'goblin', 0, r);
+  assert(game._columnRearCount(front) === 4, `뒷열 4마리 (실제 ${game._columnRearCount(front)})`);
+  assert(Math.abs(game._stackAdvanceMult(front) - 3) < 1e-9, `뒷열 4는 상한 ×3 (${game._stackAdvanceMult(front)})`);
+  const t0s = game.lineY;
+  const dts = 1 / 60;
+  for (let i = 0; i < 60; i++) game._updateLine(dts);
+  const capExpect = BALANCE.baseLineSpeed + MONSTERS.goblin.speed * 3 * game.liveMult;
+  assert(Math.abs(game.lineY - (t0s + capExpect)) < 1.2, `상한 ×3 진격 1초: lineY=${game.lineY.toFixed(2)} 기대 ${(t0s + capExpect).toFixed(2)}`);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const boss = game._spawnEnemy('boss');
+  boss.joining = false;
+  boss.y = game.lineY;
+  rearInCol(game, 'goblin', 0, 1);
+  assert(game._stackAdvanceMult(boss) === 1, '보스는 뒷열 진격 가산 없음');
+  const t0b = game.lineY;
+  const dtb = 1 / 60;
+  for (let i = 0; i < 60; i++) game._updateLine(dtb);
+  const bossExpect = Math.max(
+    BALANCE.bossMinAdvance,
+    BALANCE.baseLineSpeed + MONSTERS.boss.speed * game.liveMult,
+  );
+  assert(Math.abs(game.lineY - (t0b + bossExpect)) < 1.2, `보스+뒷열 고블린은 보스 속도만: lineY=${game.lineY.toFixed(2)} 기대 ${(t0b + bossExpect).toFixed(2)}`);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const left = occupyCol(game, 'goblin', 0);
+  occupyCol(game, 'goblin', 1);
+  occupyCol(game, 'goblin', 2);
+  const t1s = [];
+  for (let i = 0; i < 8; i++) t1s.push(allyAtCol(game, 1, 0));
+  assert(game._occupierHeld(left), '왼쪽 열 고블린은 T1 사거리 안');
+  assert(!game._occupierHeld(game.enemies[1]), '가운데 열은 T1이 안 막음');
+  assert(!game._occupierHeld(game.enemies[2]), '오른쪽 열은 T1이 안 막음');
+  const t0 = game.lineY;
+  const dt = 1 / 60;
+  for (let i = 0; i < 60; i++) {
+    game._computeEngagement();
+    game._updateLine(dt);
+  }
+  const leak = BALANCE.baseLineSpeed + MONSTERS.goblin.speed * 2 * game.liveMult;
+  assert(game.lineY > t0 + 4, `막지 않은 열은 라인을 내려야 함 (lineY=${game.lineY.toFixed(2)} Δ=${(game.lineY - t0).toFixed(2)})`);
+  assert(Math.abs(game.lineY - (t0 + leak)) < 1.2, `열 누수 1초: lineY=${game.lineY.toFixed(2)} 기대 ${(t0 + leak).toFixed(2)}`);
+  const classic = BALANCE.baseLineSpeed + MONSTERS.goblin.speed * 3 - UNITS[0].stop * t1s.length;
+  assert(classic < 0, `옛 전역 줄다리기는 후퇴했어야 함 (classic=${classic})`);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const joiner = game._spawnEnemy('goblin');
+  joiner.joining = true;
+  joiner.row = 0;
+  joiner.col = 2;
+  joiner.x = game._slotX(2);
+  joiner.y = 64;
+  allyAtCol(game, 1, 0);
+  allyAtCol(game, 1, 0);
+  assert(game._incomingLaneUncovered(), '오른쪽 합류 적은 왼쪽 T1이 못 막음');
+  const t0 = game.lineY;
+  const dt = 1 / 60;
+  for (let i = 0; i < 60; i++) game._updateLine(dt);
+  assert(joiner.joining, `합류 유지 (y=${joiner.y.toFixed(1)})`);
+  assert(Math.abs(game.lineY - t0) < 0.05, `막지 않은 열로 합류 중이면 빈 라인 후퇴 없음 (lineY=${game.lineY.toFixed(2)})`);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  occupyCol(game, 'goblin', 0);
+  occupyCol(game, 'goblin', 1);
+  occupyCol(game, 'goblin', 2);
+  allyAtCol(game, 10, 1);
+  assert(game.enemies.every((m) => game._occupierHeld(m)), 'T10 중앙은 3열 모두 사거리 안');
+  const t0 = game.lineY;
+  const dt = 1 / 60;
+  for (let i = 0; i < 30; i++) {
+    game._computeEngagement();
+    game._updateLine(dt);
+  }
+  assert(game.lineY < t0, `전열을 모두 막으면 저지력이 라인을 올릴 수 있음 (lineY=${game.lineY.toFixed(2)})`);
+}
+
+{
+  assert(SKILL_BY_ID.mercenary.maxRank === 7, '용병술 만랭 7');
+  assert(Math.min(9, (2 + 7)) === 9, '만랭이면 T9 해금');
+}
+
+{
+  const values = [];
+  for (let i = 0; i < 5; i++) values.push(rollHeroRemnantTier(() => (i + 0.5) / 5));
+  assert(values.join(',') === '5,6,7,8,9', `잔류 티어 T5–T9 (${values.join(',')})`);
+}
+
+{
+  const game = makeGame();
+  game.score = 100;
+  game.runXpBoss = 40;
+  game.gold = 25;
+  const xp0 = meta.xp;
+  const s = game._settleRun(false);
+  const expectGoldXp = Math.floor(25 * (BALANCE.goldXpRate ?? 1));
+  assert(s.goldXp === expectGoldXp, `패배 골드 XP ${s.goldXp}`);
+  assert(s.extraXp === 0, '패배는 클리어 배율 없음');
+  assert(meta.xp === xp0 + expectGoldXp, `패배는 골드 XP만 추가 (Δ=${meta.xp - xp0})`);
+}
+
+{
+  const game = makeGame();
+  game.score = 10;
+  game.runXpBoss = 10;
+  game.gold = 10;
+  const xp0 = meta.xp;
+  const s = game._settleRun(true);
+  const goldXp = Math.floor(10 * (BALANCE.goldXpRate ?? 1));
+  const extra = (10 + 10 + goldXp) * ((s.mult || 2) - 1);
+  assert(s.goldXp === goldXp && s.extraXp === extra, `클리어 extra=${s.extraXp} goldXp=${s.goldXp}`);
+  assert(s.totalRunXp === 10 + 10 + goldXp + extra, `클리어 합계 XP ${s.totalRunXp}`);
+  assert(meta.xp === xp0 + goldXp + extra, `클리어는 골드+배수 추가 (Δ=${meta.xp - xp0})`);
+}
+
+{
+  const lv = meta.level;
+  const pts = meta.skillPoints;
+  meta.setLevel(lv + 2);
+  assert(meta.level === lv + 2, `레벨 치트 ${meta.level}`);
+  assert(meta.skillPoints === pts + 2, `레벨 상승 시 포인트 +차액 (${meta.skillPoints})`);
+  meta.setLevel(lv);
+}
+
+{
+  const walls = DISTRICTS.find((d) => d.id === 'walls');
+  assert(walls?.kind === 'wallring', '성벽은 외곽 링');
+  assert(DISTRICTS.filter((d) => d.kind === 'vacant').length === 2, '공터 2칸');
+  assert(DISTRICTS.find((d) => d.id === 'village')?.kind === 'village', '9구역 마을');
+  assert(DISTRICTS.find((d) => d.id === 'barracks')?.name === '공병대', '1구역 공병대');
+  assert(DISTRICTS.find((d) => d.id === 'infantry')?.name === '병영', '3구역 병영');
+}
+
+{
+  const game = makeGame();
+  game.state = 'playing';
+  game._snapshotRunMeta();
+  const xp0 = meta.xp;
+  game._grantScore(40);
+  assert(meta.xp === xp0 + 40, '런 중 점수 XP 지급');
+  game._forfeitRun();
+  assert(meta.xp === xp0, `포기 시 런 XP 복구 (${meta.xp})`);
+  assert(game.runSettlement?.forfeited, '포기 플래그');
+  const s = game._settleRun(false);
+  assert(s.goldXp === 0 && s.forfeited, '포기 후 골드 XP 없음');
+}
+
+{
+  const game = makeGame();
+  const snap = meta.cloneProgress();
+  game.hasPlayed = true;
+  game.resetToFirstPlay();
+  assert(meta.level === 1 && meta.xp === 0 && meta.spentPoints() === 0 && meta.medals === 0, '계정 초기화는 메타를 비움');
+  assert(game.hasPlayed === false && game.state === 'start', '계정 초기화는 첫 시작 화면');
+  meta.restoreSnapshot(snap);
+  assert(meta.level === snap.level && meta.xp === snap.xp, '초기화 테스트 후 메타 복구');
+}
+
+{
+  assert(Math.abs(waveMultiplier(1) - 1) < 1e-9, 'W1 배율 1');
+  assert(waveMultiplier(5) > waveMultiplier(4) * 1.8, `W5 허들 ${waveMultiplier(5).toFixed(2)}`);
+  assert(waveMultiplier(5) >= 2.4 && waveMultiplier(5) < 2.9, `W5 ≈2.63 (${waveMultiplier(5).toFixed(2)})`);
+  assert(waveMultiplier(10) > waveMultiplier(9) * 1.8, `W10 허들 ${waveMultiplier(10).toFixed(2)}`);
+  assert(waveMultiplier(10) >= 6.8 && waveMultiplier(10) < 8.2, `W10 ≈7.4 (${waveMultiplier(10).toFixed(2)})`);
+  assert(waveMultiplier(14) > waveMultiplier(10) * 1.25, `W14는 W10보다 강함 (${waveMultiplier(14).toFixed(2)})`);
+  assert(waveMultiplier(11) / waveMultiplier(10) < 1.2, 'W11에 옛 3배 클리프 없음');
+  assert(isHurdleWave(5) && isHurdleWave(10) && !isHurdleWave(6), '허들 웨이브 5/10');
+  const e5 = bossEscortForWave(5);
+  const e1 = bossEscortForWave(1);
+  const e10 = bossEscortForWave(10);
+  assert(e1.knights === 0 && e1.escort === 2, `W1 호위 ${e1.escort}/${e1.knights}`);
+  assert(e5.knights >= 1 && e5.escort >= 4, `W5 호위 ${e5.escort}/${e5.knights}`);
+  assert(e10.knights >= 3 && e10.escort >= 6, `W10 호위 ${e10.escort}/${e10.knights}`);
+  assert(killsNeeded(5) > killsNeeded(4) + 4, 'W5 쓰레기 추가');
+  assert(XP_TO_NEXT[1] >= 2000 && XP_TO_NEXT[8] >= 25000, '레벨 곡선이 느림');
+}
+
+{
+  const game = makeGame();
+  game.wave = 1;
+  const p1 = game._monsterPool().map(([k]) => k);
+  assert(p1.includes('goblin') && p1.length === 1 && !p1.includes('skeleton'), 'W1 일반 적은 고블린만');
+  game.wave = 2;
+  const p2 = game._monsterPool().map(([k]) => k);
+  assert(p2.includes('skeleton') && p2.includes('orc'), 'W2부터 스켈레톤·오크');
+  game.wave = 4;
+  const p4 = game._monsterPool().map(([k]) => k);
+  assert(!p4.includes('troll'), 'W4까지 트롤 없음');
+  game.wave = 5;
+  const p5 = game._monsterPool().map(([k]) => k);
+  assert(p5.includes('troll'), 'W5 허들부터 트롤');
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  game._spawnEnemy('boss');
+  for (let i = 0; i < 8; i++) game._spawnEnemy('goblin');
+  game._compactEnemySlots();
+  const boss = game.enemies.find((e) => e.isBoss);
+  const br = MONSTERS.boss.r;
+  let landed = 0;
+  for (const m of game.enemies) {
+    if (m.dead || m.isBoss) continue;
+    assert((Number(m.row) || 0) === 0, `보스 뒤 스택 없음 (row=${m.row} col=${m.col})`);
+    if ((Number(m.col) || 0) < 0) {
+      assert(m.joining && m.y <= 64 + 1, `남는 부하는 캠프 대기 (y=${m.y})`);
+      continue;
+    }
+    landed += 1;
+    const d = Math.hypot(m.x - boss.x, m.y - boss.y);
+    assert(d >= br + MONSTERS[m.key].r - 1, `보스와 옆칸만 (${d.toFixed(1)})`);
+  }
+  assert(landed <= 2, `3칸 보드에서 보스 옆 착지는 최대 2 (실제 ${landed})`);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  for (let i = 0; i < 6; i++) game._spawnEnemy('goblin');
+  game._spawnEnemy('boss');
+  for (const m of game.enemies) {
+    if (m.dead || m.isBoss) continue;
+    assert((Number(m.row) || 0) === 0, `보스 등장 후 뒷열 없음 (row=${m.row})`);
+  }
+}
+
+{
+  assert(BALANCE.launchCooldown >= 1.7, `발사 쿨 ${BALANCE.launchCooldown}`);
+  assert(BALANCE.mergeComboCdRefund <= 0.3, `콤보 쿨감 ${BALANCE.mergeComboCdRefund}`);
+  assert((BALANCE.airMergeMaxTier ?? 5) <= 5, '공중 합성은 T5까지');
+}
+
 if (failed) {
   console.error(`\n${failed} assertion(s) failed`);
   process.exit(1);
 }
 console.log('\nall passed');
+

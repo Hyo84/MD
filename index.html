@@ -48,6 +48,7 @@
     <div id="chromeLeft">
       <div id="scaleHost"></div>
     </div>
+    <div id="chromeCamp" class="hidden"></div>
     <div id="chromeRight"></div>
     <div id="loadOverlay" class="overlay">
       <h1>⚔ KnightSlide</h1>
@@ -58,16 +59,33 @@
       <p id="loadPct">0%</p>
       <p id="loadLabel" class="load-label">준비 중</p>
     </div>
+    <div id="tutorialOverlay" class="hidden" aria-live="polite">
+      <div id="tutorialBand" class="tutorial-band"></div>
+      <div id="tutorialSpot" class="tutorial-spot hidden"></div>
+      <div id="tutorialBalloon" class="tutorial-balloon">
+        <strong id="tutorialTitle"></strong>
+        <p id="tutorialText"></p>
+        <span id="tutorialHint">탭하여 다음</span>
+      </div>
+    </div>
     <div id="startOverlay" class="overlay">
       <h1 id="gameTitle">⚔ KnightSlide</h1>
-      <p id="gameSubtitle" class="sub">[프로토타입 0.0.260826]</p>
+      <p id="gameSubtitle" class="sub">프로토타입 v0.0.5</p>
       <p id="metaStatus" class="sub"></p>
-      <p class="tap">탭하여 시작</p>
+      <p id="tapToStart" class="tap">탭하여 시작</p>
+      <div id="startChoices" class="start-choices hidden">
+        <button id="startEstateBtn" type="button">영지로</button>
+        <button id="startPlayBtn" type="button">게임 시작</button>
+      </div>
     </div>
     <div id="gameoverOverlay" class="overlay hidden">
-      <h1>패배</h1>
+      <h1 id="resultTitle">패배</h1>
       <p id="finalScore" class="sub"></p>
-      <button id="restartBtn">다시 시작</button>
+      <div id="resultXp" class="result-xp"></div>
+      <div class="start-choices">
+        <button id="estateFromResult" type="button">영지로</button>
+        <button id="restartBtn" type="button">다시 시작</button>
+      </div>
     </div>
   </div>
   <script type="module" src="/src/main.js"></script>

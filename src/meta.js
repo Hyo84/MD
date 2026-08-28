@@ -4,6 +4,11 @@ import {
   PROGRESSION, SKILLS, SKILL_BY_ID, xpToNextLevel, META_STORAGE_KEY, BALANCE, ECONOMY,
   rankUnlockLevel, advanceSpeedForRank, slotColsForRank, launchTierChances, SHOP_MAX_TIER,
 } from './config.js';
+import {
+  UNIT_MAX_LEVEL, emptyUnitLevels, clampUnitLevel, medalCost,
+  VILLAGE_START_LEVEL, VILLAGE_MAX_LEVEL, VILLAGE_LEVEL_COST,
+  clampVillageLevel, houseUnlockVillageLevel, isHouseUnlocked,
+} from './village.js';
 
 function emptyRanks() {
   const ranks = {};
@@ -12,7 +17,10 @@ function emptyRanks() {
 }
 
 function defaultData() {
-  return { level: 1, xp: 0, skillPoints: 0, ranks: emptyRanks() };
+  return {
+    level: 1, xp: 0, skillPoints: 0, ranks: emptyRanks(),
+    medals: 0, unitLevels: emptyUnitLevels(), villageLevel: VILLAGE_START_LEVEL,
+  };
 }
 
 function load() {
@@ -31,6 +39,13 @@ function load() {
           r = parsed.ranks.higherTier;
         }
         data.ranks[s.id] = Number.isFinite(r) ? Math.max(0, Math.min(s.maxRank, Math.floor(r))) : 0;
+      }
+    }
+    if (Number.isFinite(parsed.medals)) data.medals = Math.max(0, Math.floor(parsed.medals));
+    if (Number.isFinite(parsed.villageLevel)) data.villageLevel = clampVillageLevel(parsed.villageLevel);
+    if (parsed.unitLevels && typeof parsed.unitLevels === 'object') {
+      for (let t = 1; t <= 10; t++) {
+        data.unitLevels[t] = clampUnitLevel(parsed.unitLevels[t] ?? parsed.unitLevels[String(t)] ?? 0);
       }
     }
     return data;
@@ -65,7 +80,29 @@ export class Meta {
   get xp() { return this.data.xp; }
   get skillPoints() { return this.data.skillPoints; }
   get ranks() { return this.data.ranks; }
+  get medals() { return this.data.medals; }
+  get unitLevels() { return this.data.unitLevels; }
+  get villageLevel() { return this.data.villageLevel; }
   get xpNeeded() { return xpToNextLevel(this.data.level); }
+
+  villageSpent() {
+    return Math.max(0, (this.villageLevel - VILLAGE_START_LEVEL) * VILLAGE_LEVEL_COST);
+  }
+
+  isHouseOpen(tier) {
+    return isHouseUnlocked(this.villageLevel, tier);
+  }
+
+  storedUnitLevel(tier) {
+    const t = Math.max(1, Math.min(10, Math.floor(Number(tier) || 1)));
+    return clampUnitLevel(this.data.unitLevels?.[t] ?? 0);
+  }
+
+  unitLevel(tier) {
+    const t = Math.max(1, Math.min(10, Math.floor(Number(tier) || 1)));
+    if (!this.isHouseOpen(t)) return 0;
+    return this.storedUnitLevel(t);
+  }
 
   rank(id) {
     return this.data.ranks[id] || 0;
@@ -126,11 +163,147 @@ export class Meta {
     return { ok: true };
   }
 
+  addMedals(amount) {
+    const n = Math.max(0, Math.floor(Number(amount) || 0));
+    if (n <= 0) return this.data.medals;
+    this.data.medals += n;
+    this._emit('medals');
+    return this.data.medals;
+  }
+
+  setMedals(n) {
+    this.data.medals = Math.max(0, Math.floor(Number(n) || 0));
+    this._emit('medals');
+    return this.data.medals;
+  }
+
+  canBuyUnitLevel(tier) {
+    const t = Math.max(1, Math.min(10, Math.floor(Number(tier) || 0)));
+    if (t < 1 || t > 10) return { ok: false, reason: 'unknown' };
+    if (!this.isHouseOpen(t)) {
+      return { ok: false, reason: 'locked', need: houseUnlockVillageLevel(t) };
+    }
+    const lv = this.storedUnitLevel(t);
+    if (lv >= UNIT_MAX_LEVEL) return { ok: false, reason: 'max' };
+    const cost = medalCost(t, lv);
+    if (this.data.medals < cost) return { ok: false, reason: 'medals', cost };
+    return { ok: true, cost, next: lv + 1 };
+  }
+
+  buyUnitLevel(tier) {
+    const t = Math.max(1, Math.min(10, Math.floor(Number(tier) || 0)));
+    const check = this.canBuyUnitLevel(t);
+    if (!check.ok) return check;
+    this.data.medals -= check.cost;
+    this.data.unitLevels[t] = this.storedUnitLevel(t) + 1;
+    this._emit('village');
+    return { ok: true, level: this.storedUnitLevel(t) };
+  }
+
+  setUnitLevel(tier, level) {
+    const t = Math.max(1, Math.min(10, Math.floor(Number(tier) || 0)));
+    if (t < 1 || t > 10) return 0;
+    this.data.unitLevels[t] = clampUnitLevel(level);
+    this._emit('village');
+    return this.data.unitLevels[t];
+  }
+
+  canBuyVillageLevel() {
+    const lv = this.villageLevel;
+    if (lv >= VILLAGE_MAX_LEVEL) return { ok: false, reason: 'max' };
+    const cost = VILLAGE_LEVEL_COST;
+    if (this.data.skillPoints < cost) return { ok: false, reason: 'points', cost };
+    return { ok: true, cost, next: lv + 1 };
+  }
+
+  buyVillageLevel() {
+    const check = this.canBuyVillageLevel();
+    if (!check.ok) return check;
+    this.data.skillPoints -= check.cost;
+    this.data.villageLevel = clampVillageLevel(this.villageLevel + 1);
+    this._emit('village');
+    return { ok: true, level: this.villageLevel };
+  }
+
+  setVillageLevel(level) {
+    this.data.villageLevel = clampVillageLevel(level);
+    this._emit('village');
+    return this.data.villageLevel;
+  }
+
+  villagePower() {
+    let n = 0;
+    for (let t = 1; t <= 10; t++) n += Math.max(0, this.storedUnitLevel(t));
+    return n;
+  }
+
   // 스킬만 환불. 레벨/XP는 유지.
   resetSkills() {
     this.data.ranks = emptyRanks();
-    this.data.skillPoints = this.data.level - 1;
+    this.data.skillPoints = Math.max(0, this.data.level - 1 - this.villageSpent());
     this._emit('reset');
+  }
+
+  cloneProgress() {
+    return {
+      level: this.data.level,
+      xp: this.data.xp,
+      skillPoints: this.data.skillPoints,
+      ranks: { ...this.data.ranks },
+      medals: this.data.medals,
+      unitLevels: { ...this.data.unitLevels },
+      villageLevel: this.data.villageLevel,
+    };
+  }
+
+  restoreSnapshot(snap) {
+    if (!snap) return;
+    this.data.level = Math.max(1, Math.floor(Number(snap.level) || 1));
+    this.data.xp = Math.max(0, Math.floor(Number(snap.xp) || 0));
+    this.data.skillPoints = Math.max(0, Math.floor(Number(snap.skillPoints) || 0));
+    const ranks = emptyRanks();
+    if (snap.ranks && typeof snap.ranks === 'object') {
+      for (const s of SKILLS) {
+        const r = snap.ranks[s.id];
+        ranks[s.id] = Number.isFinite(r) ? Math.max(0, Math.min(s.maxRank, Math.floor(r))) : 0;
+      }
+    }
+    this.data.ranks = ranks;
+    this.data.medals = Math.max(0, Math.floor(Number(snap.medals) || 0));
+    this.data.villageLevel = clampVillageLevel(snap.villageLevel ?? VILLAGE_START_LEVEL);
+    const levels = emptyUnitLevels();
+    if (snap.unitLevels && typeof snap.unitLevels === 'object') {
+      for (let t = 1; t <= 10; t++) {
+        levels[t] = clampUnitLevel(snap.unitLevels[t] ?? snap.unitLevels[String(t)] ?? 0);
+      }
+    }
+    this.data.unitLevels = levels;
+    this._emit('restore');
+  }
+
+  resetAccount() {
+    this.data = defaultData();
+    this._emit('resetAccount');
+  }
+
+  setLevel(n) {
+    const next = Math.max(1, Math.floor(Number(n) || 1));
+    const prev = this.data.level;
+    if (next === prev) return next;
+    this.data.level = next;
+    this.data.skillPoints = Math.max(0, (this.data.skillPoints || 0) + (next - prev));
+    this._emit('level');
+    return next;
+  }
+
+  districtSpent(skillIds) {
+    let n = 0;
+    for (const id of skillIds || []) {
+      const skill = SKILL_BY_ID[id];
+      if (!skill) continue;
+      n += (this.rank(id) || 0) * (skill.cost || 1);
+    }
+    return n;
   }
 
   getEffects() {

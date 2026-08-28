@@ -3,19 +3,31 @@ import {
     CANVAS_W, CANVAS_H, DEFEAT_Y, LINE_START_Y, LAUNCHER_Y, ENEMY_SPAWN_Y,
     CAMP_DEST_Y, CAMP_DRAW_H,
     BALANCE, UNITS, MONSTERS, HEROES,
-    HERO_MISSION_KILLS, HERO_BOSS_LIMIT, HERO_ASCENSION_ATK_MULT, HERO_ASCENSION_SLOWMO,
+    HERO_MISSION_KILLS, HERO_ASCENSION_SLOWMO,
     HERO_ASCENSION_REPLACEMENT_TIER, HERO_ASCENSION_BONUS_SCORE, heroMissionDamage,
+    rollHeroRemnantTier,
     CHARGE_STUTTER_TIME, MERGE_BLAST_RADIUS, MERGE_BLAST_FORCE,
-    FRICTION_AIR_UNIT, killsNeeded, waveMultiplier, effectiveMult,
+    FRICTION_AIR_UNIT, killsNeeded, waveMultiplier, bossWaveMultiplier,
     LIVE_MULT_STEP, clampLiveMult, PROGRESSION,
     clampRegenPct, clampSpawnRate,
     BASE_SLOT_COLS, MAX_SLOT_COLS, getSlotX, playfieldExtraInset, getPlayfieldInset,
-    CHEATS_STORAGE_KEY, AUTO_FIRE_STORAGE_KEY, SHOP, SHOP_MIN_TIER, SHOP_MAX_TIER, isShopTier, formatShopGold,
+    CHEATS_STORAGE_KEY, AUTO_FIRE_STORAGE_KEY, PLAYED_STORAGE_KEY, SHOP, SHOP_MIN_TIER, SHOP_MAX_TIER, isShopTier, formatShopGold,
+    bossEscortForWave,
 } from './config.js';
 import { Effects } from './effects.js';
 import { meta } from './meta.js';
+import {
+  unitCombatStat, collectGlobalAuras, villageResolve, heroKit, heroBossLimit, heroAscendAtkMult,
+  medalsForClearedWave, VILLAGE_CLEAR_WAVE, VILLAGE_CLEAR_BONUS, formatMedals,
+} from './village.js';
+import { showConfirm } from './confirm.js';
 import { renderer, evoBarMetrics, autoFireRect, bottomHudMetrics } from './renderer.js';
 import { RANGE_MODE_LABELS } from './hud.js';
+import {
+  TUTORIAL_INTRO_STEPS, TUTORIAL_AUTO_STEP, setupTutorialUi,
+  tutorialPhase, autoUnlockSaved, markTutorialStarted, markTutorialIntroDone, markTutorialDone,
+  markAutoUnlocked, resetTutorialProgress,
+} from './tutorial.js';
 
 const { Engine, World, Bodies, Body, Events } = Matter;
 
@@ -89,15 +101,37 @@ export class Game {
     try { this.cheatsEnabled = localStorage.getItem(CHEATS_STORAGE_KEY) === '1'; } catch { /* ignore */ }
     this.onCheatsChange = null;
     this.onGoldChange = null;
+    this.onPlayStateChange = null;
+    this.openEstate = null;
     this._cssScale = 1;
     this._drawScale = 1;
+    this._runMetaSnap = null;
+    this.hasPlayed = this._loadHasPlayed();
+    this.tutorialFreeze = false;
+    this.tutorialAnchor = '';
+    this._tutorialQueue = [];
+    this._lockAutoUntilWave2 = false;
+    this._tutorialUi = setupTutorialUi(this, this.ui.tutorialOverlay);
 
     this._setupInput();
     this.ui.restartBtn.addEventListener('click', () => this.start());
-    this.ui.startOverlay.addEventListener('pointerdown', () => {
+    this.ui.startOverlay.addEventListener('pointerdown', (e) => {
       if (this.skillPanelOpen) return;
+      if (this.hasPlayed) return;
+      if (e.target.closest?.('button')) return;
       this.start();
     });
+    this.ui.startPlayBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.start();
+    });
+    this.ui.startEstateBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.openEstate?.();
+    });
+    this._syncStartOverlay();
     this.slotCols = this._fx.slotCols || BASE_SLOT_COLS;
     this.onSkillsChanged = () => {
       this._fx = meta.getEffects();
@@ -157,6 +191,20 @@ export class Game {
     this.bossActive = false;
     this.bossPending = false;
     this.bossWarnT = 0;
+    this.victory = false;
+    this._runSettled = false;
+    this.runXpBoss = 0;
+    this.runMedals = 0;
+    this.runSettlement = null;
+    this.resultWave = 1;
+    this.lineFreezeT = 0;
+    this.dragonFearCd = 0;
+    this.marshalInvulnCd = 0;
+    this._marshalInvulnArmed = false;
+    this.heroSmiteT = 0;
+    this._miracleWave = -1;
+    this._awakenBucket = -1;
+    this._villageAura = collectGlobalAuras([], () => 1);
 
     this.launchCd = 0;
     this.aimX = CANVAS_W / 2;
@@ -183,7 +231,236 @@ export class Game {
   _refreshStartMeta() {
     if (!this.ui.metaStatus) return;
     this.ui.metaStatus.textContent =
-      `레벨 ${meta.level}  ·  XP ${meta.xp} / ${meta.xpNeeded}  ·  포인트 ${meta.skillPoints}`;
+      `레벨 ${meta.level}  ·  XP ${meta.xp} / ${meta.xpNeeded}  ·  건설 ${meta.skillPoints}  ·  훈장 ${formatMedals(meta.medals)}`;
+  }
+
+  _loadHasPlayed() {
+    try {
+      if (localStorage.getItem(PLAYED_STORAGE_KEY) === '1') return true;
+    } catch { /* ignore */ }
+    if (meta.level > 1 || meta.xp > 0 || meta.spentPoints() > 0) {
+      this._markPlayed(true);
+      return true;
+    }
+    return false;
+  }
+
+  _markPlayed(silent = false) {
+    this.hasPlayed = true;
+    try { localStorage.setItem(PLAYED_STORAGE_KEY, '1'); } catch { /* ignore */ }
+    if (!silent) this._syncStartOverlay();
+  }
+
+  _syncStartOverlay() {
+    const first = !this.hasPlayed;
+    this.ui.tapToStart?.classList.toggle('hidden', !first);
+    this.ui.startChoices?.classList.toggle('hidden', first);
+    this.ui.startOverlay?.classList.toggle('choose', !first);
+  }
+
+  _hasTutorialUi() {
+    return !!this._tutorialUi;
+  }
+
+  _needTutorialIntro() {
+    if (!this._hasTutorialUi()) return false;
+    const phase = tutorialPhase();
+    if (phase === 'done' || phase === 'intro') return false;
+    if (phase === 'started') return true;
+    return !this.hasPlayed;
+  }
+
+  _needAutoLock() {
+    if (!this._hasTutorialUi()) return false;
+    if (autoUnlockSaved()) return false;
+    const phase = tutorialPhase();
+    if (phase === 'done') return false;
+    if (phase === 'intro' || phase === 'started') return true;
+    if (this.hasPlayed) return false;
+    return true;
+  }
+
+  autoUnlocked() {
+    if (this.wave >= 2) return true;
+    if (!this._lockAutoUntilWave2) return true;
+    return autoUnlockSaved();
+  }
+
+  _beginTutorialIfNeeded(needIntro, lockAuto) {
+    this._hideTutorial();
+    if (needIntro) {
+      markTutorialStarted();
+      this._tutorialQueue = TUTORIAL_INTRO_STEPS.map((s) => s);
+      this._showNextTutorial();
+      return;
+    }
+    this.tutorialFreeze = false;
+    this.tutorialAnchor = '';
+    if (lockAuto) this._lockAutoUntilWave2 = true;
+  }
+
+  _showNextTutorial() {
+    const step = this._tutorialQueue.shift();
+    if (!step) {
+      this._finishTutorialSegment();
+      return;
+    }
+    this.tutorialFreeze = true;
+    this.tutorialAnchor = step.anchor || '';
+    this._tutorialStep = step;
+    this._tutorialUi?.show(step, this.lineY);
+  }
+
+  _finishTutorialSegment() {
+    const stepId = this._tutorialStep?.id;
+    this._tutorialStep = null;
+    this.tutorialFreeze = false;
+    this.tutorialAnchor = '';
+    this._tutorialUi?.hide();
+    if (stepId === 'play') markTutorialIntroDone();
+    if (stepId === 'auto') {
+      this._unlockAutoFire();
+      markTutorialDone();
+    }
+  }
+
+  tutorialAdvance() {
+    if (!this._tutorialStep) return;
+    if (this._tutorialQueue.length === 0) {
+      this._finishTutorialSegment();
+      return;
+    }
+    this._showNextTutorial();
+  }
+
+  _hideTutorial() {
+    this._tutorialQueue = [];
+    this._tutorialStep = null;
+    this.tutorialFreeze = false;
+    this.tutorialAnchor = '';
+    this._tutorialUi?.hide();
+  }
+
+  _unlockAutoFire() {
+    this._lockAutoUntilWave2 = false;
+    markAutoUnlocked();
+  }
+
+  _maybeOfferAutoTutorial() {
+    if (this.wave < 2) return;
+    const wasLocked = this._lockAutoUntilWave2 || tutorialPhase() === 'intro';
+    this._lockAutoUntilWave2 = false;
+    if (!wasLocked) return;
+    markAutoUnlocked();
+    if (!this._hasTutorialUi()) {
+      markTutorialDone();
+      return;
+    }
+    if (tutorialPhase() === 'done') return;
+    this._tutorialQueue = [TUTORIAL_AUTO_STEP];
+    this._showNextTutorial();
+  }
+
+  _notifyPlayState() {
+    this.onPlayStateChange?.(this.state);
+  }
+
+  _snapshotRunMeta() {
+    this._runMetaSnap = meta.cloneProgress();
+  }
+
+  _forfeitRun() {
+    if (this._runMetaSnap) {
+      meta.restoreSnapshot(this._runMetaSnap);
+      this.onSkillsChanged?.();
+    }
+    this._runSettled = true;
+    this.runSettlement = {
+      forfeited: true,
+      victory: false,
+      scoreXp: 0,
+      bossXp: 0,
+      gold: 0,
+      goldXp: 0,
+      extraXp: 0,
+      grantNow: 0,
+      totalRunXp: 0,
+      medals: 0,
+    };
+  }
+
+  async requestRestart() {
+    if (this.state !== 'playing') {
+      this.start();
+      return;
+    }
+    const ok = await showConfirm({
+      title: '재시작',
+      message: '이번 웨이브의 점수·골드 XP 보상이 없습니다. 바로 다시 시작할까요?',
+      confirmText: '재시작',
+      cancelText: '취소',
+      danger: true,
+    });
+    if (!ok || this.state !== 'playing') return;
+    this._forfeitRun();
+    this.start();
+  }
+
+  async requestAbandon() {
+    if (this.state !== 'playing') return;
+    const ok = await showConfirm({
+      title: '포기',
+      message: '포기하면 이번 웨이브의 점수·골드 XP 보상이 없습니다. 시작 화면으로 돌아갈까요?',
+      confirmText: '포기',
+      cancelText: '취소',
+      danger: true,
+    });
+    if (!ok || this.state !== 'playing') return;
+    this.abandonToMenu();
+  }
+
+  abandonToMenu() {
+    this.holdingFire = false;
+    this._forfeitRun();
+    this._hideTutorial();
+    this.state = 'start';
+    this._reset();
+    this.onGoldChange?.();
+    this.ui.startOverlay.classList.remove('hidden');
+    this.ui.gameoverOverlay.classList.add('hidden');
+    this._syncStartOverlay();
+    this._notifyPlayState();
+  }
+
+  resetToFirstPlay() {
+    this.holdingFire = false;
+    meta.resetAccount();
+    this.setCheatsEnabled(false);
+    this.autoFire = false;
+    try { localStorage.removeItem(AUTO_FIRE_STORAGE_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(PLAYED_STORAGE_KEY); } catch { /* ignore */ }
+    resetTutorialProgress();
+    this.hasPlayed = false;
+    this._lockAutoUntilWave2 = false;
+    this._hideTutorial();
+    this._runMetaSnap = null;
+    this.state = 'start';
+    this._reset();
+    this.onGoldChange?.();
+    this.onSkillsChanged?.();
+    if (typeof document !== 'undefined') {
+      document.getElementById('skillPanel')?.classList.add('hidden');
+      document.getElementById('estatePanel')?.classList.add('hidden');
+      document.getElementById('villagePanel')?.classList.add('hidden');
+      document.getElementById('adminPanel')?.classList.add('hidden');
+    }
+    this.skillPanelOpen = false;
+    this._hideTutorial();
+    this.ui.startOverlay.classList.remove('hidden');
+    this.ui.gameoverOverlay.classList.add('hidden');
+    this._syncStartOverlay();
+    this._refreshStartMeta();
+    this._notifyPlayState();
   }
 
   _syncDefenseFromMeta(fresh) {
@@ -348,22 +625,104 @@ export class Game {
   }
 
   start() {
-    const panel = document.getElementById('skillPanel');
+    const needIntro = this._needTutorialIntro();
+    const lockAuto = this._needAutoLock();
+    const panel = typeof document !== 'undefined' ? document.getElementById('skillPanel') : null;
     if (panel) panel.classList.add('hidden');
+    const estate = typeof document !== 'undefined' ? document.getElementById('estatePanel') : null;
+    if (estate) estate.classList.add('hidden');
+    const village = typeof document !== 'undefined' ? document.getElementById('villagePanel') : null;
+    if (village) village.classList.add('hidden');
     this.skillPanelOpen = false;
     this._reset();
+    this._snapshotRunMeta();
+    this._markPlayed();
+    if (lockAuto) {
+      this._lockAutoUntilWave2 = true;
+      this.autoFire = false;
+    } else {
+      this._lockAutoUntilWave2 = false;
+    }
     this.onGoldChange?.();
     this.state = 'playing';
     this.ui.startOverlay.classList.add('hidden');
     this.ui.gameoverOverlay.classList.add('hidden');
+    this._notifyPlayState();
+    this._beginTutorialIfNeeded(needIntro, lockAuto);
+  }
+
+  _settleRun(victory) {
+    if (this._runSettled) return this.runSettlement;
+    this._runSettled = true;
+    const gold = Math.max(0, Math.floor(this.gold || 0));
+    const rate = Number.isFinite(BALANCE.goldXpRate) ? Math.max(0, BALANCE.goldXpRate) : 1;
+    const goldXp = Math.floor(gold * rate);
+    const scoreXp = Math.max(0, Math.floor(this.score || 0));
+    const bossXp = Math.max(0, Math.floor(this.runXpBoss || 0));
+    const mult = victory
+      ? Math.max(1, Number(BALANCE.clearRewardMult) || 2)
+      : 1;
+    const extra = victory ? (scoreXp + bossXp + goldXp) * (mult - 1) : 0;
+    const grantNow = goldXp + extra;
+    if (grantNow > 0) this._addRunXp(grantNow);
+    this.runSettlement = {
+      victory: !!victory,
+      scoreXp,
+      bossXp,
+      gold,
+      goldXp,
+      extraXp: extra,
+      grantNow,
+      mult,
+      totalRunXp: scoreXp + bossXp + goldXp + extra,
+      medals: Math.max(0, Math.floor(this.runMedals || 0)),
+    };
+    return this.runSettlement;
+  }
+
+  _showResultOverlay(victory) {
+    const s = this._settleRun(victory);
+    const title = this.ui.resultTitle || this.ui.gameoverOverlay?.querySelector('h1');
+    if (title) title.textContent = victory ? '완전 클리어!' : '패배';
+    if (this.ui.finalScore) {
+      this.ui.finalScore.textContent =
+        `점수 ${this.score} · 골드 ${s.gold} · 웨이브 ${this.resultWave || this.wave} · 레벨 ${meta.level}`;
+    }
+    const xpEl = this.ui.resultXp;
+    if (xpEl) {
+      const lines = [
+        `전투 점수 XP ${s.scoreXp}`,
+        `보스 보너스 XP ${s.bossXp}`,
+        `잔여 골드 환산 XP ${s.goldXp} (+${s.gold}G)`,
+      ];
+      if (victory) {
+        lines.push(`완전 클리어 보상 ×${s.mult} (추가 XP ${s.extraXp})`);
+      }
+      lines.push(`이번 런 훈장 +${s.medals || 0}`);
+      lines.push(`이번 런 합계 XP ${s.totalRunXp}`);
+      xpEl.innerHTML = lines.map((t) => `<span>${t}</span>`).join('');
+    }
+    this.ui.gameoverOverlay.classList.remove('hidden');
+    this._hideTutorial();
   }
 
   _gameOver() {
+    if (this.state === 'gameover') return;
     this.holdingFire = false;
     this.state = 'gameover';
-    this.ui.finalScore.textContent =
-      `점수: ${this.score} · 골드 ${Math.floor(this.gold)} · 웨이브 ${this.wave} · 레벨 ${meta.level}`;
-    this.ui.gameoverOverlay.classList.remove('hidden');
+    this.victory = false;
+    this.resultWave = this.wave;
+    this._showResultOverlay(false);
+    this._notifyPlayState();
+  }
+
+  _runComplete() {
+    if (this.state === 'gameover') return;
+    this.holdingFire = false;
+    this.state = 'gameover';
+    this.victory = true;
+    this._showResultOverlay(true);
+    this._notifyPlayState();
   }
 
   _rollTier() {
@@ -394,21 +753,26 @@ export class Game {
         this.rangeMode = (this.rangeMode + 1) % RANGE_MODE_LABELS.length;
         return;
       }
-      if (this._hitRect(p, this._diffMinusRect)) {
+      if (this.cheatsEnabled && this._hitRect(p, this._diffMinusRect)) {
         this.adjustLiveMult(-LIVE_MULT_STEP);
         return;
       }
-      if (this._hitRect(p, this._diffPlusRect)) {
+      if (this.cheatsEnabled && this._hitRect(p, this._diffPlusRect)) {
         this.adjustLiveMult(LIVE_MULT_STEP);
         return;
       }
       if (this._hitRect(p, autoFireRect())) {
+        if (!this.autoUnlocked()) {
+          this.effects?.floatText(CANVAS_W / 2, 72, '1웨이브 클리어 후 해금', '#ffd27a', 15, 0.8);
+          return;
+        }
         this.setAutoFire(!this.autoFire);
         return;
       }
       if (this._tryShopBar(p)) return;
       if (this._hitDockHud(p)) return;
       if (this.skillPanelOpen) return;
+      if (this.tutorialFreeze) return;
       if (this.state !== 'playing') return;
       this.dragging = true;
       this.holdingFire = true;
@@ -419,11 +783,11 @@ export class Game {
     this.canvas.addEventListener('pointermove', (e) => {
       const p = toCanvas(e);
       this.mouse = p;
-      if (this.skillPanelOpen || this.state !== 'playing') return;
+      if (this.skillPanelOpen || this.tutorialFreeze || this.state !== 'playing') return;
       if (!this.dragging) {
         if (this._hitRect(p, this._rangeToggleRect)) return;
-        if (this._hitRect(p, this._diffMinusRect)) return;
-        if (this._hitRect(p, this._diffPlusRect)) return;
+        if (this.cheatsEnabled && this._hitRect(p, this._diffMinusRect)) return;
+        if (this.cheatsEnabled && this._hitRect(p, this._diffPlusRect)) return;
         if (this._hitRect(p, this._evoBarRect)) return;
         if (this._hitDockHud(p)) return;
       }
@@ -443,15 +807,22 @@ export class Game {
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', (e) => {
         if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-        if (e.key === '+' || e.key === '=' || e.key === ']' || e.code === 'NumpadAdd') {
+        if (this.cheatsEnabled && (e.key === '+' || e.key === '=' || e.key === ']' || e.code === 'NumpadAdd')) {
           this.adjustLiveMult(LIVE_MULT_STEP);
           e.preventDefault();
-        } else if (e.key === '-' || e.key === '_' || e.key === '[' || e.code === 'NumpadSubtract') {
+        } else if (this.cheatsEnabled && (e.key === '-' || e.key === '_' || e.key === '[' || e.code === 'NumpadSubtract')) {
           this.adjustLiveMult(-LIVE_MULT_STEP);
           e.preventDefault();
         } else if (e.code === 'Space' || e.key === ' ') {
-          if (this.state === 'playing' && !this.skillPanelOpen) {
-            this.setAutoFire(!this.autoFire);
+          if (this.tutorialFreeze) {
+            this.tutorialAdvance();
+            e.preventDefault();
+          } else if (this.state === 'playing' && !this.skillPanelOpen) {
+            if (!this.autoUnlocked()) {
+              this.effects?.floatText(CANVAS_W / 2, 72, '1웨이브 클리어 후 해금', '#ffd27a', 15, 0.8);
+            } else {
+              this.setAutoFire(!this.autoFire);
+            }
             e.preventDefault();
           }
         }
@@ -482,6 +853,12 @@ export class Game {
 
   setAutoFire(on) {
     const next = !!on;
+    if (next && !this.autoUnlocked()) {
+      if (this.state === 'playing' && this.effects) {
+        this.effects.floatText(CANVAS_W / 2, 72, '1웨이브 클리어 후 해금', '#ffd27a', 15, 0.8);
+      }
+      return this.autoFire;
+    }
     if (next === this.autoFire) return this.autoFire;
     this.autoFire = next;
     try { localStorage.setItem(AUTO_FIRE_STORAGE_KEY, next ? '1' : '0'); } catch { /* ignore */ }
@@ -492,9 +869,9 @@ export class Game {
   }
 
   _tickAutoFire() {
-    if (this.state !== 'playing' || this.skillPanelOpen) return;
+    if (this.state !== 'playing' || this.skillPanelOpen || this.tutorialFreeze) return;
     if (this.launchCd > 0) return;
-    if (this.autoFire || this.holdingFire) this._launchUnit();
+    if ((this.autoFire && this.autoUnlocked()) || this.holdingFire) this._launchUnit();
   }
 
   trollRegenPct() {
@@ -547,17 +924,25 @@ export class Game {
   }
 
   _enemyAtk(m) {
-    return MONSTERS[m.key].atk * m.waveMult * this.liveMult;
+    const debuff = Math.max(0, 1 - (this._villageAura?.enemyAtkDebuff || 0));
+    return MONSTERS[m.key].atk * m.waveMult * this.liveMult * debuff;
   }
 
   _launchUnit() {
     const u = this._spawnUnit(this.currentTier, this.aimX, LAUNCHER_Y);
+    if (!u) {
+      this.launchCd = this._launchCooldown();
+      this.currentTier = this.nextTier;
+      this.nextTier = this._rollTier();
+      return;
+    }
     u.fromLaunch = true;
     u.body.collisionFilter = allyCollisionFilter(true);
     setVelPxS(u.body, 0, -BALANCE.launchSpeed);
     this.launchCd = this._launchCooldown();
     this.currentTier = this.nextTier;
     this.nextTier = this._rollTier();
+    this._applyLaunchPassives(u);
   }
 
   setCheatsEnabled(on) {
@@ -667,7 +1052,7 @@ export class Game {
 
   // ---------- 생성 ----------
   _spawnUnit(tier, x, y, heroType = null) {
-    const stat = UNITS[tier - 1];
+    const stat = unitCombatStat(tier, meta.unitLevel(tier));
     const body = Bodies.circle(x, y, stat.r, {
       frictionAir: FRICTION_AIR_UNIT,
       restitution: 0.3,
@@ -677,9 +1062,10 @@ export class Game {
     Body.setMass(body, stat.mass);
     World.add(this.engine.world, body);
 
+    const hp = Math.max(1, Math.round(stat.hp));
     const u = {
       body, tier,
-      hp: stat.hp, maxHp: stat.hp,
+      hp, maxHp: hp,
       r: stat.r, color: stat.color,
       attackCd: Math.random() * 0.3,
       isMerging: false, dead: false,
@@ -688,14 +1074,22 @@ export class Game {
       heroType,
       missionDamage: 0,
       bossKills: 0,
-      targetDamage: heroType ? heroMissionDamage(this.wave) : 0,
+      targetDamage: heroType
+        ? Math.max(1, Math.round(heroMissionDamage(this.wave) * villageResolve(10, meta.unitLevel(10)).missionReqMult))
+        : 0,
       targetKills: heroType ? HERO_MISSION_KILLS : 0,
       gatherToBoss: false,
       firstHit: false,
       valkTick: 0,
+      invulnT: 0,
+      buffMoveT: 0,
+      buffAtkT: 0,
+      buffAspdT: 0,
+      miracleRegenT: 0,
     };
     this.units.push(u);
     this.unitByBodyId.set(body.id, u);
+    this._onUnitAppeared(u);
     return u;
   }
 
@@ -715,11 +1109,19 @@ export class Game {
     return false;
   }
 
+  _hasLivingBoss(exclude = null) {
+    return this.enemies.some((m) => m !== exclude && !m.dead && m.isBoss);
+  }
+
   // 반지름 기반 스폰 위치 탐색: 기존 적(보스 포함)과 원이 겹치지 않는 빈 슬롯
-  // 앞열이 겹치면 더 뒷열(스택)로 간다. 겹치는 앞열에 멈춰 밀지 않음.
+  // 앞열이 겹치면 더 뒷열(스택)로 간다. 보스가 있으면 뒷열은 쓰지 않고 옆칸만.
   _findSpawnSpot(radius, exclude = null, minRow = 0) {
     const cols = this.slotCols || BASE_SLOT_COLS;
-    for (let row = Math.max(0, minRow); row < 30; row++) {
+    const bossPresent = this._hasLivingBoss(exclude);
+    const maxRow = bossPresent ? 1 : 30;
+    const startRow = Math.max(0, minRow);
+    if (startRow >= maxRow) return null;
+    for (let row = startRow; row < maxRow; row++) {
       const candidates = [];
       for (let col = 0; col < cols; col++) {
         if (this.occupiedSlots.has(`${row}:${col}`)) continue;
@@ -745,6 +1147,8 @@ export class Game {
         row = spot.row;
         col = spot.col;
         x = spot.x;
+      } else if (this._hasLivingBoss()) {
+        return null;
       } else {
         // 앞열이 꽉 찼으면 뒷열 빈 칸. 착지한 적과 겹치면 그 열은 쓰지 않음.
         for (let r2 = 0; r2 < 30 && col < 0; r2++) {
@@ -768,8 +1172,9 @@ export class Game {
       this.occupiedSlots.add(`${row}:${col}`);
     }
     // 실효 배율 = 웨이브 곡선 × 실시간 수동 배율 (HP는 스냅샷, ATK/라인속도는 liveMult 즉시 반영)
-    const waveMult = waveMultiplier(this.wave);
-    const hp = Math.round(stat.hp * effectiveMult(this.wave, this.liveMult));
+    // 허들 보스는 bossHurdleExtra를 waveMult에 포함해 ATK·라이브 리스케일도 같이 탐.
+    const waveMult = isBoss ? bossWaveMultiplier(this.wave) : waveMultiplier(this.wave);
+    const hp = Math.round(stat.hp * waveMult * this.liveMult);
     const slotY = isBoss ? this.lineY : (this.lineY - row * SLOT_ROW_H);
     const spawnY = ENEMY_SPAWN_Y;
     const joining = spawnY < slotY - JOIN_ARRIVE_EPS;
@@ -807,17 +1212,24 @@ export class Game {
         other.col = spot.col;
         other.x = spot.x;
         if (!other.joining) other.y = this._enemySlotY(other);
+      } else if (this._hasLivingBoss()) {
+        other.row = 0;
+        other.col = -1;
+        other.joining = true;
+        other.y = ENEMY_SPAWN_Y;
+        other.x = this._slotX(0);
       } else {
         other.row = Math.max((Number(other.row) || 0) + 1, 1);
         if (!other.joining) other.y = this._enemySlotY(other);
       }
-      this.occupiedSlots.add(`${other.row}:${other.col}`);
+      if ((Number(other.col) || 0) >= 0) this.occupiedSlots.add(`${other.row}:${other.col}`);
     }
   }
 
   // 같은 열의 착지 적과 목표 슬롯이 겹치면 더 뒷열로. 옆열 겹침으로 구멍 메우기를 막지 않음.
   _ensureJoinSlotClear(m) {
     if (!m || m.dead || !m.joining) return;
+    if (!m.isBoss && (Number(m.col) < 0)) return;
     const stat = MONSTERS[m.key];
     if (m.isBoss) {
       m.x = this._playfieldCenterX();
@@ -827,11 +1239,19 @@ export class Game {
     const slotY = this._enemySlotY(m);
     if (!this._slotBlockedInColumn(m, m.x, slotY)) return;
     this.occupiedSlots.delete(`${m.row}:${m.col}`);
-    const spot = this._findSpawnSpot(stat.r, m, m.row + 1);
+    const nextRow = this._hasLivingBoss() ? 0 : m.row + 1;
+    const spot = this._findSpawnSpot(stat.r, m, nextRow);
     if (spot) {
       m.row = spot.row;
       m.col = spot.col;
       m.x = spot.x;
+    } else if (this._hasLivingBoss()) {
+      m.row = 0;
+      m.col = -1;
+      m.joining = true;
+      m.y = ENEMY_SPAWN_Y;
+      m.x = this._slotX(0);
+      return;
     }
     this.occupiedSlots.add(`${m.row}:${m.col}`);
   }
@@ -889,6 +1309,51 @@ export class Game {
       return false;
     };
 
+    if (bosses.length > 0) {
+      const used = new Set();
+      const assignFront = (m, col) => {
+        const x = this._slotX(col);
+        m.row = 0;
+        m.col = col;
+        m.x = x;
+        const slotY = this.lineY;
+        if (m.y + JOIN_ARRIVE_EPS < slotY) m.joining = true;
+        else {
+          m.y = slotY;
+          m.joining = false;
+        }
+        used.add(col);
+        this.occupiedSlots.add(`0:${col}`);
+      };
+      const parkAtCamp = (m) => {
+        m.row = 0;
+        m.col = -1;
+        m.joining = true;
+        m.y = ENEMY_SPAWN_Y;
+        m.x = this._slotX(0);
+      };
+      const tryCol = (m, col) => {
+        if (used.has(col) || col < 0 || col >= cols) return false;
+        const radius = MONSTERS[m.key].r;
+        const x = this._slotX(col);
+        if (slotBlockedByBoss(x, this.lineY, radius)) return false;
+        assignFront(m, col);
+        return true;
+      };
+      for (const m of living) {
+        if (tryCol(m, Number(m.col))) continue;
+        let placed = false;
+        for (let c = 0; c < cols; c++) {
+          if (tryCol(m, c)) {
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) parkAtCamp(m);
+      }
+      return;
+    }
+
     for (let col = 0; col < cols; col++) {
       const group = buckets[col];
       group.sort((a, b) => b.y - a.y);
@@ -919,6 +1384,302 @@ export class Game {
     this.unitByBodyId.delete(u.body.id);
     const i = this.units.indexOf(u);
     if (i >= 0) this.units.splice(i, 1);
+  }
+
+  _allyDist(a, b) {
+    return Math.hypot(
+      a.body.position.x - b.body.position.x,
+      a.body.position.y - b.body.position.y,
+    );
+  }
+
+  _refreshVillageAuras() {
+    this._villageAura = collectGlobalAuras(this.units, (t) => meta.unitLevel(t));
+    return this._villageAura;
+  }
+
+  _bestNearbyValue(u, pickRadius, pickValue) {
+    let best = 0;
+    for (const s of this.units) {
+      if (s.dead) continue;
+      const p = this._unitStat(s).village;
+      const v = pickValue(p, s);
+      if (!(v > 0)) continue;
+      const r = pickRadius(p, s);
+      if (s === u || this._allyDist(u, s) <= r) best = Math.max(best, v);
+    }
+    return best;
+  }
+
+  _bestSacrifice(u) {
+    let best = null;
+    let bestShare = 0;
+    for (const s of this.units) {
+      if (s.dead || s === u) continue;
+      const p = this._unitStat(s).village;
+      const share = p.sacrificeShare || 0;
+      if (!(share > 0)) continue;
+      if (this._allyDist(u, s) > (p.sacrificeRadius || 110)) continue;
+      if (share > bestShare) {
+        bestShare = share;
+        best = { src: s, share, keep: p.sacrificeKeep || 1 };
+      }
+    }
+    return best;
+  }
+
+  _allyMoveMult(u) {
+    const aura = this._villageAura || {};
+    const nearby = this._bestNearbyValue(
+      u,
+      (p) => p.captainRadius || 70,
+      (p) => p.captainAdvance || 0,
+    );
+    let m = 1 + (aura.militiaAdvance || 0) + (aura.armyMove || 0) + nearby;
+    if ((u.buffMoveT || 0) > 0) m *= 1.5;
+    return m;
+  }
+
+  _allyAtkMult(u) {
+    const aura = this._villageAura || {};
+    let m = 1 + (aura.armyAtk || 0) + (aura.heroArmyAtk || 0);
+    if ((u.buffAtkT || 0) > 0) m *= 1.5;
+    if (this._jeanneBuffed(u)) {
+      const kit = this._jeanneKit();
+      m *= kit?.damageBuff || HEROES.jeanne.damageBuff;
+    }
+    return m;
+  }
+
+  _jeanneKit() {
+    const j = this.units.find((u) => !u.dead && u.heroType === 'jeanne');
+    if (!j) return HEROES.jeanne;
+    return heroKit('jeanne', meta.unitLevel(10), this._villageAura) || HEROES.jeanne;
+  }
+
+  _applyLaunchPassives(u) {
+    if (!u || u.dead) return;
+    const p = this._unitStat(u).village;
+    const aura = this._villageAura || this._refreshVillageAuras();
+    if (u.tier === 1) {
+      const chance = (p.awakenChance || 0) * (aura.militiaAwakenMult || 1);
+      const bucket = Math.floor((this.wave - 1) / 5);
+      if (chance > 0 && this._awakenBucket !== bucket && Math.random() < chance) {
+        this._awakenBucket = bucket;
+        const { x, y } = u.body.position;
+        this._removeUnit(u);
+        const hero = this._summonHero(x, y);
+        hero.fromLaunch = false;
+        hero.settled = true;
+        this.effects.floatText(x, y - 36, '영웅 각성!', '#FFD700', 20, 1.2);
+        return;
+      }
+    }
+    if ((p.launchDash || 0) > 0 && Math.random() < p.launchDash) {
+      const holdY = this.lineY + 20 + u.r;
+      Body.setPosition(u.body, { x: u.body.position.x, y: holdY });
+      u.settled = true;
+      u.fromLaunch = false;
+      u.body.collisionFilter = allyCollisionFilter(false);
+      setVelPxS(u.body, 0, 0);
+      this.effects.floatText(u.body.position.x, u.body.position.y - u.r, '돌격!', '#ffe7a0', 13, 0.6);
+    }
+    const dur = p.launchBuffDur || 5;
+    if ((p.launchMoveChance || 0) > 0 && Math.random() < p.launchMoveChance) u.buffMoveT = dur;
+    if ((p.launchAtkChance || 0) > 0 && Math.random() < p.launchAtkChance) u.buffAtkT = dur;
+    if ((p.launchAspdChance || 0) > 0 && Math.random() < p.launchAspdChance) u.buffAspdT = dur;
+  }
+
+  _onUnitAppeared(u) {
+    if (!u || u.dead) return;
+    const p = this._unitStat(u).village;
+    if ((p.appearExecute || 0) > 0 && Math.random() < p.appearExecute) {
+      this.effects.floatText(CANVAS_W / 2, 280, '드래곤 강림!', '#ff6b6b', 22, 1.2);
+      for (const m of [...this.enemies]) {
+        if (m.dead) continue;
+        if (m.isBoss) this._damageEnemy(m, m.maxHp * 0.3, u);
+        else this._damageEnemy(m, m.hp, u);
+      }
+      return;
+    }
+    if ((p.appearHpPct || 0) > 0) {
+      for (const m of [...this.enemies]) {
+        if (!m.dead) this._damageEnemy(m, m.hp * p.appearHpPct, u);
+      }
+    }
+  }
+
+  _damageAlly(u, raw, { fromEnemy = true, skipSacrifice = false } = {}) {
+    if (!u || u.dead) return 0;
+    if ((u.invulnT || 0) > 0) return 0;
+    const p = this._unitStat(u).village;
+    const aura = this._villageAura || {};
+    if (fromEnemy && !u._enemyHitOnce) {
+      u._enemyHitOnce = true;
+      if (Math.random() < (p.firstHitIgnore || 0)) {
+        const msg = Math.random() < 0.5 ? '피했다!' : '살았다!';
+        this.effects.floatText(u.body.position.x, u.body.position.y - u.r, msg, '#ffe7a0', 14, 0.7);
+        return 0;
+      }
+    }
+    const crisis = this._bestNearbyValue(
+      u,
+      (vp) => vp.crisisRadius || 70,
+      (vp) => vp.crisisDodge || 0,
+    );
+    if (fromEnemy && crisis > 0 && Math.random() < crisis) {
+      this.effects.floatText(u.body.position.x, u.body.position.y - u.r, '감지!', '#87CEFA', 11, 0.4);
+      return 0;
+    }
+    let dmg = Math.max(0, raw);
+    dmg *= (1 - (p.selfDr || 0));
+    dmg *= (1 - this._bestNearbyValue(u, (vp) => vp.shieldRadius || 50, (vp) => vp.shieldDr || 0));
+    dmg *= (1 - (aura.armyDr || 0));
+    dmg *= (1 - (aura.heroArmyDr || 0));
+    if (!skipSacrifice && u.tier !== 7) {
+      const sac = this._bestSacrifice(u);
+      if (sac && sac.share > 0 && sac.src && !sac.src.dead) {
+        const transferred = dmg * sac.share;
+        dmg -= transferred;
+        this._damageAlly(sac.src, transferred * sac.keep, { fromEnemy: false, skipSacrifice: true });
+      }
+    }
+    return this._applyAllyHpLoss(u, dmg, { lucky: fromEnemy });
+  }
+
+  _applyAllyHpLoss(u, dmg, { lucky = false } = {}) {
+    if (!u || u.dead || !(dmg > 0)) return 0;
+    if ((u.invulnT || 0) > 0) return 0;
+    const p = this._unitStat(u).village;
+    if (lucky && u.hp - dmg <= 0 && (p.luckySurvive || 0) > 0 && Math.random() < p.luckySurvive) {
+      const dealt = Math.max(0, u.hp - 1);
+      u.hp = 1;
+      u.flashT = 0.12;
+      this.effects.floatText(u.body.position.x, u.body.position.y - u.r, '생존!', '#ffe7a0', 12, 0.5);
+      return dealt;
+    }
+    const dealt = Math.min(u.hp, dmg);
+    u.hp -= dmg;
+    u.flashT = 0.12;
+    if (u.hp <= 0) this._killAlly(u);
+    return dealt;
+  }
+
+  _killAlly(u) {
+    if (!u || u.dead) return;
+    this._onAllyDeathPassives(u);
+    this.effects.burst(u.body.position.x, u.body.position.y, u.color, 10, 3, 3);
+    this._removeUnit(u);
+  }
+
+  _onAllyDeathPassives(u) {
+    const p = this._unitStat(u).village;
+    if ((p.deathGoldChance || 0) > 0 && Math.random() < p.deathGoldChance) {
+      this._grantGold(p.deathGold, u.body.position.x, u.body.position.y - 20);
+    }
+    if ((p.deathLineFreezeChance || 0) > 0 && this._unitNearFront(u)
+      && Math.random() < p.deathLineFreezeChance) {
+      this.lineFreezeT = Math.max(this.lineFreezeT || 0, p.deathLineFreezeDur || 3);
+      this.effects.floatText(CANVAS_W / 2, this.lineY, '결사항전!', '#c9b48a', 16, 0.8);
+    }
+    if (p.miracleOnDeath && this._miracleWave !== this.wave) {
+      this._miracleWave = this.wave;
+      for (const a of this.units) {
+        if (a.dead || a === u) continue;
+        a.hp = a.maxHp;
+        a.miracleRegenT = 7;
+      }
+      this.effects.floatText(CANVAS_W / 2, 300, '기적!', '#FFD700', 22, 1.2);
+    }
+  }
+
+  _tickVillageAuras(dt) {
+    const aura = this._villageAura || this._refreshVillageAuras();
+    this.dragonFearCd = Math.max(0, (this.dragonFearCd || 0) - dt);
+    this.marshalInvulnCd = Math.max(0, (this.marshalInvulnCd || 0) - dt);
+    this.heroSmiteT = (this.heroSmiteT || 0) + dt;
+    for (const u of this.units) {
+      if (u.dead) continue;
+      u.invulnT = Math.max(0, (u.invulnT || 0) - dt);
+      u.buffMoveT = Math.max(0, (u.buffMoveT || 0) - dt);
+      u.buffAtkT = Math.max(0, (u.buffAtkT || 0) - dt);
+      u.buffAspdT = Math.max(0, (u.buffAspdT || 0) - dt);
+      u.miracleRegenT = Math.max(0, (u.miracleRegenT || 0) - dt);
+    }
+    if (aura.fearFreeze > 0 && this.dragonFearCd <= 0) {
+      this.lineFreezeT = Math.max(this.lineFreezeT || 0, aura.fearFreeze);
+      this.dragonFearCd = 30;
+      this.effects.floatText(CANVAS_W / 2, this.lineY - 24, '드래곤 피어!', '#ff8a65', 18, 0.9);
+    }
+    if (aura.invulnPeriod > 0) {
+      if (!this._marshalInvulnArmed) {
+        this._marshalInvulnArmed = true;
+        this.marshalInvulnCd = aura.invulnPeriod;
+      } else if (this.marshalInvulnCd <= 0) {
+        this.marshalInvulnCd = aura.invulnPeriod;
+        for (const a of this.units) {
+          if (!a.dead) a.invulnT = Math.max(a.invulnT || 0, aura.invulnDur || 3);
+        }
+        this.effects.floatText(CANVAS_W / 2, 280, '필사즉생!', '#e0d0ff', 20, 1.1);
+      }
+    } else {
+      this._marshalInvulnArmed = false;
+    }
+    if (aura.smitePeriod > 0 && this.heroSmiteT >= aura.smitePeriod) {
+      this.heroSmiteT = 0;
+      const hero = this.units.find((a) => !a.dead && a.heroType);
+      if (hero) {
+        const atk = this._unitStat(hero).atk * (aura.smiteAtkFrac || 0.35);
+        this.effects.floatText(CANVAS_W / 2, 250, '신벌!', '#ffe7a0', 18, 0.8);
+        for (const m of [...this.enemies]) {
+          if (!m.dead) this._damageEnemy(m, atk, hero);
+        }
+      }
+    }
+  }
+
+  _knightSwapFront(knight) {
+    let best = null;
+    let bestY = knight.body.position.y;
+    for (const a of this.units) {
+      if (a.dead || a === knight || !a.settled) continue;
+      if (a.tier < 1 || a.tier > 4) continue;
+      if (a.body.position.y < bestY) {
+        bestY = a.body.position.y;
+        best = a;
+      }
+    }
+    if (!best) return;
+    const kp = { x: knight.body.position.x, y: knight.body.position.y };
+    const bp = { x: best.body.position.x, y: best.body.position.y };
+    Body.setPosition(knight.body, bp);
+    Body.setPosition(best.body, kp);
+  }
+
+  _knockbackEnemy(m, px) {
+    if (!m || m.dead || !(px > 0)) return;
+    if (this._enemyOccupiesLine(m)) {
+      this.lineY = Math.max(LINE_START_Y, this.lineY - px);
+      this._syncEnemyY(0);
+    } else {
+      m.y = Math.max(LINE_START_Y - 80, m.y - px);
+    }
+  }
+
+  _grantWaveClearRewards(clearedWave) {
+    let gold = 0;
+    for (const u of this.units) {
+      if (u.dead) continue;
+      gold += this._unitStat(u).village.waveGold || 0;
+    }
+    if (gold > 0) this._grantGold(gold, CANVAS_W / 2, 248);
+    let medals = medalsForClearedWave(clearedWave);
+    if (clearedWave >= VILLAGE_CLEAR_WAVE) medals += VILLAGE_CLEAR_BONUS;
+    if (medals > 0) {
+      meta.addMedals(medals);
+      this.runMedals = (this.runMedals || 0) + medals;
+      this.effects.floatText(CANVAS_W / 2, 332, `훈장 +${medals}`, '#e8c878', 18, 1.2);
+    }
   }
 
   _unitFromBody(body) {
@@ -954,6 +1715,10 @@ export class Game {
       if (!a || !b || a === b) continue;
       if (a.dead || b.dead || a.isMerging || b.isMerging) continue;
       if (a.tier !== b.tier || a.tier >= 10) continue;
+      const newTier = a.tier + 1;
+      const air = (a.fromLaunch && !a.settled) || (b.fromLaunch && !b.settled);
+      const airMax = Math.max(1, Math.round(BALANCE.airMergeMaxTier ?? 5));
+      if (air && newTier > airMax) continue;
       a.isMerging = true;
       b.isMerging = true;
       this.mergeQueue.push([a, b]);
@@ -1052,9 +1817,13 @@ export class Game {
 
   // ---------- 웨이브 / 스폰 ----------
   _monsterPool() {
-    const pool = [['goblin', this.wave <= 1 ? 78 : 55], ['skeleton', this.wave <= 1 ? 12 : 25]];
-    if (this.wave >= 2) pool.push(['orc', 20]);
-    if (this.wave >= 3) pool.push(['troll', 4]);
+    const w = this.wave;
+    const pool = [
+      ['goblin', w < 5 ? 48 : (w < 10 ? 36 : 26)],
+    ];
+    if (w >= 2) pool.push(['skeleton', 24]);
+    if (w >= 2) pool.push(['orc', w >= 10 ? 24 : (w >= 5 ? 20 : 16)]);
+    if (w >= 5) pool.push(['troll', w >= 15 ? 18 : (w >= 10 ? 14 : 8)]);
     return pool;
   }
 
@@ -1186,9 +1955,8 @@ export class Game {
     this._spawnEnemy('boss');
     this.bossActive = true;
     this._markBossGather();
+    const { escort, knights } = bossEscortForWave(this.wave);
     const cap = this._bossMinionCap();
-    const knights = Math.max(0, Math.round(BALANCE.bossKnightEscorts ?? 2));
-    const escort = Math.max(0, Math.round(BALANCE.bossEscortCount ?? 4));
     for (let i = 0; i < knights; i++) {
       if (this._livingTrashEnemies() >= cap) break;
       this._spawnEnemy('skelknight');
@@ -1236,18 +2004,29 @@ export class Game {
     if (m.isBoss) {
       this._dismissBossMinions();
       const bonus = Math.round(PROGRESSION.bossXpPerWave * this.wave);
+      this.runXpBoss = (this.runXpBoss || 0) + bonus;
       this._addRunXp(bonus);
       this.effects.floatText(CANVAS_W / 2, 360, `보스 XP +${bonus}`, '#ffd27a', 18, 1.4);
       this.bossActive = false;
       this.bossPending = false;
+      const clearedWave = this.wave;
       this.wave += 1;
       this.kills = 0;
       this.waveTrashSpawned = 0;
       this.spawnTimer = this._waveSpawnInterval() * 0.7;
       this._refillArcherAmmo();
       this._resetShopBuys();
-      this.effects.floatText(CANVAS_W / 2, 300, `웨이브 ${this.wave} 시작!`, '#7CFC00', 26, 2.0);
       this._onBossSlain();
+      const clearAt = Math.max(1, Math.round(BALANCE.clearWave || 30));
+      this._grantWaveClearRewards(clearedWave);
+      if (clearedWave >= clearAt) {
+        this.resultWave = clearedWave;
+        this._removeEnemy(m);
+        this._runComplete();
+        return;
+      }
+      this.effects.floatText(CANVAS_W / 2, 300, `웨이브 ${this.wave} 시작!`, '#7CFC00', 26, 2.0);
+      this._maybeOfferAutoTutorial();
     } else {
       this.kills += 1;
     }
@@ -1269,7 +2048,7 @@ export class Game {
 
   // ---------- 웨이브라인 이동 (줄다리기) ----------
   _unitStat(u) {
-    return UNITS[u.tier - 1];
+    return unitCombatStat(u.tier, meta.unitLevel(u.tier));
   }
 
   // 예약 슬롯에 착지한 적 (뒷열 스택 포함). 합류/구멍에 떠 있는 적은 제외.
@@ -1305,13 +2084,50 @@ export class Game {
     return this.enemies.filter((m) => this._enemyOccupiesLine(m));
   }
 
-  _unitEngaged(u, onLine) {
-    const joined = onLine || this.joinedEnemies();
+  _unitInRangeOf(u, m) {
+    if (!u || u.dead || !m || m.dead) return false;
     const range = this._unitStat(u).range;
     const { x, y } = u.body.position;
-    for (const m of joined) {
+    const er = MONSTERS[m.key].r;
+    return this._meleeGap(x, y, u.r, m.x, m.y, er) <= range;
+  }
+
+  _unitEngaged(u, onLine) {
+    const joined = onLine || this.joinedEnemies();
+    return joined.some((m) => this._unitInRangeOf(u, m));
+  }
+
+  // 사거리 안 아군이 없는 전열 적. 다른 열의 저지력이 이 적을 붙잡지 못함.
+  _occupierHeld(m) {
+    for (const u of this.units) {
+      if (this._unitInRangeOf(u, m)) return true;
+    }
+    return false;
+  }
+
+  // 슬롯 착지 지점 기준으로, 그 열을 막을 전열 아군이 있는지.
+  _allyWouldHoldAt(u, x, y, enemyR) {
+    if (!u || u.dead || !u.settled) return false;
+    const range = this._unitStat(u).range;
+    const { x: ux, y: uy } = u.body.position;
+    return this._meleeGap(ux, uy, u.r, x, y, enemyR) <= range;
+  }
+
+  // 착지 전/빈 전열인데 아군이 안 막는 적이 있으면 빈 라인 후퇴를 하지 않음.
+  _incomingLaneUncovered() {
+    for (const m of this.enemies) {
+      if (m.dead) continue;
+      const destX = m.isBoss ? this._playfieldCenterX() : m.x;
+      const destY = this._enemySlotY(m);
       const er = MONSTERS[m.key].r;
-      if (this._meleeGap(x, y, u.r, m.x, m.y, er) <= range) return true;
+      let held = false;
+      for (const u of this.units) {
+        if (this._allyWouldHoldAt(u, destX, destY, er)) {
+          held = true;
+          break;
+        }
+      }
+      if (!held) return true;
     }
     return false;
   }
@@ -1331,19 +2147,52 @@ export class Game {
     return u.body.position.y <= holdY + BALANCE.emptyLinePushSlack;
   }
 
+  // 같은 열 뒷열(착지, 합류 아님). 보스는 열 스택에서 빼 진격 가산을 받지 않음.
+  _columnRearCount(front) {
+    if (!front || front.dead || front.isBoss) return 0;
+    const col = Number(front.col);
+    if (!Number.isFinite(col) || col < 0) return 0;
+    let n = 0;
+    for (const m of this.enemies) {
+      if (m === front || m.dead || m.joining || m.isBoss) continue;
+      if ((Number(m.row) || 0) < 1) continue;
+      if ((Number(m.col) || 0) !== col) continue;
+      n += 1;
+    }
+    return n;
+  }
+
+  _stackAdvanceMult(front) {
+    if (!front || front.isBoss) return 1;
+    const per = Number.isFinite(BALANCE.stackAdvancePerRear) ? BALANCE.stackAdvancePerRear : 0.5;
+    const cap = Number.isFinite(BALANCE.stackAdvanceCap) ? BALANCE.stackAdvanceCap : 3;
+    return Math.min(cap, 1 + per * this._columnRearCount(front));
+  }
+
+  _occupierPushSpeed(m) {
+    if (!m || m.stunT > 0) return 0;
+    return MONSTERS[m.key].speed * this.liveMult * this._stackAdvanceMult(m)
+      * Math.max(0, 1 - (this._villageAura?.enemySpdDebuff || 0));
+  }
+
   _updateLine(dt) {
     this.chargeStutterT = Math.max(0, (this.chargeStutterT || 0) - dt);
     this._refreshJoinFlags();
-    // 돌격 저지력: firstHit 동안 라인 순속도 0 (빈 라인 푸시 포함)
-    if (this.chargeStutterT > 0) {
+    this.lineFreezeT = Math.max(0, (this.lineFreezeT || 0) - dt);
+    if (this.chargeStutterT > 0 || this.lineFreezeT > 0) {
       this.netSpeed = 0;
       this._syncEnemyY(dt);
       return;
     }
     const joined = this.joinedEnemies();
-    // 착지한 적이 없으면 전진하지 않음. 전열 아군 저지력으로 시작 위치까지 밀어올림.
-    // 합류 중인 적만 있을 때도 동일 (joining은 라인 속도에 기여하지 않음).
+    // 착지한 적이 없으면 전진하지 않음. 막힌 열만 있으면 전열 저지력으로 밀어올림.
+    // 아군이 안 막는 열로 합류 중이면 후퇴하지 않고 착지를 기다림.
     if (joined.length === 0) {
+      if (this._incomingLaneUncovered()) {
+        this.netSpeed = 0;
+        this._syncEnemyY(dt);
+        return;
+      }
       let stopping = 0;
       for (const u of this.units) {
         if (this._unitCanPushEmptyLine(u)) stopping += this._unitStop(u);
@@ -1358,17 +2207,26 @@ export class Game {
       this._syncEnemyY(dt);
       return;
     }
+    const unheld = joined.filter((m) => !this._occupierHeld(m));
     let advance = BALANCE.baseLineSpeed;
-    for (const m of joined) {
-      if (m.stunT <= 0) advance += MONSTERS[m.key].speed * this.liveMult;
+    // 막히지 않은 열의 전열은 다른 열 저지력에 묶이지 않고 라인을 민다.
+    if (unheld.length > 0) {
+      for (const m of unheld) {
+        advance += this._occupierPushSpeed(m);
+      }
+      this.netSpeed = advance;
+    } else {
+      for (const m of joined) {
+        advance += this._occupierPushSpeed(m);
+      }
+      let stopping = 0;
+      for (const u of this.units) {
+        if (u.engaged) stopping += this._unitStop(u);
+      }
+      this.netSpeed = advance - stopping;
     }
-    let stopping = 0;
-    for (const u of this.units) {
-      if (u.engaged) stopping += this._unitStop(u);
-    }
-    this.netSpeed = advance - stopping;
     // 착지한 보스만. joining 중이면 occupied가 아니라 여기 안 옴(빈 라인 분기로 감).
-    if (joined.some((m) => m.isBoss)) {
+    if (joined.some((m) => m.isBoss) && !this._villageAura?.bossMinAdvanceZero) {
       this.netSpeed = Math.max(this.netSpeed, BALANCE.bossMinAdvance);
     }
     this.lineY += this.netSpeed * dt;
@@ -1398,6 +2256,11 @@ export class Game {
     const step = dt || 0;
     for (const m of this.enemies) {
       if (m.dead) continue;
+      if (!m.isBoss && (Number(m.col) < 0)) {
+        m.joining = true;
+        m.y = ENEMY_SPAWN_Y;
+        continue;
+      }
       const slotY = this._enemySlotY(m);
       if (m.y + JOIN_ARRIVE_EPS < slotY) m.joining = true;
       if (m.joining) {
@@ -1471,7 +2334,12 @@ export class Game {
         if (v.y < 0) setVelPxS(u.body, v.x, 0);
       } else if (u.settled) {
         const v = getVelPxS(u.body);
-        setVelPxS(u.body, v.x * 0.9, -advPx);
+        setVelPxS(u.body, v.x * 0.9, -advPx * this._allyMoveMult(u));
+      }
+      const vp = this._unitStat(u).village;
+      if (u.settled && vp.knightSwap && !u._knightSwapped && this._unitNearFront(u)) {
+        u._knightSwapped = true;
+        this._knightSwapFront(u);
       }
     }
   }
@@ -1537,13 +2405,15 @@ export class Game {
   // ---------- 전투 ----------
   _jeanneBuffed(u) {
     if (u.heroType) return false;
+    const kit = this._jeanneKit();
+    const radius = kit?.auraRadius || HEROES.jeanne.auraRadius;
     for (const h of this.units) {
-      if (h.heroType === 'jeanne') {
+      if (h.heroType === 'jeanne' && !h.dead) {
         const d = Math.hypot(
           u.body.position.x - h.body.position.x,
           u.body.position.y - h.body.position.y,
         );
-        if (d < HEROES.jeanne.auraRadius) return true;
+        if (d < radius) return true;
       }
     }
     return false;
@@ -1570,30 +2440,15 @@ export class Game {
         if (d <= stat.range && d < best) { best = d; target = m; }
       }
       if (!target) continue;
-      u.attackCd = BALANCE.attackCooldown;
+      const aspd = (u.buffAspdT || 0) > 0 ? 1.5 : 1;
+      u.attackCd = BALANCE.attackCooldown / aspd;
 
-      let dmg = stat.atk;
-      if (this._jeanneBuffed(u)) dmg *= HEROES.jeanne.damageBuff;
-      this.effects.hitFlash(target.x, target.y, '#fff');
-
-      // 티어 특수 능력
-      const sp = stat.special;
-      if (u.tier === 5 && sp) {
-        for (const m2 of [...this.enemies]) {
-          if (m2 === target || m2.dead || !this._enemyArrived(m2)) continue;
-          if (Math.hypot(m2.x - target.x, m2.y - target.y) < sp.cleaveRadius) {
-            this._damageEnemy(m2, dmg * sp.cleaveMult, u);
-          }
-        }
+      const hits = (stat.village.doubleHitChance || 0) > 0 && Math.random() < stat.village.doubleHitChance
+        ? 2 : 1;
+      for (let hit = 0; hit < hits; hit += 1) {
+        if (u.dead || target.dead) break;
+        this._performUnitHit(u, target, stat, hit === 0);
       }
-      if (u.tier === 6 && sp && Math.random() < sp.stunChance && !target.dead) {
-        target.stunT = Math.max(target.stunT, sp.stunDuration);
-        this.effects.floatText(target.x, target.y - 24, '기절!', '#87CEFA', 12, 0.5);
-      }
-      if (u.tier === 8 && sp && !target.dead) {
-        target.burn = { dps: stat.atk * sp.burnAtkFrac, t: sp.burnDuration };
-      }
-      if (!target.dead) this._damageEnemy(target, dmg, u);
       this._checkHeroMission(u);
     }
 
@@ -1612,14 +2467,57 @@ export class Game {
       }
       if (!target) continue;
       m.attackCd = BALANCE.attackCooldown;
-      target.hp -= this._enemyAtk(m);
-      target.flashT = 0.12;
       this.effects.hitFlash(target.body.position.x, target.body.position.y, '#ff6b6b');
-      if (target.hp <= 0) {
-        this.effects.burst(target.body.position.x, target.body.position.y, target.color, 10, 3, 3);
-        this._removeUnit(target);
+      this._damageAlly(target, this._enemyAtk(m), { fromEnemy: true });
+    }
+  }
+
+  _performUnitHit(u, target, stat, primary) {
+    const vp = stat.village;
+    let dmg = stat.atk * this._allyAtkMult(u);
+    if ((vp.atkProcChance || 0) > 0 && Math.random() < vp.atkProcChance) {
+      dmg *= (1 + (vp.atkProcMult || 0));
+    }
+    dmg += vp.flatDmg || 0;
+    if (primary) this.effects.hitFlash(target.x, target.y, '#fff');
+
+    const sp = stat.special;
+    if (u.tier === 5 && sp) {
+      for (const m2 of [...this.enemies]) {
+        if (m2 === target || m2.dead || !this._enemyArrived(m2)) continue;
+        if (Math.hypot(m2.x - target.x, m2.y - target.y) < sp.cleaveRadius) {
+          this._damageEnemy(m2, dmg * sp.cleaveMult, u);
+        }
       }
     }
+    if (u.tier === 6 && sp && Math.random() < sp.stunChance && !target.dead) {
+      target.stunT = Math.max(target.stunT, sp.stunDuration);
+      this.effects.floatText(target.x, target.y - 24, '기절!', '#87CEFA', 12, 0.5);
+    }
+    if (u.tier === 8 && sp && !target.dead) {
+      target.burn = { dps: stat.atk * sp.burnAtkFrac, t: sp.burnDuration };
+    }
+    if ((vp.knockbackChance || 0) > 0 && Math.random() < vp.knockbackChance) {
+      this._knockbackEnemy(target, vp.knockbackPx || 0);
+    }
+    if ((vp.breathDmg || 0) > 0) {
+      const { x, y } = u.body.position;
+      for (const m2 of [...this.enemies]) {
+        if (m2.dead || m2 === target) continue;
+        if (Math.abs(m2.x - x) > 32 || m2.y > y) continue;
+        this._damageEnemy(m2, vp.breathDmg, u);
+      }
+      this._damageEnemy(target, vp.breathDmg, u);
+    }
+    if ((vp.hammerSplash || 0) > 0) {
+      for (const m2 of [...this.enemies]) {
+        if (m2.dead) continue;
+        if (Math.hypot(m2.x - target.x, m2.y - target.y) <= 80) {
+          this._damageEnemy(m2, vp.hammerSplash, u);
+        }
+      }
+    }
+    if (!target.dead) this._damageEnemy(target, dmg, u);
   }
 
   _updateEnemyTicks(dt) {
@@ -1646,17 +2544,27 @@ export class Game {
   }
 
   _updateUnitAbilities(dt) {
+    let bestPal = null;
+    let bestHeal = -1;
+    for (const u of this.units) {
+      if (u.dead || u.tier !== 7) continue;
+      const sp = this._unitStat(u).special;
+      if (sp && (sp.healPct || 0) > bestHeal) {
+        bestHeal = sp.healPct;
+        bestPal = u;
+      }
+    }
     for (const u of [...this.units]) {
       if (u.dead) continue;
       u.abilityT += dt;
       const stat = this._unitStat(u);
 
       const sp = stat.special;
-      // T7 성기사: 주기마다 주변 아군 회복
-      if (u.tier === 7 && sp && u.abilityT >= sp.healPeriod) {
+      // T7 성기사: 가장 강한 오라 1명만 주기 회복 (복사본 중첩 없음)
+      if (u.tier === 7 && sp && u === bestPal && u.abilityT >= sp.healPeriod) {
         u.abilityT = 0;
         for (const a of this.units) {
-          if (a.dead || a === u) continue;
+          if (a.dead) continue;
           const d = Math.hypot(
             a.body.position.x - u.body.position.x,
             a.body.position.y - u.body.position.y,
@@ -1681,23 +2589,23 @@ export class Game {
 
       // T10 영웅 (수명 타이머 없음 — 사명 쿼터 또는 HP 사망)
       if (u.heroType) {
-        const hero = HEROES[u.heroType];
-        if (u.heroType === 'arthur' && hero && u.abilityT >= hero.period) {
+        const kit = heroKit(u.heroType, meta.unitLevel(10), this._villageAura);
+        if (u.heroType === 'arthur' && kit && u.abilityT >= kit.period) {
           u.abilityT = 0;
           this.effects.lineFlash(this.lineY, '#9be7ff');
           for (const m of [...this.enemies]) {
-            if (!m.dead) this._damageEnemy(m, stat.atk * hero.atkFrac, u);
+            if (!m.dead) this._damageEnemy(m, stat.atk * kit.atkFrac, u);
           }
           this._checkHeroMission(u);
         }
-        if (u.heroType === 'valkyrie' && hero) {
+        if (u.heroType === 'valkyrie' && kit) {
           u.valkTick += dt;
-          if (u.valkTick >= hero.tick) {
+          if (u.valkTick >= kit.tick) {
             u.valkTick = 0;
             for (const m of [...this.enemies]) {
               if (m.dead) continue;
               const d = Math.hypot(m.x - u.body.position.x, m.y - u.body.position.y);
-              if (d < stat.range) this._damageEnemy(m, stat.atk * hero.atkFrac, u);
+              if (d < stat.range) this._damageEnemy(m, stat.atk * kit.atkFrac, u);
             }
             this._checkHeroMission(u);
           }
@@ -1713,11 +2621,19 @@ export class Game {
 
   _updateRegen(dt) {
     const pct = this._effects().regenPct;
-    if (pct <= 0) return;
     for (const u of this.units) {
       if (u.dead || u.hp >= u.maxHp) continue;
-      if (!u.engaged && !this._unitNearFront(u)) continue;
-      u.hp = Math.min(u.maxHp, u.hp + u.maxHp * pct * dt);
+      let extra = 0;
+      if (pct > 0 && (u.engaged || this._unitNearFront(u))) extra += u.maxHp * pct;
+      const vp = this._unitStat(u).village;
+      if ((vp.frontRegenPerSec || 0) > 0 && this._unitNearFront(u)) extra += vp.frontRegenPerSec;
+      extra += u.maxHp * this._bestNearbyValue(
+        u,
+        (p) => p.holyRadius || 110,
+        (p) => p.holyRegen || 0,
+      );
+      if ((u.miracleRegenT || 0) > 0) extra += u.maxHp * 0.03;
+      if (extra > 0) u.hp = Math.min(u.maxHp, u.hp + extra * dt);
     }
   }
 
@@ -1769,7 +2685,19 @@ export class Game {
       this._ascendHero(u);
       return;
     }
-    if ((u.bossKills || 0) >= HERO_BOSS_LIMIT) this._retireHero(u);
+    if ((u.bossKills || 0) >= heroBossLimit(this._villageAura)) this._retireHero(u);
+  }
+
+  _spawnHeroRemnant(x, y, label) {
+    const fallback = HERO_ASCENSION_REPLACEMENT_TIER;
+    let tier = rollHeroRemnantTier();
+    if (!Number.isFinite(tier) || tier < 1 || tier > UNITS.length) tier = fallback;
+    const stat = UNITS[tier - 1] || UNITS[fallback - 1];
+    const spawn = this._clampFriendlyPos(x, y, stat.r);
+    const unit = this._spawnUnit(tier, spawn.x, spawn.y);
+    unit.settled = true;
+    if (label) this.effects.floatText(spawn.x, spawn.y - 28, `${label} T${tier} ${stat.name}`, '#e8d5a0', 14, 1.1);
+    return unit;
   }
 
   _retireHero(hero) {
@@ -1780,10 +2708,7 @@ export class Game {
     this.effects.burst(x, y, '#c9b48a', 22, 4, 4);
     this.effects.floatText(x, y - 36, '영웅 퇴장', '#e8d5a0', 18, 1.3);
     this._removeUnit(hero);
-    const t5 = UNITS[HERO_ASCENSION_REPLACEMENT_TIER - 1];
-    const spawn = this._clampFriendlyPos(x, y, t5.r);
-    const knight = this._spawnUnit(HERO_ASCENSION_REPLACEMENT_TIER, spawn.x, spawn.y);
-    knight.settled = true;
+    this._spawnHeroRemnant(x, y, '잔류');
   }
 
   _ascendHero(hero) {
@@ -1791,7 +2716,7 @@ export class Game {
     hero._ascending = true;
     const x = hero.body.position.x;
     const y = hero.body.position.y;
-    const blast = this._unitStat(hero).atk * HERO_ASCENSION_ATK_MULT;
+    const blast = this._unitStat(hero).atk * heroAscendAtkMult(this._villageAura);
 
     this.slowMoT = HERO_ASCENSION_SLOWMO;
     this.ascendFlashT = HERO_ASCENSION_SLOWMO;
@@ -1811,11 +2736,9 @@ export class Game {
     this._grantScore(HERO_ASCENSION_BONUS_SCORE);
 
     this._removeUnit(hero);
-
-    const t5 = UNITS[HERO_ASCENSION_REPLACEMENT_TIER - 1];
-    const spawn = this._clampFriendlyPos(x, y, t5.r);
-    const knight = this._spawnUnit(HERO_ASCENSION_REPLACEMENT_TIER, spawn.x, spawn.y);
-    knight.settled = true;
+    const reenter = this._villageAura?.reenterChance || 0;
+    if (reenter > 0 && Math.random() < reenter) this._summonHero(x, y);
+    else this._spawnHeroRemnant(x, y, '잔류');
   }
 
   _updateChargeHits() {
@@ -1903,6 +2826,12 @@ export class Game {
   _update(dt) {
     this._fx = meta.getEffects();
     if (this.slotCols !== this._fx.slotCols) this._syncPlayfieldFromMeta();
+    if (this.tutorialFreeze) {
+      this.netSpeed = 0;
+      this.holdingFire = false;
+      this.effects?.update(dt);
+      return;
+    }
     this.launchCd = Math.max(0, this.launchCd - dt);
     this._tickAutoFire();
     const tax = this._effects().taxPerSec || 0;
@@ -1912,6 +2841,8 @@ export class Game {
     this._stepMs = engineStepMs(dt);
     Engine.update(this.engine, this._stepMs);
     this._processMerges();
+    this._refreshVillageAuras();
+    this._tickVillageAuras(dt);
     this._updateSpawning(dt);
     this._refreshJoinFlags();
     this._computeEngagement();

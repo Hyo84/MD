@@ -397,14 +397,14 @@ function drawCastleWall(ctx, game) {
   ctx.restore();
 }
 
-function drawDefeatLine(ctx, left, right) {
+function drawDefeatLine(ctx, left, right, highlight = false) {
   const pulse = 12 + Math.sin(performance.now() / 280) * 6;
   ctx.save();
   ctx.strokeStyle = '#ff3333';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = highlight ? 6 : 3;
   ctx.setLineDash([12, 9]);
   ctx.shadowColor = '#ff2222';
-  ctx.shadowBlur = pulse;
+  ctx.shadowBlur = highlight ? pulse + 16 : pulse;
   ctx.beginPath();
   ctx.moveTo(left, DEFEAT_Y);
   ctx.lineTo(right, DEFEAT_Y);
@@ -420,11 +420,12 @@ function drawDefeatLine(ctx, left, right) {
 }
 
 function drawWaveLine(ctx, game, left, right) {
+  const hi = game.tutorialAnchor === 'waveLine';
   ctx.save();
   ctx.strokeStyle = '#c33a5a';
-  ctx.lineWidth = 4;
+  ctx.lineWidth = hi ? 7 : 4;
   ctx.shadowColor = '#e0335a';
-  ctx.shadowBlur = 14;
+  ctx.shadowBlur = hi ? 26 : 14;
   ctx.beginPath();
   ctx.moveTo(left, game.lineY);
   ctx.lineTo(right, game.lineY);
@@ -766,13 +767,20 @@ function drawBottomDock(ctx, game) {
   const ready = game.launchCd <= 0;
   const nstat = UNITS[game.nextTier - 1];
   const nspr = assets.unit(game.nextTier);
+  const locked = typeof game.autoUnlocked === 'function' ? !game.autoUnlocked() : false;
 
-  fillWoodFrame(ctx, auto.x, auto.y, auto.w, auto.h, { active: !!game.autoFire });
+  fillWoodFrame(ctx, auto.x, auto.y, auto.w, auto.h, { active: !locked && !!game.autoFire });
   ctx.save();
   drawDockLabel(ctx, auto, '자동');
-  ctx.fillStyle = game.autoFire ? '#7ec8ff' : '#8a7a60';
-  ctx.font = "bold 13px 'Malgun Gothic', sans-serif";
-  ctx.fillText(game.autoFire ? 'ON' : 'OFF', auto.x + auto.w / 2, auto.y + 29);
+  if (locked) {
+    ctx.fillStyle = '#8a7a60';
+    ctx.font = "bold 13px 'Malgun Gothic', sans-serif";
+    ctx.fillText('잠김', auto.x + auto.w / 2, auto.y + 29);
+  } else {
+    ctx.fillStyle = game.autoFire ? '#7ec8ff' : '#8a7a60';
+    ctx.font = "bold 13px 'Malgun Gothic', sans-serif";
+    ctx.fillText(game.autoFire ? 'ON' : 'OFF', auto.x + auto.w / 2, auto.y + 29);
+  }
   ctx.restore();
 
   ctx.save();
@@ -1099,7 +1107,7 @@ class Renderer {
     drawCampFieldSeam(ctx, innerL, innerR);
 
     drawWaveLine(ctx, game, innerL, innerR);
-    drawDefeatLine(ctx, innerL, innerR);
+    drawDefeatLine(ctx, innerL, innerR, game.tutorialAnchor === 'lastLine');
 
     drawEnemies(ctx, game);
     if (game.rangeMode !== 0) drawRangeIndicators(ctx, game);

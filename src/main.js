@@ -21,9 +21,17 @@ const canvas = document.getElementById('game');
 const ui = {
   startOverlay: document.getElementById('startOverlay'),
   gameoverOverlay: document.getElementById('gameoverOverlay'),
+  resultTitle: document.getElementById('resultTitle'),
   finalScore: document.getElementById('finalScore'),
+  resultXp: document.getElementById('resultXp'),
+  estateFromResult: document.getElementById('estateFromResult'),
   restartBtn: document.getElementById('restartBtn'),
   metaStatus: document.getElementById('metaStatus'),
+  tapToStart: document.getElementById('tapToStart'),
+  startChoices: document.getElementById('startChoices'),
+  startEstateBtn: document.getElementById('startEstateBtn'),
+  startPlayBtn: document.getElementById('startPlayBtn'),
+  tutorialOverlay: document.getElementById('tutorialOverlay'),
 };
 
 let game = null;

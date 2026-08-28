@@ -64,19 +64,8 @@ export function drawHud(game, ctx) {
   ctx.fillStyle = '#b0a284';
   ctx.textAlign = 'left';
   ctx.fillText(waveLabel, left, row2);
-  const liveLabel = `×${game.liveMult.toFixed(1)}`;
-  const liveX = left + ctx.measureText(waveLabel).width + 5;
-  ctx.fillStyle = '#ffd27a';
-  ctx.fillText(liveLabel, liveX, row2);
-  const btnSize = 16;
-  const btnGap = 3;
-  const btnY = row2 - btnSize / 2;
-  const btnX = liveX + ctx.measureText(liveLabel).width + 6;
-  ctx.font = 'bold 13px sans-serif';
-  drawHudChip(ctx, btnX, btnY, btnSize, btnSize, '−', 'rgba(0,0,0,0.45)', 'rgba(200, 180, 140, 0.55)');
-  drawHudChip(ctx, btnX + btnSize + btnGap, btnY, btnSize, btnSize, '+', 'rgba(0,0,0,0.45)', 'rgba(200, 180, 140, 0.55)');
-  game._diffMinusRect = { x: btnX - 2, y: btnY - 2, w: btnSize + 2, h: btnSize + 4 };
-  game._diffPlusRect = { x: btnX + btnSize + btnGap, y: btnY - 2, w: btnSize + 2, h: btnSize + 4 };
+  game._diffMinusRect = { x: 0, y: 0, w: 0, h: 0 };
+  game._diffPlusRect = { x: 0, y: 0, w: 0, h: 0 };
 
   ctx.font = "bold 12px 'Malgun Gothic', sans-serif";
   ctx.textAlign = 'center';

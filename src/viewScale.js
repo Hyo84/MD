@@ -14,7 +14,8 @@ function maxFitScale() {
 
 function loadMode() {
   const v = localStorage.getItem(STORAGE_KEY);
-  if (v === '1' || v === '2' || v === '3' || v === 'full') return v;
+  if (v === '1' || v === '2' || v === 'full') return v;
+  if (v === '3') return '2';
   return '1';
 }
 
@@ -28,7 +29,6 @@ export function setupViewScale(onScale) {
   const modes = [
     { id: '1', label: '1배' },
     { id: '2', label: '2배' },
-    { id: '3', label: '3배' },
     { id: 'full', label: '전체' },
   ];
 
@@ -96,7 +96,6 @@ export function setupViewScale(onScale) {
     if (e.target.matches('input, textarea')) return;
     if (e.key === '1') setMode('1');
     if (e.key === '2') setMode('2');
-    if (e.key === '3') setMode('3');
     if (e.key === 'f' || e.key === 'F' || e.key === 'ㄹ') setMode('full');
   });
 

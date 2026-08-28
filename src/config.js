@@ -17,24 +17,28 @@ export const LAUNCHER_Y = 700;
 
 // 전역 밸런스 (어드민 패널에서 실시간 조정)
 export const BALANCE = {
-  baseLineSpeed: 8,     // 웨이브라인 기본 전진 속도 (px/초). 스킬 없이 W11 압박용
+  baseLineSpeed: 9.5,   // 웨이브라인 기본 전진 속도 (px/초). 무투자 3칸이 빈 열을 못 막으면 샘
   // 착지한 보스(_enemyOccupiesLine)가 있을 때 netSpeed 하한. joining 캠프 행군에는 적용 안 함.
-  bossMinAdvance: 18,
-  spawnInterval: 2.3,   // 1웨이브 적 스폰 간격 (초). 웨이브가 오를수록 짧아짐
-  spawnIntervalAccel: 0.30, // interval = base / (1 + (wave-1)*accel)
-  spawnIntervalFloor: 0.55,  // 웨이브 곡선 최단 스폰 간격 (초). 캠프 러시는 spawnCampRushFloor
+  bossMinAdvance: 9,
+  spawnInterval: 4.1,   // 1웨이브 적 스폰 간격 (초). 웨이브 1.5 / 리스폰 0.5 템포에 맞춤
+  spawnIntervalAccel: 0.22, // interval = base / (1 + (wave-1)*accel)
+  spawnIntervalFloor: 0.96,  // 웨이브 곡선 최단 스폰 간격 (초). 캠프 러시는 spawnCampRushFloor
   spawnCampRaidMin: 2,  // 캠프 침입 시 투입 배율 하한 (아군이 캠프 스프라이트 안)
   spawnCampRaidMax: 3,  // 캠프 침입 시 투입 배율 상한
   // 전열 아군이 캠프에 가까워질수록 스폰 타이머가 빨리 줄어듦 (라인 기준이면 시작부터 러시)
   spawnCampApproachRange: 200, // 캠프 하단에서 아군까지 이 거리(px) 안에서 가속. 밖·아군 없음이면 배율 1
-  spawnCampTouchMult: 6,       // 아군이 캠프 하단에 닿을 때 타이머 소진 배율. W1 2.3s → ~0.38s
+  spawnCampTouchMult: 2.2,     // 아군이 캠프 하단에 닿을 때 타이머 소진 배율
   spawnCampApproachEase: 1.5,  // proximity^k. 1=선형, >1이면 캠프 근처에서 급가속
-  spawnCampRushFloor: 0.28,    // 러시 실효 최단 간격 (초). 우르르지만 적당히
-  bossEscortCount: 4,   // 보스 등장 시 총 부하 수 (해골기사 기본 포함)
-  bossKnightEscorts: 2, // 그중 해골기사 기본 수. 나머지는 일반 풀
-  bossMinionCap: 5,     // 보스전 중 필드에 유지할 최대 부하 수
-  launchCooldown: 1.35, // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
-  mergeComboCdRefund: 0.5, // 발사체 연속 머지 2회+ 시 남은 발사 쿨 감소 비율
+  spawnCampRushFloor: 1.0,     // 러시 실효 최단 간격 (초)
+  goldXpRate: 0.2,             // 패배/클리어 시 잔여 골드 → 계정 XP 배율. 한 판 만렙 방지
+  clearWave: 30,               // 이 웨이브 보스 처치 시 완전 클리어
+  clearRewardMult: 2,          // 완전 클리어 시 런 XP(점수+보스보너스+골드환산) 배율
+  bossEscortCount: 2,   // W1–4 기본 호위. 실제 수는 bossEscortForWave
+  bossKnightEscorts: 0, // W1–4는 해골기사 없음. 허들부터 증가
+  bossMinionCap: 6,     // 보스전 중 필드에 유지할 최대 부하 수
+  launchCooldown: 1.75, // 발사 쿨다운 (초, 스킬로 감소 · 최저 launchCdFloor)
+  mergeComboCdRefund: 0.25, // 발사체 연속 머지 2회+ 시 남은 발사 쿨 감소 비율
+  airMergeMaxTier: 5, // 공중 합성 결과 최대 티어. T6+는 착지한 유닛만
   launchSpeed: 720,     // 발사 돌진 (px/초). 짧은 버스트 후 진군 테이블로 걸음
   unitAdvanceSpeed: 28, // 진군 테이블이 없을 때 폴백 (px/초)
   // 진군 절대 속도 (px/초). 인덱스 0 = 스킬 없음, 1–5 = 진격 랭크
@@ -45,11 +49,18 @@ export const BALANCE = {
   attackCooldown: 0.8,  // 공격 틱 간격 (초)
   enemyReach: 12,       // 적 근접 공격 사거리 보정 (px). 실제 거리 = 적.r + 12
 
-  // 웨이브 난이도 곡선. 스킬 0 기준 W11 ≈ 8.4배, 마지노(W11)에서 게임오버 목표
-  gentleRate: 0.20,     // 완만 구간: 웨이브당 +20% (W5=1.80, W10=2.80)
-  steepStartWave: 11,   // 가파른 구간 시작 — 마지노(W11) 클리프
-  steepFactor: 3.0,     // 첫 가파른 웨이브 배율. W11 ≈ 8.4배
-  steepContinue: 1.45,  // 클리프 이후 웨이브당 배율 (W12≈12.2배). 미설정 시 steepFactor와 동일
+  // 5웨이브 허들. 허들 사이는 완만, 5/10/15/20/25/30에서 급상승(내부 호칭: 통곡의 벽).
+  // 무투자(영지 0)는 W5에서 첫 벽, W8~10에서 막히는 게 목표. W14 클리어는 영지 필요.
+  // W1–4 ≈ 1.00–1.23, W5 ≈ 2.63, W10 ≈ 7.4, W14 ≈ 9.7, W15 ≈ 20.9
+  hurdleEvery: 5,
+  intraRate: 0.07,      // 허들 사이 웨이브당 +7%
+  hurdleFactor: 2.15,   // 5의 배수 웨이브에서 곱셈 스파이크 (이후 바닥으로 유지)
+  bossHurdleExtra: 1.28, // 허들 보스만 HP/ATK 추가 배율. 쓰레기 곡선과 분리
+  hurdleKillBonus: 8,   // 허들 웨이브 처치 할당 추가
+
+  // 뒷열 스택: ATK/HP는 그대로, 그 열 전열 진격만 1 + perRear*뒷열 수 (상한 cap). 보스는 제외.
+  stackAdvancePerRear: 0.5,
+  stackAdvanceCap: 3,
 
   // 적 없는 라인: 전열 아군 저지력으로 시작 위치까지 밀어올림
   emptyLinePushScale: 1,  // 저지력 배율 (1 = 교전 저지력과 동일)
@@ -127,18 +138,43 @@ export function clampSpawnRate(v) {
   return Math.max(SPAWN_RATE_MIN, Math.min(SPAWN_RATE_MAX, stepped));
 }
 
-// 웨이브별 적 스탯 배율: 1~(steepStart-1) 완만 선형, steepStart에서 클리프 후 steepContinue로 증가
+export function isHurdleWave(wave) {
+  const every = Math.max(1, Math.round(BALANCE.hurdleEvery || 5));
+  const w = Math.max(1, Math.floor(Number(wave) || 1));
+  return w % every === 0;
+}
+
+// 웨이브별 적 HP/ATK 배율. 허들 사이는 intraRate, 5의 배수에서 hurdleFactor.
 export function waveMultiplier(wave) {
-  const start = BALANCE.steepStartWave;
-  const gentleWaves = Math.min(wave, start - 1);
-  let mult = 1 + (gentleWaves - 1) * BALANCE.gentleRate;
-  if (wave >= start) {
-    const n = wave - start + 1;
-    const cliff = BALANCE.steepFactor;
-    const cont = Number.isFinite(BALANCE.steepContinue) ? BALANCE.steepContinue : cliff;
-    mult *= cliff * Math.pow(cont, n - 1);
+  const w = Math.max(1, Math.floor(Number(wave) || 1));
+  const every = Math.max(1, Math.round(BALANCE.hurdleEvery || 5));
+  const intra = Number.isFinite(BALANCE.intraRate) ? BALANCE.intraRate : 0.07;
+  const hurdle = Number.isFinite(BALANCE.hurdleFactor) ? BALANCE.hurdleFactor : 2.15;
+  let mult = 1;
+  for (let i = 2; i <= w; i++) {
+    mult *= (i % every === 0) ? hurdle : (1 + intra);
   }
   return mult;
+}
+
+/** 보스 등장 호위. 블록(5웨이브)마다 늘고, 허들부터 해골기사. */
+export function bossEscortForWave(wave) {
+  const w = Math.max(1, Math.floor(Number(wave) || 1));
+  const every = Math.max(1, Math.round(BALANCE.hurdleEvery || 5));
+  const block = Math.floor(w / every); // W1–4=0, W5–9=1, W10–14=2
+  const cap = Math.max(0, Math.round(BALANCE.bossMinionCap ?? 6));
+  const base = Math.max(0, Math.round(BALANCE.bossEscortCount ?? 2));
+  const escort = Math.min(cap, base + block * 2);
+  const knights = block <= 0 ? 0 : Math.min(escort, 1 + (block - 1) * 2);
+  return { escort, knights };
+}
+
+/** 보스 HP/ATK 배율. 허들 웨이브는 bossHurdleExtra를 추가로 곱함. */
+export function bossWaveMultiplier(wave) {
+  const m = waveMultiplier(wave);
+  if (!isHurdleWave(wave)) return m;
+  const extra = Number.isFinite(BALANCE.bossHurdleExtra) ? BALANCE.bossHurdleExtra : 1.28;
+  return m * extra;
 }
 
 // 실효 배율 = 웨이브 곡선 × 실시간 수동 배율
@@ -189,18 +225,39 @@ export const HERO_MISSION_KILLS = 25;     // 미사용 대안 쿼터 (킬 모드
 export const HERO_BOSS_LIMIT = 3;         // 영웅 생존 중 보스 처치 이 횟수면 퇴장 (사명보다 먼저면 승천 없음)
 export const HERO_ASCENSION_ATK_MULT = 1.5;
 export const HERO_ASCENSION_SLOWMO = 0.3; // 초 (실시간 슬로모·플래시)
-export const HERO_ASCENSION_REPLACEMENT_TIER = 5;
+export const HERO_ASCENSION_REPLACEMENT_TIER = 5; // 폴백. 실제 잔류는 rollHeroRemnantTier
 export const HERO_ASCENSION_BONUS_SCORE = 400;
+/** 승천·퇴장 잔류 티어 범위 (T5~T9). 영웅의 전당에서 가중치 변경 예정. */
+export const HERO_REMNANT_MIN = 5;
+export const HERO_REMNANT_MAX = 9;
+export const HERO_REMNANT_WEIGHTS = [1, 1, 1, 1, 1];
+
+export function rollHeroRemnantTier(rand = Math.random) {
+  const min = HERO_REMNANT_MIN;
+  const max = HERO_REMNANT_MAX;
+  const n = max - min + 1;
+  let w = HERO_REMNANT_WEIGHTS;
+  if (!Array.isArray(w) || w.length < n) w = Array.from({ length: n }, () => 1);
+  let total = 0;
+  for (let i = 0; i < n; i++) total += Math.max(0, Number(w[i]) || 0);
+  if (!(total > 0)) return min;
+  let r = (typeof rand === 'function' ? rand() : Math.random()) * total;
+  for (let i = 0; i < n; i++) {
+    r -= Math.max(0, Number(w[i]) || 0);
+    if (r <= 0) return min + i;
+  }
+  return max;
+}
 
 // 적 (웨이브라인에 부착되는 개체)
 // speed = 라인 전진 가속 기여 (px/초, 0이면 라인을 밀지 않음)
 export const MONSTERS = {
-  goblin:     { name: '고블린',     icon: '고', grade: '1',    color: '#3CB371', outline: '#1e5c38', r: 15, hp: 48,   atk: 5,  speed: 4, score: 10,  gold: 6 },
-  skeleton:   { name: '스켈레톤',   icon: '스', grade: '2',    color: '#DCDCDC', outline: '#6e6e6e', r: 16, hp: 150,  atk: 12, speed: 1, score: 20,  gold: 12, sprite: 'skeleton2' },
-  orc:        { name: '오크',       icon: '오', grade: '3',    color: '#6B8E23', outline: '#39510f', r: 22, hp: 185,  atk: 14, speed: 2, score: 30,  gold: 18 },
-  troll:      { name: '동굴 트롤',  icon: '트', grade: '4',    color: '#556B2F', outline: '#2c3a14', r: 28, hp: 430,  atk: 15, speed: 3, score: 100, gold: 50, regenDelay: 1.2, regenPct: 0.08 },
-  skelknight: { name: '해골기사',   icon: '기', grade: '5',    color: '#C0C0C0', outline: '#4a4a4a', r: 24, hp: 280,  atk: 21, speed: 3, score: 80,  gold: 40, sprite: 'skeleton', bossOnly: true },
-  boss:       { name: '오크 워로드', icon: '보스', grade: '보스', color: '#B22222', outline: '#5c0e0e', r: 45, hp: 1350, atk: 17, speed: 12, score: 500, gold: 150, isBoss: true },
+  goblin:     { name: '고블린',     icon: '고', grade: '1',    color: '#3CB371', outline: '#1e5c38', r: 15, hp: 72,   atk: 8,  speed: 6,   score: 10,  gold: 6 },
+  skeleton:   { name: '스켈레톤',   icon: '스', grade: '2',    color: '#DCDCDC', outline: '#6e6e6e', r: 16, hp: 255,  atk: 21, speed: 1.5, score: 20,  gold: 12, sprite: 'skeleton2' },
+  orc:        { name: '오크',       icon: '오', grade: '3',    color: '#6B8E23', outline: '#39510f', r: 22, hp: 330,  atk: 26, speed: 3,   score: 30,  gold: 18 },
+  troll:      { name: '동굴 트롤',  icon: '트', grade: '4',    color: '#556B2F', outline: '#2c3a14', r: 28, hp: 780,  atk: 29, speed: 4.5, score: 100, gold: 50, regenDelay: 1.2, regenPct: 0.11 },
+  skelknight: { name: '해골기사',   icon: '기', grade: '5',    color: '#C0C0C0', outline: '#4a4a4a', r: 24, hp: 540,  atk: 39, speed: 4.5, score: 80,  gold: 40, sprite: 'skeleton', bossOnly: true },
+  boss:       { name: '오크 워로드', icon: '보스', grade: '보스', color: '#B22222', outline: '#5c0e0e', r: 45, hp: 2250, atk: 27, speed: 19.5, score: 500, gold: 150, isBoss: true },
 };
 
 // ---------- 골드 / 하단 티어 상점 ----------
@@ -245,18 +302,18 @@ export function formatShopGold(n) {
 export const FRICTION_AIR_UNIT = 0.03;
 
 export function killsNeeded(wave) {
-  return 12 + wave * 2;
+  const w = Math.max(1, Math.floor(Number(wave) || 1));
+  const every = Math.max(1, Math.round(BALANCE.hurdleEvery || 5));
+  let n = 10 + w * 2; // W1=12, W5=20, W10=30
+  if (w % every === 0) n += Math.max(0, Math.round(BALANCE.hurdleKillBonus ?? 8));
+  return n;
 }
 
 // ---------- 메타 진행 (XP / 레벨 / 스킬) ----------
-// XP = 기존 점수 + 보스 처치 보너스(bossXpPerWave * 클리어한 웨이브).
-// 쓰레기 처치보다 웨이브 클리어/보스 킬이 유리하도록 보너스를 크게 둠.
-//
-// 레벨 곡선 목표:
-//   Lv2 ≈ 1웨이브 보스 직후, Lv5 ≈ 웨이브 5–7 무난한 런, Lv10은 장기 목표.
-// xpToNext[i] = 레벨 i → i+1 에 필요한 XP (1-indexed).
+// XP = 처치 점수 + 보스 보너스(bossXpPerWave * 클리어 웨이브) + 잔여 골드 환산.
+// 한 판 W5 클리어 ≈ Lv2~3. W10을 뚫어도 Lv4 근처. Lv9는 반복·영지 목표.
 export const PROGRESSION = {
-  bossXpPerWave: 200,     // 보스 처치 시 추가 XP = 이 값 × 클리어한 웨이브
+  bossXpPerWave: 35,      // 보스 처치 시 추가 XP = 이 값 × 클리어한 웨이브
   launchCdFloor: 0.28,    // 발사 쿨다운 하드 하한 (초)
   regenNearSlack: 48,     // 전열로 간주해 재생이 켜지는 추가 여유 (px)
 
@@ -279,17 +336,17 @@ export const PROGRESSION = {
 // 인덱스 = 현재 레벨. 값 = 다음 레벨까지 XP. 테이블 이후는 last + extraPerLevel*(level-lastIndex)
 export const XP_TO_NEXT = [
   0,
-  800,    // 1→2
-  1300,   // 2→3
-  2000,   // 3→4
-  2800,   // 4→5
-  3800,   // 5→6
-  5200,   // 6→7
-  7000,   // 7→8
-  9200,   // 8→9
-  12000,  // 9→10
+  2200,   // 1→2  W5 클리어 한 판으로 넘김
+  3800,   // 2→3
+  5800,   // 3→4  W10 클리어 근처
+  8500,   // 4→5
+  12000,  // 5→6
+  16500,  // 6→7
+  22000,  // 7→8
+  29000,  // 8→9
+  38000,  // 9→10
 ];
-export const XP_AFTER_TABLE = 3000; // Lv10+ : 12000 + 3000*(level-9) 형태로 증가
+export const XP_AFTER_TABLE = 8000; // Lv10+ : 38000 + 8000*(level-9)
 
 export function xpToNextLevel(level) {
   const lv = Math.max(1, Math.floor(level));
@@ -335,6 +392,23 @@ export const SKILL_TREES = [
   { id: 'archer', name: '궁수' },
 ];
 
+/** 영지 10구역. 성벽은 외곽 링, 위성 공터 2 + 마을 + 중앙 영주 성. */
+export const DISTRICTS = [
+  { id: 'barracks', zone: 1, name: '공병대', kind: 'military', skills: ['launchCd', 'advance', 'regen'] },
+  { id: 'tactics', zone: 2, name: '전술소', kind: 'military', skills: ['stopping', 'boardWidth'] },
+  { id: 'infantry', zone: 3, name: '병영', kind: 'military', skills: ['eliteRecruit', 'mergeShock'] },
+  { id: 'market', zone: 4, name: '시장', kind: 'economy', skills: ['startGold', 'taxRate'] },
+  { id: 'guild', zone: 5, name: '용병길드', kind: 'economy', skills: ['mercenary', 'bountyGold'] },
+  { id: 'vacant3', zone: 6, name: '공터', kind: 'vacant', skills: [] },
+  { id: 'range', zone: 7, name: '궁수훈련소', kind: 'defense', skills: ['archer', 'archerCount', 'archerRange', 'archerAtk', 'archerAmmo'] },
+  { id: 'vacant1', zone: 8, name: '공터', kind: 'vacant', skills: [] },
+  { id: 'village', zone: 9, name: '마을', kind: 'village', skills: [] },
+  { id: 'keep', zone: 10, name: '영주 성', kind: 'keep', skills: [] },
+  { id: 'walls', zone: 0, name: '성벽', kind: 'wallring', skills: ['wall', 'wallHp', 'wallKb'] },
+];
+
+export const DISTRICT_BY_ID = Object.fromEntries(DISTRICTS.map((d) => [d.id, d]));
+
 // cost = 랭크당 포인트. maxRank 1 은 온/오프 해금.
 // requires: 선행 스킬 id (해당 랭크 ≥ 1).
 // rankLevelStep: 랭크마다 필요한 플레이어 레벨 증가 (기본 1).
@@ -349,7 +423,7 @@ export const SKILLS = [
     unlockLevel: 1,
     rankLevelStep: 2,
     requires: null,
-    perRank: 0.32, // 초 감소. 기본 1.35 → R5는 하한에 근접
+    perRank: 0.32, // 초 감소. 기본 1.75 → R5는 하한에 근접
   },
   {
     id: 'advance',
@@ -533,9 +607,9 @@ export const SKILLS = [
   {
     id: 'mercenary',
     name: '용병술',
-    desc: '하단 티어표에서 구매할 수 있는 최대 티어를 해금합니다. 기본 T2.',
+    desc: '하단 티어표에서 구매할 수 있는 최대 티어를 해금합니다. 기본 T2, 만랭 T9.',
     tree: 'economy',
-    maxRank: 6,
+    maxRank: 7,
     cost: 1,
     unlockLevel: 4,
     requires: null,
@@ -564,9 +638,12 @@ export const META_STORAGE_KEY = 'md.knightslide.meta.v1';
 export const BRANDING_STORAGE_KEY = 'md.knightslide.branding.v1';
 export const CHEATS_STORAGE_KEY = 'md.knightslide.cheats.v1';
 export const AUTO_FIRE_STORAGE_KEY = 'md.knightslide.autofire.v1';
+export const PLAYED_STORAGE_KEY = 'md.knightslide.hasPlayed.v1';
+export const TUTORIAL_STORAGE_KEY = 'md.knightslide.tutorial.v1';
+export const AUTO_UNLOCK_STORAGE_KEY = 'md.knightslide.autoUnlock.v1';
 
 /** Start overlay / document.title. Admin 패널에서 수정, localStorage에 유지. */
 export const BRANDING = {
   title: '⚔ KnightSlide',
-  subtitle: '[프로토타입 0.0.260826]',
+  subtitle: '프로토타입 v0.0.5',
 };

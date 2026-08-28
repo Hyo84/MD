@@ -1,5 +1,8 @@
 // 어드민 패널: config 객체 값을 실시간으로 수정 (A 키 또는 ⚙ 버튼)
 import { BALANCE, UNITS, MONSTERS, LIVE_MULT_MIN, LIVE_MULT_MAX, LIVE_MULT_STEP, SPAWN_RATE_MIN, SPAWN_RATE_MAX, SPAWN_RATE_STEP, PROGRESSION, XP_TO_NEXT, SKILLS, BASE_SLOT_COLS, MAX_SLOT_COLS, SLOT_INSET_PER_COL, BRANDING, BRANDING_STORAGE_KEY, ECONOMY, SHOP, HERO_MISSION, SHOP_MIN_TIER, SHOP_MAX_TIER } from './config.js';
+import { meta } from './meta.js';
+import { showConfirm } from './confirm.js';
+import { UNIT_MAX_LEVEL, VILLAGE_MAX_LEVEL } from './village.js';
 
 function numberRow(label, obj, key, step = 1) {
   const row = document.createElement('label');
@@ -51,13 +54,18 @@ function textRow(label, obj, key, onChange) {
   return row;
 }
 
+const STALE_SUBTITLES = new Set([
+  '중세 슬라이드 & 머지 디펜스',
+  '[프로토타입 0.0.260826]',
+]);
+
 function loadBranding() {
   try {
     const raw = localStorage.getItem(BRANDING_STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
     if (typeof parsed.title === 'string') BRANDING.title = parsed.title;
-    if (typeof parsed.subtitle === 'string' && parsed.subtitle !== '중세 슬라이드 & 머지 디펜스') {
+    if (typeof parsed.subtitle === 'string' && !STALE_SUBTITLES.has(parsed.subtitle)) {
       BRANDING.subtitle = parsed.subtitle;
     }
   } catch { /* ignore */ }
@@ -87,6 +95,50 @@ function section(title) {
   h.textContent = title;
   el.appendChild(h);
   return el;
+}
+
+function medalHoldingsRow() {
+  const medalRow = document.createElement('div');
+  medalRow.className = 'admin-row';
+  const medalSpan = document.createElement('span');
+  medalSpan.textContent = '훈장 보유량';
+  const medalStep = document.createElement('div');
+  medalStep.className = 'admin-stepper';
+  const medalMinus = document.createElement('button');
+  medalMinus.type = 'button';
+  medalMinus.textContent = '−1k';
+  const medalInput = document.createElement('input');
+  medalInput.type = 'number';
+  medalInput.min = '0';
+  medalInput.step = '1';
+  medalInput.value = String(meta.medals);
+  const medalPlus = document.createElement('button');
+  medalPlus.type = 'button';
+  medalPlus.textContent = '+1k';
+  const medalApply = document.createElement('button');
+  medalApply.type = 'button';
+  medalApply.textContent = '적용';
+  medalApply.style.width = 'auto';
+  medalApply.style.minWidth = '48px';
+  medalApply.style.fontSize = '12px';
+  medalApply.style.padding = '0 8px';
+  const syncMedals = () => { medalInput.value = String(meta.medals); };
+  const applyMedals = () => {
+    const v = parseFloat(medalInput.value);
+    if (Number.isFinite(v)) meta.setMedals(v);
+    syncMedals();
+  };
+  medalMinus.addEventListener('click', () => { meta.setMedals(meta.medals - 1000); syncMedals(); });
+  medalPlus.addEventListener('click', () => { meta.setMedals(meta.medals + 1000); syncMedals(); });
+  medalApply.addEventListener('click', applyMedals);
+  medalInput.addEventListener('change', applyMedals);
+  medalInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') applyMedals();
+  });
+  meta.onChange(() => syncMedals());
+  medalStep.append(medalMinus, medalInput, medalPlus, medalApply);
+  medalRow.append(medalSpan, medalStep);
+  return medalRow;
 }
 
 export function setupAdmin(game) {
@@ -152,7 +204,130 @@ export function setupAdmin(game) {
   cheatToggle.append(cheatOff, cheatOn);
   cheatRow.append(cheatSpan, cheatToggle);
   cheatSec.append(cheatNote, cheatRow);
+
+  const lvRow = document.createElement('div');
+  lvRow.className = 'admin-row';
+  const lvSpan = document.createElement('span');
+  lvSpan.textContent = '계정 레벨';
+  const lvStep = document.createElement('div');
+  lvStep.className = 'admin-stepper';
+  const lvInput = document.createElement('input');
+  lvInput.type = 'number';
+  lvInput.min = '1';
+  lvInput.step = '1';
+  lvInput.value = String(meta.level);
+  const lvApply = document.createElement('button');
+  lvApply.type = 'button';
+  lvApply.textContent = '적용';
+  lvApply.style.width = 'auto';
+  lvApply.style.minWidth = '48px';
+  lvApply.style.fontSize = '12px';
+  lvApply.style.padding = '0 8px';
+  const syncLevel = () => { lvInput.value = String(meta.level); };
+  lvApply.addEventListener('click', () => {
+    const n = parseInt(lvInput.value, 10);
+    if (!Number.isFinite(n)) return;
+    meta.setLevel(n);
+    game.onSkillsChanged?.();
+    syncLevel();
+  });
+  meta.onChange(() => syncLevel());
+  lvStep.append(lvInput, lvApply);
+  lvRow.append(lvSpan, lvStep);
+  const lvNote = document.createElement('p');
+  lvNote.className = 'admin-note';
+  lvNote.textContent = '레벨을 올리면 차액만큼 건설 포인트가 추가됩니다. 내리면 포인트를 깎되 연구는 유지됩니다.';
+  cheatSec.append(lvNote, lvRow, medalHoldingsRow());
+
+  const resetNote = document.createElement('p');
+  resetNote.className = 'admin-note';
+  resetNote.textContent = '계정·영지·마을·훈장·튜토리얼·첫 시작 화면을 처음 플레이 상태로 되돌립니다.';
+  const resetBtn = document.createElement('button');
+  resetBtn.type = 'button';
+  resetBtn.className = 'admin-reset-account';
+  resetBtn.textContent = '계정 초기화';
+  resetBtn.addEventListener('click', async () => {
+    const ok = await showConfirm({
+      title: '계정 초기화',
+      message: '레벨, 영지 연구, 마을 훈련, 훈장, 첫 시작 화면까지 처음 상태로 되돌립니다. 이 작업은 되돌릴 수 없습니다.',
+      confirmText: '초기화',
+      cancelText: '취소',
+      danger: true,
+    });
+    if (!ok) return;
+    game.resetToFirstPlay();
+    syncLevel();
+    syncGold();
+  });
+  cheatSec.append(resetNote, resetBtn);
   body.appendChild(cheatSec);
+
+  const villageSec = section('마을 / 훈장');
+  const villageNote = document.createElement('p');
+  villageNote.className = 'admin-note';
+  villageNote.textContent = '훈장은 웨이브 클리어로 쌓입니다. 마을 레벨은 숙소 해금. 유닛은 0부터. 오라는 복사본이 많아도 1회만.';
+  villageSec.appendChild(villageNote);
+  const vLvRow = document.createElement('div');
+  vLvRow.className = 'admin-row';
+  const vLvSpan = document.createElement('span');
+  vLvSpan.textContent = '마을 레벨';
+  const vLvStep = document.createElement('div');
+  vLvStep.className = 'admin-stepper';
+  const vLvMinus = document.createElement('button');
+  vLvMinus.type = 'button';
+  vLvMinus.textContent = '−';
+  const vLvInput = document.createElement('input');
+  vLvInput.type = 'number';
+  vLvInput.min = '1';
+  vLvInput.max = String(VILLAGE_MAX_LEVEL);
+  vLvInput.value = String(meta.villageLevel);
+  const vLvPlus = document.createElement('button');
+  vLvPlus.type = 'button';
+  vLvPlus.textContent = '+';
+  const syncVillageLv = () => { vLvInput.value = String(meta.villageLevel); };
+  vLvMinus.addEventListener('click', () => { meta.setVillageLevel(meta.villageLevel - 1); syncVillageLv(); });
+  vLvPlus.addEventListener('click', () => { meta.setVillageLevel(meta.villageLevel + 1); syncVillageLv(); });
+  vLvInput.addEventListener('change', () => {
+    const v = parseFloat(vLvInput.value);
+    if (Number.isFinite(v)) meta.setVillageLevel(v);
+    syncVillageLv();
+  });
+  meta.onChange(() => syncVillageLv());
+  vLvStep.append(vLvMinus, vLvInput, vLvPlus);
+  vLvRow.append(vLvSpan, vLvStep);
+  villageSec.append(vLvRow, medalHoldingsRow());
+  for (let t = 1; t <= 10; t++) {
+    const row = document.createElement('div');
+    row.className = 'admin-row';
+    const span = document.createElement('span');
+    span.textContent = `T${t} ${UNITS[t - 1]?.name || ''} 레벨`;
+    const step = document.createElement('div');
+    step.className = 'admin-stepper';
+    const minus = document.createElement('button');
+    minus.type = 'button';
+    minus.textContent = '−';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.max = String(UNIT_MAX_LEVEL);
+    input.value = String(meta.storedUnitLevel(t));
+    const plus = document.createElement('button');
+    plus.type = 'button';
+    plus.textContent = '+';
+    const syncLv = () => { input.value = String(meta.storedUnitLevel(t)); };
+    minus.addEventListener('click', () => { meta.setUnitLevel(t, meta.storedUnitLevel(t) - 1); syncLv(); });
+    plus.addEventListener('click', () => { meta.setUnitLevel(t, meta.storedUnitLevel(t) + 1); syncLv(); });
+    input.addEventListener('change', () => {
+      const v = parseFloat(input.value);
+      if (Number.isFinite(v)) meta.setUnitLevel(t, v);
+      syncLv();
+    });
+    meta.onChange(() => syncLv());
+    step.append(minus, input, plus);
+    row.append(span, step);
+    villageSec.appendChild(row);
+  }
+  body.appendChild(villageSec);
 
   const eco = section('경제');
   const ecoNote = document.createElement('p');
@@ -211,6 +386,7 @@ export function setupAdmin(game) {
   tempo.append(
     numberRow('발사 쿨다운 (s)', BALANCE, 'launchCooldown', 0.05),
     numberRow('머지 콤보 쿨감 비율', BALANCE, 'mergeComboCdRefund', 0.05),
+    numberRow('공중 합성 최대 티어', BALANCE, 'airMergeMaxTier', 1),
     numberRow('영웅 사명 최소 딜', HERO_MISSION, 'min', 1000),
     numberRow('영웅 사명 기본 딜량', HERO_MISSION, 'base', 1000),
     numberRow('영웅 사명 웨이브당 증가', HERO_MISSION, 'perWave', 500),
@@ -316,10 +492,13 @@ export function setupAdmin(game) {
     numberRow('집결 이동 속도 (px/s)', BALANCE, 'gatherSpeed', 5),
     numberRow('공격 틱 간격 (s)', BALANCE, 'attackCooldown', 0.1),
     numberRow('적 공격 사거리 보정', BALANCE, 'enemyReach', 5),
-    numberRow('완만 구간 증가율 (/웨이브)', BALANCE, 'gentleRate', 0.01),
-    numberRow('가파른 구간 시작 웨이브', BALANCE, 'steepStartWave', 1),
-    numberRow('가파른 구간 첫 배율', BALANCE, 'steepFactor', 0.05),
-    numberRow('클리프 이후 배율 (/웨이브)', BALANCE, 'steepContinue', 0.05),
+    numberRow('허들 간격 (웨이브)', BALANCE, 'hurdleEvery', 1),
+    numberRow('허들 사이 증가율 (/웨이브)', BALANCE, 'intraRate', 0.01),
+    numberRow('허들 배율 (5·10·15…)', BALANCE, 'hurdleFactor', 0.05),
+    numberRow('허들 보스 추가 배율', BALANCE, 'bossHurdleExtra', 0.05),
+    numberRow('허들 처치 할당 추가', BALANCE, 'hurdleKillBonus', 1),
+    numberRow('뒷열 진격 가산 (/마리)', BALANCE, 'stackAdvancePerRear', 0.05),
+    numberRow('뒷열 진격 배율 상한', BALANCE, 'stackAdvanceCap', 0.1),
     numberRow('빈 라인 푸시 배율', BALANCE, 'emptyLinePushScale', 0.1),
     numberRow('빈 라인 전열 여유 (px)', BALANCE, 'emptyLinePushSlack', 1),
   );
@@ -336,6 +515,9 @@ export function setupAdmin(game) {
   prog.appendChild(progNote);
   prog.append(
     numberRow('보스 클리어 추가 XP/웨이브', PROGRESSION, 'bossXpPerWave', 10),
+    numberRow('잔여 골드 XP 환산 배율', BALANCE, 'goldXpRate', 0.1),
+    numberRow('완전 클리어 웨이브', BALANCE, 'clearWave', 1),
+    numberRow('완전 클리어 보상 배율', BALANCE, 'clearRewardMult', 0.1),
     numberRow('발사 쿨 하한 (s)', PROGRESSION, 'launchCdFloor', 0.05),
     numberRow('재생 전열 여유 (px)', PROGRESSION, 'regenNearSlack', 1),
     numberRow('벽 기본 HP', PROGRESSION, 'wallBaseHp', 1),
@@ -421,47 +603,95 @@ export function setupAdmin(game) {
   restart.id = 'quickRestartBtn';
   restart.type = 'button';
   restart.textContent = '재시작';
-  restart.title = '바로 다시 시작';
+  restart.title = '보상 없이 바로 다시 시작';
   restart.addEventListener('click', (e) => {
     e.stopPropagation();
-    game.start();
+    game.requestRestart();
   });
-  btn.addEventListener('click', (e) => e.stopPropagation());
-  chromeRight.append(restart, btn);
 
-  const chromeLeft = document.getElementById('chromeLeft') || document.body;
-  const spawnBar = document.createElement('div');
-  spawnBar.id = 'liveSpawnBar';
-  const spawnLabel = document.createElement('div');
-  spawnLabel.className = 'live-spawn-label';
-  spawnLabel.textContent = '리스폰';
-  const spawnBtns = document.createElement('div');
-  spawnBtns.className = 'live-spawn-row';
-  const sMinus = document.createElement('button');
-  sMinus.type = 'button';
-  sMinus.textContent = '−';
-  const sVal = document.createElement('span');
-  sVal.className = 'live-spawn-val';
-  const sPlus = document.createElement('button');
-  sPlus.type = 'button';
-  sPlus.textContent = '+';
-  const paintSpawn = () => {
-    sVal.textContent = `×${game.spawnRateMult.toFixed(1)}`;
+  const abandon = document.createElement('button');
+  abandon.id = 'abandonBtn';
+  abandon.type = 'button';
+  abandon.textContent = '포기';
+  abandon.title = '보상 없이 시작 화면으로';
+  abandon.disabled = game.state !== 'playing';
+  abandon.addEventListener('click', (e) => {
+    e.stopPropagation();
+    game.requestAbandon();
+  });
+  const prevPlay = game.onPlayStateChange;
+  game.onPlayStateChange = (state) => {
+    prevPlay?.(state);
+    abandon.disabled = state !== 'playing';
   };
-  paintSpawn();
-  sMinus.addEventListener('click', (e) => {
-    e.stopPropagation();
-    game.adjustSpawnRateMult(-SPAWN_RATE_STEP);
-  });
-  sPlus.addEventListener('click', (e) => {
-    e.stopPropagation();
-    game.adjustSpawnRateMult(SPAWN_RATE_STEP);
-  });
+
+  btn.addEventListener('click', (e) => e.stopPropagation());
+  chromeRight.append(restart, abandon, btn);
+
+  let chromeCamp = document.getElementById('chromeCamp');
+  if (!chromeCamp) {
+    chromeCamp = document.createElement('div');
+    chromeCamp.id = 'chromeCamp';
+    (document.getElementById('wrap') || document.body).appendChild(chromeCamp);
+  }
+
+  const makeCheatBar = (id, labelText, getVal, onMinus, onPlus) => {
+    const bar = document.createElement('div');
+    bar.id = id;
+    const label = document.createElement('div');
+    label.className = 'live-spawn-label';
+    label.textContent = labelText;
+    const row = document.createElement('div');
+    row.className = 'live-spawn-row';
+    const minus = document.createElement('button');
+    minus.type = 'button';
+    minus.textContent = '−';
+    const val = document.createElement('span');
+    val.className = 'live-spawn-val';
+    const plus = document.createElement('button');
+    plus.type = 'button';
+    plus.textContent = '+';
+    const paint = () => { val.textContent = `×${getVal().toFixed(1)}`; };
+    paint();
+    minus.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onMinus();
+    });
+    plus.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onPlus();
+    });
+    row.append(minus, val, plus);
+    bar.append(label, row);
+    return { bar, paint };
+  };
+
+  const waveHud = makeCheatBar(
+    'liveWaveBar',
+    '웨이브',
+    () => game.liveMult,
+    () => game.adjustLiveMult(-LIVE_MULT_STEP),
+    () => game.adjustLiveMult(LIVE_MULT_STEP),
+  );
+  const spawnHud = makeCheatBar(
+    'liveSpawnBar',
+    '리스폰',
+    () => game.spawnRateMult,
+    () => game.adjustSpawnRateMult(-SPAWN_RATE_STEP),
+    () => game.adjustSpawnRateMult(SPAWN_RATE_STEP),
+  );
+  const prevLive = game.onLiveMultChange;
+  game.onLiveMultChange = () => { prevLive?.(); waveHud.paint(); };
   const prevSpawn = game.onSpawnRateChange;
-  game.onSpawnRateChange = () => { prevSpawn?.(); paintSpawn(); };
-  spawnBtns.append(sMinus, sVal, sPlus);
-  spawnBar.append(spawnLabel, spawnBtns);
-  chromeLeft.appendChild(spawnBar);
+  game.onSpawnRateChange = () => { prevSpawn?.(); spawnHud.paint(); };
+  chromeCamp.append(waveHud.bar, spawnHud.bar);
+
+  const paintCheatChrome = () => {
+    chromeCamp.classList.toggle('hidden', !game.cheatsEnabled);
+  };
+  const prevCheats = game.onCheatsChange;
+  game.onCheatsChange = () => { prevCheats?.(); paintCheatChrome(); };
+  paintCheatChrome();
 
   const setOpen = (open) => panel.classList.toggle('hidden', !open);
   const toggle = () => setOpen(panel.classList.contains('hidden'));
