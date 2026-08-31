@@ -5,6 +5,7 @@ import { setupAdmin } from './admin.js';
 import { meta } from './meta.js';
 import { setupSkillsUi } from './skills-ui.js';
 import { setupViewScale } from './viewScale.js';
+import { audio, setupAudioUi } from './audio.js';
 
 const loadOverlay = document.getElementById('loadOverlay');
 const loadFill = document.getElementById('loadFill');
@@ -44,3 +45,5 @@ game = new Game(canvas, ui);
 applyScale();
 setupAdmin(game);
 setupSkillsUi(game, meta);
+setupAudioUi();
+audio.armUnlock();

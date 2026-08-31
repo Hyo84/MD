@@ -23,6 +23,7 @@ import {
 import { showConfirm } from './confirm.js';
 import { renderer, evoBarMetrics, autoFireRect, bottomHudMetrics } from './renderer.js';
 import { RANGE_MODE_LABELS } from './hud.js';
+import { audio } from './audio.js';
 import {
   TUTORIAL_INTRO_STEPS, TUTORIAL_AUTO_STEP, setupTutorialUi,
   tutorialPhase, autoUnlockSaved, markTutorialStarted, markTutorialIntroDone, markTutorialDone,
@@ -430,6 +431,7 @@ export class Game {
     this.ui.gameoverOverlay.classList.add('hidden');
     this._syncStartOverlay();
     this._notifyPlayState();
+    audio.setMode('menu');
   }
 
   resetToFirstPlay() {
@@ -461,6 +463,7 @@ export class Game {
     this._syncStartOverlay();
     this._refreshStartMeta();
     this._notifyPlayState();
+    audio.setMode('menu');
   }
 
   _syncDefenseFromMeta(fresh) {
@@ -649,6 +652,7 @@ export class Game {
     this.ui.gameoverOverlay.classList.add('hidden');
     this._notifyPlayState();
     this._beginTutorialIfNeeded(needIntro, lockAuto);
+    audio.setMode('play');
   }
 
   _settleRun(victory) {
@@ -714,6 +718,8 @@ export class Game {
     this.resultWave = this.wave;
     this._showResultOverlay(false);
     this._notifyPlayState();
+    audio.play('defeat');
+    audio.setMode('result');
   }
 
   _runComplete() {
@@ -723,6 +729,8 @@ export class Game {
     this.victory = true;
     this._showResultOverlay(true);
     this._notifyPlayState();
+    audio.play('victory');
+    audio.setMode('result');
   }
 
   _rollTier() {
@@ -943,6 +951,7 @@ export class Game {
     this.currentTier = this.nextTier;
     this.nextTier = this._rollTier();
     this._applyLaunchPassives(u);
+    audio.play('launch');
   }
 
   setCheatsEnabled(on) {
@@ -1767,6 +1776,7 @@ export class Game {
       }
       this._onProjectileMerge(a, b, pos.x, pos.y);
       this._grantScore(newTier * 5);
+      audio.play('merge');
     }
     this.mergeQueue.length = 0;
     for (const u of this.units) {
@@ -1929,6 +1939,7 @@ export class Game {
       this.bossPending = true;
       this.bossWarnT = 1.6;
       this.effects.floatText(CANVAS_W / 2, 250, '⚠ 보스 출현! ⚠', '#FF3030', 30, 1.6);
+      audio.play('boss');
       return;
     }
 
@@ -2001,6 +2012,7 @@ export class Game {
     this._grantGold(goldGain, m.x, m.y - 34);
     this.effects.burst(m.x, m.y, stat.color, 12, 3, 3);
     this.effects.floatText(m.x, m.y - 20, `+${stat.score}`, '#ffd', 13, 0.7);
+    audio.play(m.isBoss ? 'boss' : 'kill');
     if (m.isBoss) {
       this._dismissBossMinions();
       const bonus = Math.round(PROGRESSION.bossXpPerWave * this.wave);
@@ -2026,6 +2038,7 @@ export class Game {
         return;
       }
       this.effects.floatText(CANVAS_W / 2, 300, `웨이브 ${this.wave} 시작!`, '#7CFC00', 26, 2.0);
+      audio.play('wave');
       this._maybeOfferAutoTutorial();
     } else {
       this.kills += 1;

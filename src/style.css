@@ -417,7 +417,8 @@ canvas {
 
 /* ---------- 어드민 패널 ---------- */
 
-#adminBtn {
+#adminBtn,
+#audioBtn {
   width: 40px;
   min-width: 40px;
   height: 34px;
@@ -430,7 +431,8 @@ canvas {
   touch-action: manipulation;
 }
 
-#adminBtn:hover {
+#adminBtn:hover,
+#audioBtn:hover {
   filter: brightness(1.3);
 }
 

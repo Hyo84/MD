@@ -641,6 +641,7 @@ export const AUTO_FIRE_STORAGE_KEY = 'md.knightslide.autofire.v1';
 export const PLAYED_STORAGE_KEY = 'md.knightslide.hasPlayed.v1';
 export const TUTORIAL_STORAGE_KEY = 'md.knightslide.tutorial.v1';
 export const AUTO_UNLOCK_STORAGE_KEY = 'md.knightslide.autoUnlock.v1';
+export const AUDIO_STORAGE_KEY = 'md.knightslide.audio.v1';
 
 /** Start overlay / document.title. Admin 패널에서 수정, localStorage에 유지. */
 export const BRANDING = {
