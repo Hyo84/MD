@@ -493,6 +493,7 @@ export class Game {
       this.archers.push({
         ammo: fx.archerAmmo,
         maxAmmo: fx.archerAmmo,
+        look: fx.archerLook || 0,
         attackCd: 0.15 + Math.random() * 0.5,
         flashT: 0,
       });
@@ -506,10 +507,48 @@ export class Game {
       a.y = DEFEAT_Y + 14; // 마지노선 성벽 위(보도)
       const prevMax = a.maxAmmo;
       a.maxAmmo = fx.archerAmmo;
+      a.look = fx.archerLook || 0;
       if (fresh) a.ammo = fx.archerAmmo;
       else if (a.maxAmmo > prevMax) a.ammo = Math.min(a.maxAmmo, a.ammo + (a.maxAmmo - prevMax));
       else a.ammo = Math.min(a.ammo, a.maxAmmo);
     }
+  }
+
+  _lockedCount() {
+    let n = 0;
+    for (const u of this.units) {
+      if (!u.dead && u.tierLocked) n += 1;
+    }
+    return n;
+  }
+
+  _tryToggleTierLock(p) {
+    const slots = this._effects().tierLockSlots || 0;
+    if (slots <= 0 || !p) return false;
+    let best = null;
+    let bestD = Infinity;
+    for (const u of this.units) {
+      if (u.dead || u.heroType || u.tier >= 10) continue;
+      const { x, y } = u.body.position;
+      const d = Math.hypot(p.x - x, p.y - y);
+      const hit = (u.r || 12) + 8;
+      if (d <= hit && d < bestD) {
+        best = u;
+        bestD = d;
+      }
+    }
+    if (!best) return false;
+    const { x, y } = best.body.position;
+    if (best.tierLocked) {
+      best.tierLocked = false;
+      this.effects?.floatText(x, y - best.r - 12, '잠금 해제', '#c8e8d0', 13, 0.7);
+    } else if (this._lockedCount() >= slots) {
+      this.effects?.floatText(x, y - best.r - 12, '잠금 슬롯 없음', '#ffd27a', 13, 0.7);
+    } else {
+      best.tierLocked = true;
+      this.effects?.floatText(x, y - best.r - 12, '티어 잠금', '#e8c878', 13, 0.7);
+    }
+    return true;
   }
 
   _refillArcherAmmo() {
@@ -782,6 +821,7 @@ export class Game {
       if (this.skillPanelOpen) return;
       if (this.tutorialFreeze) return;
       if (this.state !== 'playing') return;
+      this._tryToggleTierLock(p);
       this.dragging = true;
       this.holdingFire = true;
       this.aimX = this._clampAimX(p.x);
@@ -856,7 +896,9 @@ export class Game {
 
   _hitDockHud(p) {
     const m = bottomHudMetrics();
-    return this._hitRect(p, m.gold) || this._hitRect(p, m.next) || this._hitRect(p, m.auto);
+    if (this._hitRect(p, m.gold) || this._hitRect(p, m.next) || this._hitRect(p, m.auto)) return true;
+    if ((this._effects().tierLockSlots || 0) > 0 && this._hitRect(p, m.lock)) return true;
+    return false;
   }
 
   setAutoFire(on) {
@@ -1089,6 +1131,7 @@ export class Game {
       targetKills: heroType ? HERO_MISSION_KILLS : 0,
       gatherToBoss: false,
       firstHit: false,
+      tierLocked: false,
       valkTick: 0,
       invulnT: 0,
       buffMoveT: 0,
@@ -1723,6 +1766,7 @@ export class Game {
       const b = this._unitFromBody(pair.bodyB);
       if (!a || !b || a === b) continue;
       if (a.dead || b.dead || a.isMerging || b.isMerging) continue;
+      if (a.tierLocked || b.tierLocked) continue;
       if (a.tier !== b.tier || a.tier >= 10) continue;
       const newTier = a.tier + 1;
       const air = (a.fromLaunch && !a.settled) || (b.fromLaunch && !b.settled);
@@ -1739,7 +1783,7 @@ export class Game {
     for (const [a, b] of this.mergeQueue) {
       const aOk = a && !a.dead && !consumed.has(a);
       const bOk = b && !b.dead && !consumed.has(b);
-      if (!aOk || !bOk) {
+      if (!aOk || !bOk || a.tierLocked || b.tierLocked) {
         if (aOk) a.isMerging = false;
         if (bOk) b.isMerging = false;
         continue;
@@ -2683,12 +2727,32 @@ export class Game {
     }
   }
 
-  _onBossSlain() {
-    for (const u of [...this.units]) {
-      if (u.dead || !u.heroType || u._ascending) continue;
-      u.bossKills = (u.bossKills || 0) + 1;
-      this._checkHeroMission(u);
+  _livingHeroes() {
+    return this.units.filter((u) => u && !u.dead && u.heroType && !u._ascending);
+  }
+
+  _heroForBossCredit() {
+    const heroes = this._livingHeroes();
+    if (heroes.length === 0) return null;
+    let best = heroes[0];
+    for (const u of heroes) {
+      const kills = u.bossKills || 0;
+      const bestKills = best.bossKills || 0;
+      if (kills > bestKills) {
+        best = u;
+        continue;
+      }
+      if (kills < bestKills) continue;
+      if ((u.missionDamage || 0) > (best.missionDamage || 0)) best = u;
     }
+    return best;
+  }
+
+  _onBossSlain() {
+    const u = this._heroForBossCredit();
+    if (!u) return;
+    u.bossKills = (u.bossKills || 0) + 1;
+    this._checkHeroMission(u);
   }
 
   _checkHeroMission(u) {
@@ -2746,6 +2810,7 @@ export class Game {
     this.effects.burst(x, y, '#FFD700', 40, 7, 5);
     this.effects.burst(x, y, '#fff8dc', 24, 5, 4);
     this.effects.floatText(x, y - 40, '명예로운 승천!', '#FFD700', 22, 1.6);
+    audio.play('ascend');
     this._grantScore(HERO_ASCENSION_BONUS_SCORE);
 
     this._removeUnit(hero);

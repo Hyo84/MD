@@ -511,7 +511,7 @@ export function setupAdmin(game) {
   const prog = section('메타 진행 / 방어');
   const progNote = document.createElement('p');
   progNote.className = 'admin-note';
-  progNote.textContent = '방어벽: 마지노선 접촉 시 HP를 잃고 라인을 밀어냄. HP 0이 되는 충격도 밀치기는 적용되며, 그 다음 접촉은 게임오버. 궁수 탄약은 웨이브 시작(보스 처치)에 재충전.';
+  progNote.textContent = '방어벽: 마지노선 접촉 시 HP를 잃고 라인을 밀어냄. HP 0이 되는 충격도 밀치기는 적용되며, 그 다음 접촉은 게임오버. 궁수 인원 실효 상한은 전장 칸(3/5/7). archerMax는 절대 상한. 사거리·공격·탄약은 궁수 레벨 테이블. 탄약은 웨이브 시작(보스 처치)에 재충전.';
   prog.appendChild(progNote);
   prog.append(
     numberRow('보스 클리어 추가 XP/웨이브', PROGRESSION, 'bossXpPerWave', 10),

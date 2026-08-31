@@ -737,6 +737,23 @@ function rearInCol(game, key, col, row) {
 }
 
 {
+  const game = makeGame();
+  const a = game._spawnUnit(10, CANVAS_W / 2 - 40, 500, 'arthur');
+  const b = game._spawnUnit(10, CANVAS_W / 2 + 40, 500, 'jeanne');
+  a.settled = true;
+  b.settled = true;
+  game._onBossSlain();
+  assert(a.bossKills === 1 && b.bossKills === 0, '보스 1킬은 영웅 1명만 카운트');
+  b.bossKills = 2;
+  b.missionDamage = 100;
+  a.missionDamage = 9999;
+  game._onBossSlain();
+  assert(a.bossKills === 1 && b.bossKills === 3, '처치 카운트가 많은 영웅에게만 추가');
+  assert(b.dead || b._ascending || !game.units.includes(b), '한도 도달 영웅은 퇴장');
+  assert(game.units.includes(a) && a.bossKills === 1, '다른 영웅은 유지');
+}
+
+{
   assert(Math.abs(waveMultiplier(1) - 1) < 1e-9, 'W1 배율 1');
   assert(waveMultiplier(5) > waveMultiplier(4) * 1.8, `W5 허들 ${waveMultiplier(5).toFixed(2)}`);
   assert(waveMultiplier(5) >= 2.4 && waveMultiplier(5) < 2.9, `W5 ≈2.63 (${waveMultiplier(5).toFixed(2)})`);

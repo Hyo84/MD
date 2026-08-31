@@ -8,12 +8,14 @@ export const MAX_SLOT_COLS = 7;
 // extraInset = (MAX - cols) / 2 * SLOT_INSET_PER_COL → 7칸=0, 5칸=50, 3칸=100. 플레이어블 450 / 350 / 250.
 export const SLOT_INSET_PER_COL = 50;
 export const SLOT_EDGE_PAD = 40;      // 슬롯을 내면에서 한 칸 더 안쪽 (7칸일 때 기존 40)
-export const DEFEAT_Y = 660;      // 마지노선
-export const CAMP_DEST_Y = 64;   // 적 캠프 그리기·아군 침입 판정
-export const CAMP_DRAW_H = 164;
-export const LINE_START_Y = CAMP_DEST_Y + CAMP_DRAW_H; // 웨이브라인 상한 = 캠프 이미지 하단 (228)
+export const WALL_DEST_Y = 660;  // 성벽 스프라이트 상단(총안). 마지노선과 분리
+export const DEFEAT_Y = 684;     // 마지노선. 성벽 보도로 살짝 내림
+export const CAMP_DEST_Y = 32;   // 적 캠프 그리기·아군 침입 판정
+export const CAMP_DRAW_H = 162;  // 108 × 1.5
+export const LINE_START_Y = CAMP_DEST_Y + CAMP_DRAW_H; // 웨이브라인 상한 = 캠프 하단 (194)
 export const ENEMY_SPAWN_Y = CAMP_DEST_Y; // 캠프 상단에서 합류. 라인이 상한이어도 내려오며 착지
 export const LAUNCHER_Y = 700;
+// 전열 길이 DEFEAT_Y − LINE_START_Y = 490
 
 // 전역 밸런스 (어드민 패널에서 실시간 조정)
 export const BALANCE = {
@@ -194,7 +196,7 @@ export const UNITS = [
     special: { cleaveRadius: 28, cleaveMult: 0.5 } },
   { tier: 6,  name: '근위대장',     color: '#4169E1', r: 26, drawR: 27, hp: 2200,  atk: 250,  mass: 3.5,  stop: 24, range: 41,
     special: { stunChance: 0.10, stunDuration: 0.5 } },
-  { tier: 7,  name: '성기사',       color: '#FFD700', r: 28, drawR: 28, hp: 4600,  atk: 520,  mass: 4.3,  stop: 32, range: 48,
+  { tier: 7,  name: '성기사',       color: '#FFD700', r: 32, drawR: 34, hp: 4600,  atk: 520,  mass: 4.3,  stop: 32, range: 48,
     special: { healPeriod: 2, healRadius: 110, healPct: 0.04 } },
   { tier: 8,  name: '드래곤가디언', color: '#8B0000', r: 30, drawR: 29, hp: 9500,  atk: 1100, mass: 5.3,  stop: 42, range: 56,
     special: { burnAtkFrac: 0.20, burnDuration: 3 } },
@@ -222,7 +224,7 @@ export function heroMissionDamage(wave) {
 }
 export const HERO_MISSION_DAMAGE = HERO_MISSION.min; // 폴백 (스폰 시 heroMissionDamage(wave) 사용)
 export const HERO_MISSION_KILLS = 25;     // 미사용 대안 쿼터 (킬 모드 스위치 없음)
-export const HERO_BOSS_LIMIT = 3;         // 영웅 생존 중 보스 처치 이 횟수면 퇴장 (사명보다 먼저면 승천 없음)
+export const HERO_BOSS_LIMIT = 3;         // 영웅 생존 중 보스 처치 이 횟수면 퇴장 (사명보다 먼저면 승천 없음). 한 보스당 카운트가 제일 많은 영웅 1명만.
 export const HERO_ASCENSION_ATK_MULT = 1.5;
 export const HERO_ASCENSION_SLOWMO = 0.3; // 초 (실시간 슬로모·플래시)
 export const HERO_ASCENSION_REPLACEMENT_TIER = 5; // 폴백. 실제 잔류는 rollHeroRemnantTier
@@ -326,9 +328,10 @@ export const PROGRESSION = {
 
   // 궁수: 벽 위에 서서 사거리 안의 웨이브라인 적을 사격. 웨이브 솔로 불가.
   // 탄약은 웨이브당 지급, 보스 처치(웨이브 증가) 및 런 시작 시 재충전. 소진 시 다음 웨이브까지 정지.
-  archerMax: 3,
-  archerBaseRange: 80,
-  archerBaseAtk: 7,
+  // 인원 상한은 전장 칸(3/5/7). archerMax는 절대 상한.
+  archerMax: 7,
+  archerBaseRange: 200,
+  archerBaseAtk: 24,
   archerBaseAmmo: 10,
   archerInterval: 1.05,   // 초/발
 };
@@ -383,6 +386,54 @@ export function getSlotX(col, totalCols) {
   return margin + col * ((CANVAS_W - margin * 2) / (totalCols - 1));
 }
 
+/** 인덱스 = 궁수 레벨 1–10. 해금 시 Lv1. */
+export const ARCHER_LEVELS = [
+  null,
+  { range: 200, atk: 24, ammo: 10 },
+  { range: 210, atk: 28, ammo: 12 },
+  { range: 220, atk: 32, ammo: 14 },
+  { range: 230, atk: 38, ammo: 16 },
+  { range: 240, atk: 44, ammo: 18 },
+  { range: 250, atk: 50, ammo: 20 },
+  { range: 260, atk: 56, ammo: 22 },
+  { range: 270, atk: 60, ammo: 24 },
+  { range: 275, atk: 64, ammo: 26 },
+  { range: 280, atk: 68, ammo: 28 },
+];
+export const ARCHER_LEVEL_MAX = 10;
+
+export function archerCombatLevel(hasArcher, levelRank) {
+  if (!hasArcher) return 0;
+  const r = Math.max(0, Math.floor(Number(levelRank) || 0));
+  return Math.max(1, Math.min(ARCHER_LEVEL_MAX, 1 + r));
+}
+
+export function archerStatsForLevel(level) {
+  const lv = Math.max(1, Math.min(ARCHER_LEVEL_MAX, Math.floor(Number(level) || 1)));
+  if (lv === 1) {
+    return {
+      range: PROGRESSION.archerBaseRange,
+      atk: PROGRESSION.archerBaseAtk,
+      ammo: PROGRESSION.archerBaseAmmo,
+    };
+  }
+  return ARCHER_LEVELS[lv] || ARCHER_LEVELS[1];
+}
+
+/** 0=지금(Lv1–3), 1=상위1(4–6), 2=상위2(7–9), 3=최종(10). */
+export function archerLookForLevel(level) {
+  const lv = Math.max(0, Math.floor(Number(level) || 0));
+  if (lv >= 10) return 3;
+  if (lv >= 7) return 2;
+  if (lv >= 4) return 1;
+  return 0;
+}
+
+export function archerCapForCols(cols) {
+  const c = Math.max(BASE_SLOT_COLS, Math.min(MAX_SLOT_COLS, Math.floor(Number(cols) || BASE_SLOT_COLS)));
+  return c;
+}
+
 export const SKILL_TREES = [
   { id: 'combat', name: '전투' },
   { id: 'frontline', name: '전열' },
@@ -396,11 +447,11 @@ export const SKILL_TREES = [
 export const DISTRICTS = [
   { id: 'barracks', zone: 1, name: '공병대', kind: 'military', skills: ['launchCd', 'advance', 'regen'] },
   { id: 'tactics', zone: 2, name: '전술소', kind: 'military', skills: ['stopping', 'boardWidth'] },
-  { id: 'infantry', zone: 3, name: '병영', kind: 'military', skills: ['eliteRecruit', 'mergeShock'] },
+  { id: 'infantry', zone: 3, name: '병영', kind: 'military', skills: ['eliteRecruit', 'mergeShock', 'tierLock'] },
   { id: 'market', zone: 4, name: '시장', kind: 'economy', skills: ['startGold', 'taxRate'] },
   { id: 'guild', zone: 5, name: '용병길드', kind: 'economy', skills: ['mercenary', 'bountyGold'] },
   { id: 'vacant3', zone: 6, name: '공터', kind: 'vacant', skills: [] },
-  { id: 'range', zone: 7, name: '궁수훈련소', kind: 'defense', skills: ['archer', 'archerCount', 'archerRange', 'archerAtk', 'archerAmmo'] },
+  { id: 'range', zone: 7, name: '궁수훈련소', kind: 'defense', skills: ['archer', 'archerCount', 'archerLevel'] },
   { id: 'vacant1', zone: 8, name: '공터', kind: 'vacant', skills: [] },
   { id: 'village', zone: 9, name: '마을', kind: 'village', skills: [] },
   { id: 'keep', zone: 10, name: '영주 성', kind: 'keep', skills: [] },
@@ -492,6 +543,17 @@ export const SKILLS = [
     healPctPerRank: 0.04,
   },
   {
+    id: 'tierLock',
+    name: '티어 잠금',
+    desc: '유닛을 눌러 합성을 막습니다. 등급에 자물쇠. 최대 5기.',
+    tree: 'merge',
+    maxRank: 5,
+    cost: 1,
+    unlockLevel: 3,
+    requires: null,
+    perRank: 1,
+  },
+  {
     id: 'wall',
     name: '방어벽 설치',
     tree: 'wall',
@@ -534,42 +596,21 @@ export const SKILLS = [
     id: 'archerCount',
     name: '궁수 수',
     tree: 'archer',
-    maxRank: 4, // 실제 수는 min(해금 1 + 랭크, PROGRESSION.archerMax)
+    maxRank: 6, // 해금 1 + 랭크. 실효 상한은 전장 칸(3/5/7) − 1
     cost: 1,
     unlockLevel: 8,
     requires: 'archer',
     extraPerRank: 1,
   },
   {
-    id: 'archerRange',
-    name: '궁수 사거리',
+    id: 'archerLevel',
+    name: '궁수 레벨',
+    desc: '해금 시 레벨 1. 랭크당 +1, 최대 10. 사거리·공격·탄약이 같이 오르고 4/7/10에서 모습이 바뀝니다.',
     tree: 'archer',
-    maxRank: 5,
+    maxRank: 9,
     cost: 1,
     unlockLevel: 8,
     requires: 'archer',
-    perRank: 18,
-  },
-  {
-    id: 'archerAtk',
-    name: '궁수 공격력',
-    tree: 'archer',
-    maxRank: 5,
-    cost: 1,
-    unlockLevel: 8,
-    rankLevelStep: 2,
-    requires: 'archer',
-    perRank: 4,
-  },
-  {
-    id: 'archerAmmo',
-    name: '궁수 탄약',
-    tree: 'archer',
-    maxRank: 5,
-    cost: 1,
-    unlockLevel: 8,
-    requires: 'archer',
-    perRank: 4, // 웨이브당 발수
   },
   {
     id: 'startGold',

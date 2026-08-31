@@ -1,6 +1,6 @@
 # KnightSlide — Gemini 검증용 정리 (2026-08-26)
 
-**최신본: `GEMINI_VERIFY_2026-08-27.md`.** 이 파일은 8/26 스냅샷이며 상점 가격·몬스터 스탯·열 누수 로직이 코드와 다를 수 있다.
+**최신본: `GEMINI_VERIFY_2026-08-31.md`.** 이 파일은 8/26 스냅샷이며 상점 가격·몬스터 스탯·열 누수 로직이 코드와 다를 수 있다.
 
 플레이: **https://md-knightslide.vercel.app**  
 로컬: `npm run dev` → `http://localhost:5173/`  

@@ -124,7 +124,7 @@ class AudioBus {
     if (!this.ctx) return;
     const fire = () => {
       if (this.muted || !this.ctx) return;
-      const gap = name === 'kill' ? 0.09 : 0.04;
+      const gap = name === 'kill' ? 0.09 : name === 'ascend' ? 0.6 : 0.04;
       const last = this._lastSfx.get(name) || 0;
       const now = this.ctx.currentTime;
       if (now - last < gap) return;
@@ -161,6 +161,22 @@ class AudioBus {
           tone(this.ctx, dest, { type: 'triangle', freq: 783.99, t: t + 0.24, dur: 0.22, peak: 0.16 });
           tone(this.ctx, dest, { type: 'triangle', freq: 1046.5, t: t + 0.38, dur: 0.32, peak: 0.16 });
           break;
+        case 'ascend': {
+          const bell = (freq, delay, dur, peak) => {
+            tone(this.ctx, dest, { type: 'sine', freq, t: t + delay, dur, peak, attack: 0.012 });
+            tone(this.ctx, dest, {
+              type: 'triangle', freq: freq * 2, t: t + delay, dur: dur * 0.72, peak: peak * 0.32, attack: 0.01,
+            });
+          };
+          tone(this.ctx, dest, { type: 'sine', freq: 261.63, t, dur: 1.15, peak: 0.055, attack: 0.08 });
+          tone(this.ctx, dest, { type: 'sine', freq: 392, t: t + 0.04, dur: 1.1, peak: 0.04, attack: 0.1 });
+          bell(523.25, 0.02, 0.88, 0.12);
+          bell(659.25, 0.16, 0.92, 0.1);
+          bell(783.99, 0.3, 1.0, 0.13);
+          bell(1046.5, 0.46, 1.08, 0.11);
+          tone(this.ctx, dest, { type: 'sine', freq: 1568, t: t + 0.58, dur: 0.55, peak: 0.045, attack: 0.02, slide: 1.12 });
+          break;
+        }
         case 'ui':
           tone(this.ctx, dest, { type: 'square', freq: 660, t, dur: 0.05, peak: 0.05 });
           break;

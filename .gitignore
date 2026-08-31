@@ -5,3 +5,4 @@ dist
 .vercel
 /sprites/
 _verify_ui.mjs
+_chrome_verify_profile/

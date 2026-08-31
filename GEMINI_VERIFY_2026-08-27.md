@@ -1,5 +1,7 @@
 # KnightSlide — Gemini 검증용 정리 (2026-08-27)
 
+**최신본: `GEMINI_VERIFY_2026-08-31.md`.** 이 파일은 8/27 스냅샷이다. 마지노 684, 캠프 32/162, 궁수 레벨, 티어 잠금, 허들 곡선이 여기와 다르다.
+
 플레이: **https://md-knightslide.vercel.app**  
 로컬: `npm run dev` → `http://localhost:5173/`  
 저장소: https://github.com/Hyo84/MD (`master`)  

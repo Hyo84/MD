@@ -3,6 +3,7 @@
 import {
   SKILLS, SKILL_TREES, SKILL_BY_ID, DISTRICTS, BALANCE, PROGRESSION, ECONOMY,
   rankUnlockLevel, advanceSpeedForRank, slotColsForRank, launchTierChances, UNITS,
+  archerStatsForLevel, archerCapForCols,
 } from './config.js';
 import {
   VILLAGE_HOUSES, UNIT_MAX_LEVEL, medalCost, formatMedals, villageLevels,
@@ -26,7 +27,7 @@ function fmtPct(v) {
   return `${(v * 100).toFixed(v * 100 % 1 === 0 ? 0 : 1)}%`;
 }
 
-function effectLine(skill, rank) {
+function effectLine(skill, rank, meta) {
   switch (skill.id) {
     case 'launchCd': {
       const cd = (r) => Math.max(
@@ -98,24 +99,34 @@ function effectLine(skill, rank) {
       return `밀치기 ${kb(rank)}px` + (rank < skill.maxRank ? ` → ${kb(rank + 1)}px` : '');
     }
     case 'archer':
-      return rank >= 1 ? '방어벽에 궁수 1명' : '방어벽에 궁수 1명 배치 (웨이브당 탄약 제한)';
+      return rank >= 1 ? '방어벽에 궁수 1명 (레벨 1)' : '방어벽에 궁수 1명 배치 (웨이브당 탄약 제한)';
     case 'archerCount': {
-      const n = (r) => Math.min(PROGRESSION.archerMax, 1 + r * skill.extraPerRank);
-      const canMore = n(rank) < PROGRESSION.archerMax && rank < skill.maxRank;
-      return `궁수 ${n(rank)}명 (최대 ${PROGRESSION.archerMax})` +
-        (canMore ? ` → ${n(rank + 1)}명` : '');
+      const cols = slotColsForRank(meta?.rank?.('boardWidth') ?? 0);
+      const cap = archerCapForCols(cols);
+      const n = (r) => Math.min(PROGRESSION.archerMax, cap, 1 + r * skill.extraPerRank);
+      const canMore = n(rank) < cap && rank < skill.maxRank;
+      const widthBlock = n(rank) >= cap && rank < skill.maxRank;
+      let s = `궁수 ${n(rank)}명 (이 전장 ${cap}칸)`;
+      if (canMore) s += ` → ${n(rank + 1)}명`;
+      else if (widthBlock) s += ' · 전장 확장 시 추가 고용';
+      return s;
     }
-    case 'archerRange': {
-      const v = (r) => PROGRESSION.archerBaseRange + r * skill.perRank;
-      return `사거리 ${v(rank)}px` + (rank < skill.maxRank ? ` → ${v(rank + 1)}px` : '');
+    case 'archerLevel': {
+      const lv = (r) => 1 + r;
+      const st = (r) => archerStatsForLevel(lv(r));
+      const a = st(rank);
+      let s = `Lv${lv(rank)} 사거리 ${a.range} · 공격 ${a.atk} · ${a.ammo}발`;
+      if (rank < skill.maxRank) {
+        const b = st(rank + 1);
+        s += ` → Lv${lv(rank + 1)} ${b.range}/${b.atk}/${b.ammo}`;
+      }
+      return s;
     }
-    case 'archerAtk': {
-      const v = (r) => PROGRESSION.archerBaseAtk + r * skill.perRank;
-      return `공격력 ${v(rank)}` + (rank < skill.maxRank ? ` → ${v(rank + 1)}` : '');
-    }
-    case 'archerAmmo': {
-      const v = (r) => PROGRESSION.archerBaseAmmo + r * skill.perRank;
-      return `웨이브당 ${v(rank)}발` + (rank < skill.maxRank ? ` → ${v(rank + 1)}발` : '');
+    case 'tierLock': {
+      const n = (r) => r * (skill.perRank ?? 1);
+      return rank <= 0
+        ? '유닛을 눌러 합성을 막음. 등급에 자물쇠'
+        : `잠금 ${n(rank)}기` + (rank < skill.maxRank ? ` → ${n(rank + 1)}기` : '');
     }
     case 'startGold': {
       const v = (r) => (r * skill.perRank);
@@ -169,11 +180,13 @@ function fillSkillRows(host, meta, game, skillIds, canInvest, onBought) {
     body.className = 'skill-body';
     const name = document.createElement('div');
     name.className = 'skill-name';
-    const maxLabel = maxRank === 1 ? (rank >= 1 ? '해금' : '잠김') : `${rank} / ${maxRank}`;
+    const maxLabel = skill.id === 'archerLevel'
+      ? `Lv${1 + rank} / 10`
+      : (skill.maxRank === 1 ? (rank >= 1 ? '해금' : '잠김') : `${rank} / ${skill.maxRank}`);
     name.textContent = `${skill.name}  (${maxLabel})`;
     const desc = document.createElement('div');
     desc.className = 'skill-desc';
-    desc.textContent = effectLine(skill, rank);
+    desc.textContent = effectLine(skill, rank, meta);
     const sub = document.createElement('div');
     sub.className = 'skill-unlock';
     const bits = [];
@@ -195,6 +208,9 @@ function fillSkillRows(host, meta, game, skillIds, canInvest, onBought) {
     } else if (check.reason === 'requires') {
       buy.disabled = true;
       buy.textContent = `${requireName(skill.requires)} 필요`;
+    } else if (check.reason === 'width') {
+      buy.disabled = true;
+      buy.textContent = '전장 확장 필요';
     } else if (check.reason === 'max') {
       buy.disabled = true;
       buy.textContent = '최대';

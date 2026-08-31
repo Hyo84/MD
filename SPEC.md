@@ -1,4 +1,4 @@
-최신 리뷰·검증은 **GEMINI_VERIFY_2026-08-27.md**. 아래 SPEC은 구버전 수치가 섞여 있다.
+최신 리뷰·검증은 **GEMINI_VERIFY_2026-08-31.md**. 아래 SPEC은 구버전 수치가 섞여 있다.
 
 # KnightSlide (MD) — 현재 구현 스펙
 

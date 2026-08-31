@@ -2,7 +2,7 @@
 // 마젠타(#FF00FF 및 근접색) 크로마키. 픽셀아트는 그리기 쪽에서 smoothing off.
 // 스켈레톤(T2)=enemy_skeleton2.png, 해골기사(T5)=enemy_skeleton.png.
 
-import { CANVAS_W, CANVAS_H, DEFEAT_Y, UNITS, MONSTERS } from './config.js';
+import { CANVAS_W, CANVAS_H, WALL_DEST_Y, UNITS, MONSTERS } from './config.js';
 
 const BG_SCALE = 2;
 const UNIT_SIZE = 160;
@@ -57,7 +57,10 @@ function shade(hex, t) {
 }
 
 function yieldFrame() {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
 }
 
 async function toBitmap(canvas) {
@@ -226,6 +229,9 @@ function pngSpriteList() {
   }
   list.push(
     ['archer', '/sprites/ally_archer.png', { chroma: true, maxW: ARCHER_SIZE, maxH: ARCHER_SIZE }],
+    ['archer_1', '/sprites/ally_archer_2.png', { chroma: true, maxW: ARCHER_SIZE, maxH: ARCHER_SIZE }],
+    ['archer_2', '/sprites/ally_archer_3.png', { chroma: true, maxW: ARCHER_SIZE, maxH: ARCHER_SIZE }],
+    ['archer_3', '/sprites/ally_archer_4.png', { chroma: true, maxW: ARCHER_SIZE, maxH: ARCHER_SIZE }],
     ['arrow', '/sprites/fx_arrow.png', { chroma: true, maxW: 96, maxH: 96 }],
     ['bg_field', '/sprites/bg_field.png', { chroma: false, maxW: CANVAS_W * BG_SCALE, maxH: CANVAS_H * BG_SCALE }],
     ['wall_bottom', '/sprites/bg_wall.png', { chroma: true, knockoutBg: true, maxW: CANVAS_W * BG_SCALE, maxH: 220 * BG_SCALE }],
@@ -525,7 +531,7 @@ function bakeForestDense() {
 }
 
 function bakeWallBasic() {
-  const hWorld = CANVAS_H - DEFEAT_Y;
+  const hWorld = CANVAS_H - WALL_DEST_Y;
   const w = CANVAS_W * BG_SCALE;
   const h = hWorld * BG_SCALE;
   const { canvas, ctx } = makeCanvas(w, h);
@@ -555,7 +561,7 @@ function bakeWallBasic() {
 }
 
 function bakeWallBottom() {
-  const hWorld = CANVAS_H - DEFEAT_Y;
+  const hWorld = CANVAS_H - WALL_DEST_Y;
   const w = CANVAS_W * BG_SCALE;
   const h = hWorld * BG_SCALE;
   const { canvas, ctx } = makeCanvas(w, h);
@@ -1114,12 +1120,14 @@ class AssetManager {
 
   _report(pct, label) {
     const n = Math.max(0, Math.min(100, Math.round(pct)));
-    const fill = document.getElementById('loadFill');
-    const num = document.getElementById('loadPct');
-    const lab = document.getElementById('loadLabel');
-    if (fill) fill.style.width = `${n}%`;
-    if (num) num.textContent = `${n}%`;
-    if (lab && label) lab.textContent = label;
+    if (typeof document !== 'undefined') {
+      const fill = document.getElementById('loadFill');
+      const num = document.getElementById('loadPct');
+      const lab = document.getElementById('loadLabel');
+      if (fill) fill.style.width = `${n}%`;
+      if (num) num.textContent = `${n}%`;
+      if (lab && label) lab.textContent = label;
+    }
     try {
       this.onProgress?.(n, label);
     } catch { /* UI optional */ }
@@ -1135,6 +1143,15 @@ class AssetManager {
 
   unit(tier) {
     return this.get(`unit_${tier}`);
+  }
+
+  archer(look) {
+    const n = Math.max(0, Math.floor(Number(look) || 0));
+    if (n >= 1) {
+      const up = this.get(`archer_${n}`);
+      if (up) return up;
+    }
+    return this.get('archer');
   }
 
   monster(key) {

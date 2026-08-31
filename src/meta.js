@@ -3,6 +3,7 @@
 import {
   PROGRESSION, SKILLS, SKILL_BY_ID, xpToNextLevel, META_STORAGE_KEY, BALANCE, ECONOMY,
   rankUnlockLevel, advanceSpeedForRank, slotColsForRank, launchTierChances, SHOP_MAX_TIER,
+  archerCombatLevel, archerStatsForLevel, archerLookForLevel, archerCapForCols,
 } from './config.js';
 import {
   UNIT_MAX_LEVEL, emptyUnitLevels, clampUnitLevel, medalCost,
@@ -14,6 +15,22 @@ function emptyRanks() {
   const ranks = {};
   for (const s of SKILLS) ranks[s.id] = 0;
   return ranks;
+}
+
+/** 옛 사거리/공격/탄약 랭크 → 궁수 레벨 + 포인트 환급. data를 제자리 수정. */
+export function migrateLegacyArcherRanks(parsedRanks, data) {
+  if (!parsedRanks || typeof parsedRanks !== 'object' || !data?.ranks) return 0;
+  const existing = Math.max(0, Math.floor(Number(parsedRanks.archerLevel) || 0));
+  if (existing > 0) return 0;
+  const oldRange = Math.max(0, Math.floor(Number(parsedRanks.archerRange) || 0));
+  const oldAtk = Math.max(0, Math.floor(Number(parsedRanks.archerAtk) || 0));
+  const oldAmmo = Math.max(0, Math.floor(Number(parsedRanks.archerAmmo) || 0));
+  if (oldRange + oldAtk + oldAmmo <= 0) return 0;
+  const kept = Math.min(9, Math.max(oldRange, oldAtk, oldAmmo));
+  const refund = oldRange + oldAtk + oldAmmo - kept;
+  data.ranks.archerLevel = kept;
+  data.skillPoints = Math.max(0, (data.skillPoints || 0) + refund);
+  return refund;
 }
 
 function defaultData() {
@@ -40,6 +57,7 @@ function load() {
         }
         data.ranks[s.id] = Number.isFinite(r) ? Math.max(0, Math.min(s.maxRank, Math.floor(r))) : 0;
       }
+      migrateLegacyArcherRanks(parsed.ranks, data);
     }
     if (Number.isFinite(parsed.medals)) data.medals = Math.max(0, Math.floor(parsed.medals));
     if (Number.isFinite(parsed.villageLevel)) data.villageLevel = clampVillageLevel(parsed.villageLevel);
@@ -134,7 +152,12 @@ export class Meta {
     const skill = SKILL_BY_ID[id];
     if (!skill) return { ok: false, reason: 'unknown' };
     const rank = this.rank(id);
-    if (rank >= this.effectiveMaxRank(skill)) return { ok: false, reason: 'max' };
+    if (rank >= this.effectiveMaxRank(skill)) {
+      if (skill.id === 'archerCount' && rank < skill.maxRank) {
+        return { ok: false, reason: 'width' };
+      }
+      return { ok: false, reason: 'max' };
+    }
     const unlockLevel = rankUnlockLevel(skill, rank + 1);
     if (this.data.level < unlockLevel) {
       return { ok: false, reason: 'level', unlockLevel };
@@ -148,7 +171,9 @@ export class Meta {
 
   effectiveMaxRank(skill) {
     if (skill.id === 'archerCount') {
-      return Math.max(0, Math.min(skill.maxRank, PROGRESSION.archerMax - 1));
+      const cols = slotColsForRank(this.rank('boardWidth'));
+      const cap = archerCapForCols(cols);
+      return Math.max(0, Math.min(skill.maxRank, cap - 1));
     }
     return skill.maxRank;
   }
@@ -267,8 +292,11 @@ export class Meta {
         const r = snap.ranks[s.id];
         ranks[s.id] = Number.isFinite(r) ? Math.max(0, Math.min(s.maxRank, Math.floor(r))) : 0;
       }
+      this.data.ranks = ranks;
+      migrateLegacyArcherRanks(snap.ranks, this.data);
+    } else {
+      this.data.ranks = ranks;
     }
-    this.data.ranks = ranks;
     this.data.medals = Math.max(0, Math.floor(Number(snap.medals) || 0));
     this.data.villageLevel = clampVillageLevel(snap.villageLevel ?? VILLAGE_START_LEVEL);
     const levels = emptyUnitLevels();
@@ -323,10 +351,14 @@ export class Meta {
       ? PROGRESSION.wallBaseKnockback + r('wallKb') * SKILL_BY_ID.wallKb.kbPerRank
       : 0;
     const hasArcher = hasWall && r('archer') >= 1;
+    const cols = slotColsForRank(r('boardWidth'));
+    const archerCap = archerCapForCols(cols);
     const extra = hasArcher ? r('archerCount') * SKILL_BY_ID.archerCount.extraPerRank : 0;
     const archerCount = hasArcher
-      ? Math.min(PROGRESSION.archerMax, 1 + extra)
+      ? Math.min(PROGRESSION.archerMax, archerCap, 1 + extra)
       : 0;
+    const archerLv = archerCombatLevel(hasArcher, r('archerLevel'));
+    const archerStat = archerStatsForLevel(Math.max(1, archerLv));
     const startGold = (ECONOMY.startGold ?? 0) + r('startGold') * (SKILL_BY_ID.startGold?.perRank ?? 50);
     const taxPerSec = (ECONOMY.taxPerSec ?? 0) + r('taxRate') * (SKILL_BY_ID.taxRate?.perRank ?? 1.5);
     const bountyMult = (ECONOMY.bountyMult ?? 1) * (1 + r('bountyGold') * (SKILL_BY_ID.bountyGold?.perRank ?? 0.1));
@@ -351,10 +383,14 @@ export class Meta {
       wallMaxHp,
       wallKnockback,
       archerCount,
-      archerRange: PROGRESSION.archerBaseRange + r('archerRange') * SKILL_BY_ID.archerRange.perRank,
-      archerAtk: PROGRESSION.archerBaseAtk + r('archerAtk') * SKILL_BY_ID.archerAtk.perRank,
-      archerAmmo: PROGRESSION.archerBaseAmmo + r('archerAmmo') * SKILL_BY_ID.archerAmmo.perRank,
-      slotCols: slotColsForRank(r('boardWidth')),
+      archerLevel: archerLv,
+      archerLook: archerLookForLevel(archerLv),
+      archerRange: archerStat.range,
+      archerAtk: archerStat.atk,
+      archerAmmo: archerStat.ammo,
+      archerCap,
+      tierLockSlots: r('tierLock') * (SKILL_BY_ID.tierLock?.perRank ?? 1),
+      slotCols: cols,
       startGold,
       taxPerSec,
       bountyMult,

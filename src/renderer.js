@@ -1,7 +1,7 @@
 // 전장 레이어 렌더러. 베이크된 스프라이트 + 프레임당 펄스/파티클만.
 
 import {
-  CANVAS_W, CANVAS_H, DEFEAT_Y, LAUNCHER_Y, LINE_START_Y,
+  CANVAS_W, CANVAS_H, DEFEAT_Y, WALL_DEST_Y, LAUNCHER_Y, LINE_START_Y,
   CAMP_DEST_Y, CAMP_DRAW_H,
   BALANCE, UNITS, MONSTERS, HEROES, HERO_MISSION_DAMAGE, HERO_BOSS_LIMIT,
   HERO_ASCENSION_SLOWMO, formatShopGold,
@@ -31,17 +31,19 @@ const DOCK_H = 44;
 const DOCK_GAP = 5;
 const DOCK_PAD = 8;
 
-/** 상점 바 바로 위 우측. 자동 / 다음 / 골드를 같은 높이의 카드로 맞춤. 중앙 발사대와 겹치지 않게 오른쪽 정렬. */
+/** 상점 바 바로 위 우측. 잠금 / 자동 / 다음 / 골드를 같은 높이의 카드로 맞춤. */
 export function bottomHudMetrics() {
   const evo = evoBarMetrics();
   const y = evo.y - DOCK_H - 6;
   const goldW = 78;
   const nextW = 44;
   const autoW = 44;
+  const lockW = 44;
   const gold = { x: CANVAS_W - DOCK_PAD - goldW, y, w: goldW, h: DOCK_H };
   const next = { x: gold.x - DOCK_GAP - nextW, y, w: nextW, h: DOCK_H };
   const auto = { x: next.x - DOCK_GAP - autoW, y, w: autoW, h: DOCK_H };
-  return { y, h: DOCK_H, gold, next, auto };
+  const lock = { x: auto.x - DOCK_GAP - lockW, y, w: lockW, h: DOCK_H };
+  return { y, h: DOCK_H, gold, next, auto, lock };
 }
 
 export function goldIndicatorRect() {
@@ -50,6 +52,10 @@ export function goldIndicatorRect() {
 
 export function autoFireRect() {
   return bottomHudMetrics().auto;
+}
+
+export function tierLockRect() {
+  return bottomHudMetrics().lock;
 }
 
 export function colorAlpha(hex, a) {
@@ -136,7 +142,27 @@ function drawHpBar(ctx, x, y, w, ratio, color) {
 }
 
 /** 두꺼운 아웃라인 등급 숫자. 머리 위, 스프라이트를 가리지 않게 작게. */
-function drawGradeBadge(ctx, x, y, label, bodyR) {
+function drawPadlock(ctx, x, y, s) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = '#1a140c';
+  ctx.fillStyle = '#e8c878';
+  ctx.lineWidth = Math.max(1.5, s * 0.2);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(0, -s * 0.28, s * 0.34, Math.PI, 0, false);
+  ctx.stroke();
+  const bw = s * 0.78;
+  const bh = s * 0.58;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-bw / 2, -s * 0.1, bw, bh, 2);
+  else ctx.rect(-bw / 2, -s * 0.1, bw, bh);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawGradeBadge(ctx, x, y, label, bodyR, locked = false) {
   const text = String(label);
   const fs = Math.max(11, Math.min(22, Math.round(bodyR * 0.78 * (text.length > 1 ? 0.72 : 1))));
   ctx.save();
@@ -147,10 +173,11 @@ function drawGradeBadge(ctx, x, y, label, bodyR) {
   ctx.miterLimit = 2;
   ctx.lineWidth = Math.max(3.6, fs * 0.28);
   ctx.strokeStyle = '#1a140c';
-  ctx.fillStyle = '#fff8e8';
+  ctx.fillStyle = locked ? '#ffe7a0' : '#fff8e8';
   ctx.strokeText(text, x, y);
   ctx.fillText(text, x, y);
   ctx.restore();
+  if (locked) drawPadlock(ctx, x + fs * 0.62, y - fs * 0.12, Math.max(7, fs * 0.48));
 }
 
 function drawT10Particles(ctx, x, y, r, t) {
@@ -310,7 +337,7 @@ const _wallStoneSrc = new Map();
 
 function wallStoneSource(wall, id) {
   const iw = Math.max(1, wall.width || CANVAS_W);
-  const ih = Math.max(1, wall.height || (CANVAS_H - DEFEAT_Y));
+  const ih = Math.max(1, wall.height || (CANVAS_H - WALL_DEST_Y));
   const key = `${id}:${iw}x${ih}`;
   const cached = _wallStoneSrc.get(key);
   if (cached) return cached;
@@ -382,10 +409,10 @@ function wallStoneSource(wall, id) {
   return src;
 }
 
-/** Maginot 구간(DEFEAT_Y→하단). 건설 후면 성벽, 그 전에는 기본 성벽 PNG. */
+/** 성벽 아트(WALL_DEST_Y→하단). 마지노선(DEFEAT_Y)은 보도 쪽에 따로 그림. */
 function drawCastleWall(ctx, game) {
-  const destY = DEFEAT_Y;
-  const destH = CANVAS_H - DEFEAT_Y;
+  const destY = WALL_DEST_Y;
+  const destH = CANVAS_H - WALL_DEST_Y;
   const built = !!game.wall;
   const name = built ? 'wall_bottom' : 'wall_basic';
   const wall = assets.get(name);
@@ -499,11 +526,13 @@ function drawArchers(ctx, game) {
     ctx.restore();
   }
   if (!game.wall || game.wall.broken || game.archers.length === 0) return;
-  const spr = assets.get('archer');
   for (const a of game.archers) {
     const flash = a.flashT > 0;
-    if (!drawSprite(ctx, spr, a.x, a.y, 36, 36, { flash, alpha: a.ammo > 0 ? 1 : 0.55 })) {
-      fallbackCircle(ctx, a.x, a.y, 11, flash ? '#fff' : (a.ammo > 0 ? '#6b8f3c' : '#4a4a40'), '#2a3a18', '궁');
+    const look = a.look || 0;
+    const spr = assets.archer(look);
+    const dim = 36 + look * 2;
+    if (!drawSprite(ctx, spr, a.x, a.y, dim, dim, { flash, alpha: a.ammo > 0 ? 1 : 0.55 })) {
+      fallbackCircle(ctx, a.x, a.y, 11 + look, flash ? '#fff' : (a.ammo > 0 ? '#6b8f3c' : '#4a4a40'), '#2a3a18', '궁');
     }
     ctx.save();
     ctx.fillStyle = a.ammo > 0 ? '#e8ff9a' : '#ff8080';
@@ -693,7 +722,7 @@ function drawFriendlies(ctx, game) {
       ctx.restore();
     }
     drawHpBar(ctx, x, y - drawR - 16, drawR * 2, u.hp / u.maxHp, '#2ecc71');
-    drawGradeBadge(ctx, x, y - drawR - 4, String(u.tier), drawR);
+    drawGradeBadge(ctx, x, y - drawR - 4, String(u.tier), drawR, !!u.tierLocked);
     if (u.heroType) drawHeroFootHud(ctx, u, x, y, drawR);
   }
 
@@ -763,11 +792,28 @@ function drawDockLabel(ctx, r, title, yOff = 11) {
 
 function drawBottomDock(ctx, game) {
   if (game.state !== 'playing') return;
-  const { gold, next, auto } = bottomHudMetrics();
+  const { gold, next, auto, lock } = bottomHudMetrics();
   const ready = game.launchCd <= 0;
   const nstat = UNITS[game.nextTier - 1];
   const nspr = assets.unit(game.nextTier);
   const locked = typeof game.autoUnlocked === 'function' ? !game.autoUnlocked() : false;
+  const lockSlots = game._effects().tierLockSlots || 0;
+  if (lockSlots > 0) {
+    let used = 0;
+    for (const u of game.units) {
+      if (!u.dead && u.tierLocked) used += 1;
+    }
+    const remain = Math.max(0, lockSlots - used);
+    fillWoodFrame(ctx, lock.x, lock.y, lock.w, lock.h, { active: used > 0 });
+    ctx.save();
+    drawDockLabel(ctx, lock, '잠금');
+    ctx.fillStyle = remain > 0 ? '#e8c878' : '#ffb0a0';
+    ctx.font = "bold 13px 'Malgun Gothic', sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${remain}/${lockSlots}`, lock.x + lock.w / 2, lock.y + 29);
+    ctx.restore();
+  }
 
   fillWoodFrame(ctx, auto.x, auto.y, auto.w, auto.h, { active: !locked && !!game.autoFire });
   ctx.save();
