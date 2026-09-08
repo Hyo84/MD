@@ -69,8 +69,26 @@ class AudioBus {
     if (this._armed || typeof document === 'undefined') return;
     this._armed = true;
     const unlock = () => this.unlock();
-    document.addEventListener('pointerdown', unlock, { capture: true });
-    document.addEventListener('keydown', unlock, { capture: true });
+    const opts = { capture: true, passive: true };
+    // 카톡·인앱·iOS는 pointerdown만으로는 resume이 실패하는 경우가 많음.
+    for (const ev of ['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown']) {
+      document.addEventListener(ev, unlock, opts);
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') this.unlock();
+    });
+    window.addEventListener('pageshow', unlock);
+  }
+
+  _silentKick() {
+    if (!this.ctx) return;
+    try {
+      const buf = this.ctx.createBuffer(1, 1, this.ctx.sampleRate || 22050);
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(this.ctx.destination);
+      src.start(0);
+    } catch { /* ignore */ }
   }
 
   unlock() {
@@ -90,8 +108,15 @@ class AudioBus {
       this.master.connect(this.ctx.destination);
       this._applyMute();
     }
-    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-    this._ensureBgm();
+    this._silentKick();
+    if (this.ctx.state === 'suspended' && typeof this.ctx.resume === 'function') {
+      this.ctx.resume().then(() => {
+        this._silentKick();
+        if (!this.muted) this._ensureBgm();
+        this._emit();
+      }).catch(() => {});
+    }
+    if (!this.muted) this._ensureBgm();
   }
 
   setMuted(on) {
@@ -240,15 +265,23 @@ export function setupAudioUi() {
   const btn = document.createElement('button');
   btn.id = 'audioBtn';
   btn.type = 'button';
-  btn.title = '소리 켜기/끄기 (M)';
+  btn.title = '소리 켜기/끄기 (M). 안 들리면 이 버튼을 누르세요';
   const paint = () => {
+    const blocked = !audio.muted && audio.ctx && audio.ctx.state !== 'running';
     btn.textContent = audio.muted ? '🔇' : '🔊';
     btn.setAttribute('aria-pressed', audio.muted ? 'true' : 'false');
+    btn.title = blocked
+      ? '소리가 잠겨 있습니다. 버튼을 눌러 켜세요'
+      : '소리 켜기/끄기 (M)';
   };
   paint();
   audio.onChange(paint);
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (!audio.muted && audio.ctx && audio.ctx.state !== 'running') {
+      audio.unlock();
+      return;
+    }
     audio.toggleMuted();
   });
   host.insertBefore(btn, host.firstChild);

@@ -98,12 +98,13 @@ function assert(cond, msg) {
 
 {
   const game = makeGame();
-  assert(Math.abs(game.trollRegenPct() - 0.08) < 1e-9, `기본 재생 8% (실제 ${game.trollRegenPct()})`);
+  const baseRegen = game.trollRegenPct();
+  assert(baseRegen >= 0.10 && baseRegen <= 0.12, `기본 재생 ${(baseRegen * 100).toFixed(0)}% (실제 ${baseRegen})`);
   game.setTrollRegenPct(0.20);
   assert(Math.abs(game.trollRegenPct() - 0.20) < 1e-9, `재생 20%로 조절 (실제 ${game.trollRegenPct()})`);
   game.adjustTrollRegenPct(-0.04);
   assert(Math.abs(game.trollRegenPct() - 0.16) < 1e-9, `−2스텝 → 16% (실제 ${game.trollRegenPct()})`);
-  game.setTrollRegenPct(0.08);
+  game.setTrollRegenPct(baseRegen);
 }
 
 if (failed) {

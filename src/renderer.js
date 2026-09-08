@@ -903,13 +903,11 @@ function drawEvoBar(ctx, game) {
     }
     ctx.restore();
 
-    if (!bar) {
-      const spr = assets.unit(tier);
-      const cx = sx + m.slot / 2;
-      const cy = m.iconY + m.iconH / 2;
-      if (!drawSprite(ctx, spr, cx, cy, 28, 28)) {
-        fallbackCircle(ctx, cx, cy, 12, UNITS[tier - 1].color, 'rgba(0,0,0,0.4)', String(tier));
-      }
+    const spr = assets.unit(tier);
+    const cx = sx + m.slot / 2;
+    const cy = m.iconY + m.iconH / 2;
+    if (!drawSprite(ctx, spr, cx, cy, m.slot - 8, m.iconH - 4)) {
+      fallbackCircle(ctx, cx, cy, 12, UNITS[tier - 1].color, 'rgba(0,0,0,0.4)', String(tier));
     }
 
     if (view.dim) {

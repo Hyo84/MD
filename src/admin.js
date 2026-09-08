@@ -265,7 +265,7 @@ export function setupAdmin(game) {
   const villageSec = section('마을 / 훈장');
   const villageNote = document.createElement('p');
   villageNote.className = 'admin-note';
-  villageNote.textContent = '훈장은 웨이브 클리어로 쌓입니다. 마을 레벨은 숙소 해금. 유닛은 0부터. 오라는 복사본이 많아도 1회만.';
+  villageNote.textContent = '훈장은 웨이브 클리어로 쌓입니다. 마을 레벨은 숙소 해금. 유닛은 0부터. 오라는 같은 효과가 중첩되지 않습니다.';
   villageSec.appendChild(villageNote);
   const vLvRow = document.createElement('div');
   vLvRow.className = 'admin-row';
@@ -480,6 +480,8 @@ export function setupAdmin(game) {
     numberRow('보스 해골기사 기본 수', BALANCE, 'bossKnightEscorts', 1),
     numberRow('보스전 부하 상한', BALANCE, 'bossMinionCap', 1),
     numberRow('보스 최소 진격 (px/s)', BALANCE, 'bossMinAdvance', 0.5),
+    numberRow('라인 최소 진격 (px/s)', BALANCE, 'lineMinAdvance', 0.5),
+    numberRow('잡몹 필드 상한/칸', BALANCE, 'trashFieldPerCol', 1),
     numberRow('발사 속도 (px/s)', BALANCE, 'launchSpeed', 10),
     numberAt('진군 R0 (스킬 없음)', BALANCE.advanceSpeedByRank, 0, 1),
     numberAt('진군 R1', BALANCE.advanceSpeedByRank, 1, 1),
@@ -502,6 +504,10 @@ export function setupAdmin(game) {
     numberRow('빈 라인 푸시 배율', BALANCE, 'emptyLinePushScale', 0.1),
     numberRow('빈 라인 전열 여유 (px)', BALANCE, 'emptyLinePushSlack', 1),
   );
+  const lineNote = document.createElement('p');
+  lineNote.className = 'admin-note';
+  lineNote.textContent = '라인 최소 진격: 전열에 적이 붙어 있으면 하한(px/s). 0이면 없음. 지금 런에 즉시 반영. 잡몹은 처치 할당 전까지 끊기지 않고, 칸당 상한만큼만 필드에 유지됩니다.';
+  g.appendChild(lineNote);
   const pfNote = document.createElement('p');
   pfNote.className = 'admin-note';
   pfNote.textContent = `전장 슬롯: 기본 ${BASE_SLOT_COLS}칸 · 최대 ${MAX_SLOT_COLS}칸 (3→5→7). extraInset=(MAX-cols)/2×${SLOT_INSET_PER_COL}px → 3칸=${(MAX_SLOT_COLS - BASE_SLOT_COLS) / 2 * SLOT_INSET_PER_COL}px, 5칸=${(MAX_SLOT_COLS - 5) / 2 * SLOT_INSET_PER_COL}px, 7칸=0 (플레이어블 250 / 350 / 450).`;
@@ -548,7 +554,7 @@ export function setupAdmin(game) {
       skSec.appendChild(numberRow('rankLevelStep', skill, 'rankLevelStep', 1));
     }
     for (const key of Object.keys(skill)) {
-      if (!['perRank', 't2PerRank', 't3PerRank', 't3StartRank', 'dmgPerRank', 'radiusBase', 'radiusPerRank', 'knockbackPerRank', 'healPctPerRank', 'hpPerRank', 'kbPerRank', 'extraPerRank'].includes(key)) continue;
+      if (!['perRank', 't2PerRank', 't3PerRank', 't3StartRank', 'dmgPerRank', 'radiusBase', 'radiusPerRank', 'knockbackPerRank', 'knockbackChance', 'minResultTier', 'healPctPerRank', 'hpPerRank', 'kbPerRank', 'extraPerRank'].includes(key)) continue;
       if (skill.id === 'advance' && key === 'perRank') continue;
       const step = Math.abs(skill[key]) < 1 ? 0.001 : 1;
       skSec.appendChild(numberRow(key, skill, key, step));

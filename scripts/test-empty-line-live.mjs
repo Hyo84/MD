@@ -2,7 +2,7 @@
 global.requestAnimationFrame = () => {};
 
 import { Game } from '../src/game.js';
-import { CANVAS_W, LINE_START_Y, DEFEAT_Y, UNITS, MONSTERS, BALANCE, waveMultiplier, effectiveMult, bossWaveMultiplier, SKILL_BY_ID, rollHeroRemnantTier, DISTRICTS, isHurdleWave, bossEscortForWave, killsNeeded, XP_TO_NEXT } from '../src/config.js';
+import { CANVAS_W, LINE_START_Y, DEFEAT_Y, CAMP_DEST_Y, UNITS, MONSTERS, BALANCE, waveMultiplier, effectiveMult, bossWaveMultiplier, SKILL_BY_ID, rollHeroRemnantTier, DISTRICTS, isHurdleWave, bossEscortForWave, killsNeeded, XP_TO_NEXT } from '../src/config.js';
 import { meta } from '../src/meta.js';
 
 const ctxStub = new Proxy({}, {
@@ -630,12 +630,29 @@ function rearInCol(game, key, col, row) {
   joiner.y = 64;
   allyAtCol(game, 1, 0);
   allyAtCol(game, 1, 0);
-  assert(game._incomingLaneUncovered(), '오른쪽 합류 적은 왼쪽 T1이 못 막음');
   const t0 = game.lineY;
   const dt = 1 / 60;
   for (let i = 0; i < 60; i++) game._updateLine(dt);
+  assert(game.joinedEnemies().length === 0, '합류 중만 있으면 전열 적이 없음');
   assert(joiner.joining, `합류 유지 (y=${joiner.y.toFixed(1)})`);
-  assert(Math.abs(game.lineY - t0) < 0.05, `막지 않은 열로 합류 중이면 빈 라인 후퇴 없음 (lineY=${game.lineY.toFixed(2)})`);
+  assert(game.lineY < t0 - 1, `전열에 적이 없으면 아군이 라인을 올려야 함 (lineY=${game.lineY.toFixed(2)})`);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const parked = game._spawnEnemy('goblin');
+  parked.joining = true;
+  parked.row = 0;
+  parked.col = -1;
+  parked.y = CAMP_DEST_Y;
+  parked.x = game._campParkX(parked);
+  allyAtCol(game, 1, 1);
+  const t0 = game.lineY;
+  const dt = 1 / 60;
+  for (let i = 0; i < 60; i++) game._updateLine(dt);
+  assert(game.joinedEnemies().length === 0, '캠프 주차 적은 전열에 없음');
+  assert(game.lineY < t0 - 1, `주차 적만 있으면 아군이 라인을 올려야 함 (lineY=${game.lineY.toFixed(2)})`);
 }
 
 {
@@ -652,7 +669,9 @@ function rearInCol(game, key, col, row) {
     game._computeEngagement();
     game._updateLine(dt);
   }
-  assert(game.lineY < t0, `전열을 모두 막으면 저지력이 라인을 올릴 수 있음 (lineY=${game.lineY.toFixed(2)})`);
+  const floor = Number(BALANCE.lineMinAdvance) || 0;
+  assert(game.lineY > t0, `전열을 막아도 라인 최소 진격으로 내려감 (lineY=${game.lineY.toFixed(2)})`);
+  assert(Math.abs(game.lineY - (t0 + floor * 0.5)) < 1.2, `0.5초 최소 진격: lineY=${game.lineY.toFixed(2)} 기대 ${(t0 + floor * 0.5).toFixed(2)}`);
 }
 
 {
@@ -801,7 +820,7 @@ function rearInCol(game, key, col, row) {
     if (m.dead || m.isBoss) continue;
     assert((Number(m.row) || 0) === 0, `보스 뒤 스택 없음 (row=${m.row} col=${m.col})`);
     if ((Number(m.col) || 0) < 0) {
-      assert(m.joining && m.y <= 64 + 1, `남는 부하는 캠프 대기 (y=${m.y})`);
+      assert(m.joining && m.y <= CAMP_DEST_Y + 8, `남는 부하는 캠프 대기 (y=${m.y})`);
       continue;
     }
     landed += 1;
@@ -823,9 +842,236 @@ function rearInCol(game, key, col, row) {
 }
 
 {
+  const game = makeGame();
+  game.lineY = 400;
+  const ax = CANVAS_W / 2;
+  const ay = 698;
+  const range = 900;
+  const joining = game._spawnEnemy('goblin');
+  joining.joining = true;
+  joining.row = 0;
+  joining.col = 1;
+  joining.x = game._slotX(1);
+  joining.y = 520;
+  const pick = game._pickArcherTarget(ax, ay, range);
+  assert(pick === joining, '합류 중인 적도 사거리면 궁수 후보');
+  assert(!game._enemyArrived(joining), '합류 고블린은 아직 착지 전');
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const ax = CANVAS_W / 2;
+  const ay = 698;
+  const range = 900;
+  const lineGob = occupyCol(game, 'goblin', 0);
+  const joinTroll = game._spawnEnemy('troll');
+  joinTroll.joining = true;
+  joinTroll.row = 0;
+  joinTroll.col = 2;
+  joinTroll.x = game._slotX(2);
+  joinTroll.y = 560;
+  const pick = game._pickArcherTarget(ax, ay, range);
+  assert(pick === lineGob, '웨이브라인 적이 더 가깝고 강한 합류 트롤보다 우선');
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const ax = CANVAS_W / 2;
+  const ay = 698;
+  const range = 900;
+  occupyCol(game, 'goblin', 0);
+  const boss = game._spawnEnemy('boss');
+  boss.joining = true;
+  boss.y = 480;
+  boss.x = ax;
+  const pick = game._pickArcherTarget(ax, ay, range);
+  assert(pick !== boss, '웨이브라인 고블린이 합류 보스보다 우선');
+  assert(game._enemyOccupiesLine(pick), '최우선은 라인 착지 적');
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const ax = CANVAS_W / 2;
+  const ay = 698;
+  const range = 900;
+  const troll = game._spawnEnemy('troll');
+  const boss = game._spawnEnemy('boss');
+  troll.joining = true;
+  troll.row = 0;
+  troll.col = 0;
+  troll.x = game._slotX(0);
+  troll.y = 500;
+  boss.joining = true;
+  boss.x = game._slotX(2);
+  boss.y = 500;
+  assert(!game._enemyOccupiesLine(troll) && !game._enemyOccupiesLine(boss), '둘 다 합류 중');
+  const pick = game._pickArcherTarget(ax, ay, range);
+  assert(pick === boss, '라인에 적이 없으면 보스가 트롤보다 우선');
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const ax = CANVAS_W / 2;
+  const ay = 698;
+  const range = 900;
+  const gob = game._spawnEnemy('goblin');
+  gob.joining = true;
+  gob.x = game._slotX(0);
+  gob.y = 520;
+  const troll = game._spawnEnemy('troll');
+  troll.joining = true;
+  troll.x = game._slotX(2);
+  troll.y = 520;
+  const pick = game._pickArcherTarget(ax, ay, range);
+  assert(pick === troll, '라인·보스가 없으면 강한 적(트롤) 우선');
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const ax = CANVAS_W / 2;
+  const ay = 698;
+  occupyCol(game, 'goblin', 1);
+  const pick = game._pickArcherTarget(ax, ay, 20);
+  assert(pick == null, '사거리 밖은 쏘지 않음');
+}
+
+{
+  const game = makeGame();
+  game.lineY = 500;
+  game.wall = { hp: 3, maxHp: 3, broken: false };
+  const baseFx = game._effects.bind(game);
+  game._effects = () => ({ ...baseFx(), archerCount: 1, archerRange: 900, archerAtk: 5 });
+  game.archers = [{
+    x: CANVAS_W / 2, y: 698, ammo: 3, maxAmmo: 3, attackCd: 0, flashT: 0,
+  }];
+  const joining = game._spawnEnemy('orc');
+  joining.joining = true;
+  joining.row = 0;
+  joining.col = 1;
+  joining.x = game._slotX(1);
+  joining.y = 560;
+  const hp0 = joining.hp;
+  game._updateArchers(0);
+  assert(joining.hp < hp0, `합류 오크도 궁수 피해 (hp ${hp0}→${joining.hp})`);
+  assert(game.archerShots.length === 1, '합류 적 사격 이펙트');
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  occupyCol(game, 'goblin', 0);
+  for (let i = 0; i < 8; i++) allyAtCol(game, 1, 0);
+  const t0 = game.lineY;
+  const dt = 1 / 60;
+  for (let i = 0; i < 60; i++) {
+    game._computeEngagement();
+    game._updateLine(dt);
+  }
+  const one = BALANCE.baseLineSpeed + MONSTERS.goblin.speed * game.liveMult - UNITS[0].stop;
+  const expect = Math.max(one, Number(BALANCE.lineMinAdvance) || 0);
+  assert(Math.abs(game.lineY - (t0 + expect)) < 1.2, `전열 1기만 저지: lineY=${game.lineY.toFixed(2)} 기대 ${(t0 + expect).toFixed(2)}`);
+  const stacked = BALANCE.baseLineSpeed + MONSTERS.goblin.speed * game.liveMult - UNITS[0].stop * 8;
+  assert(stacked < 0, `옛 8기 합산은 후퇴했어야 함 (classic=${stacked.toFixed(1)})`);
+}
+
+{
+  const prev = BALANCE.lineMinAdvance;
+  try {
+    BALANCE.lineMinAdvance = 0;
+    const game = makeGame();
+    game.lineY = 400;
+    occupyCol(game, 'goblin', 0);
+    occupyCol(game, 'goblin', 1);
+    occupyCol(game, 'goblin', 2);
+    allyAtCol(game, 10, 1);
+    const t0 = game.lineY;
+    const dt = 1 / 60;
+    for (let i = 0; i < 30; i++) {
+      game._computeEngagement();
+      game._updateLine(dt);
+    }
+    assert(game.lineY < t0, `라인 최소 진격 0이면 저지력이 라인을 올림 (lineY=${game.lineY.toFixed(2)})`);
+  } finally {
+    BALANCE.lineMinAdvance = prev;
+  }
+}
+
+{
+  const game = makeGame();
+  game.wave = 1;
+  game.kills = 0;
+  const cap = game._trashFieldCap();
+  assert(cap === (game.slotCols || 3) * (BALANCE.trashFieldPerCol || 3), `필드 상한 ${cap}`);
+  for (let i = 0; i < 40; i++) {
+    game.spawnTimer = 0;
+    game._updateSpawning(0);
+  }
+  assert(game._livingTrashEnemies() <= cap, `상한 이상 스폰 안 함 (${game._livingTrashEnemies()}/${cap})`);
+  assert(game._livingTrashEnemies() === cap, `상한까지 채움 (${game._livingTrashEnemies()})`);
+  assert(!game.bossPending, '처치 전엔 보스 없음');
+  const before = game._livingTrashEnemies();
+  const victim = game.enemies.find((m) => !m.dead && !m.isBoss);
+  game.kills += 1;
+  game._removeEnemy(victim);
+  assert(game._livingTrashEnemies() === before - 1, '한 칸 빔');
+  game.spawnTimer = 0;
+  game._updateSpawning(0);
+  assert(game._livingTrashEnemies() === before, `빈자리 리필 (${game._livingTrashEnemies()})`);
+  assert(game.kills === 1, '리필은 처치 할당을 기다림');
+}
+
+{
+  const game = makeGame();
+  game.wave = 1;
+  const need = killsNeeded(1);
+  game.kills = need;
+  game.spawnTimer = 0;
+  const n0 = game.enemies.length;
+  game._updateSpawning(0);
+  assert(game.bossPending, '처치 할당이면 보스 대기');
+  assert(game.enemies.length === n0, '보스 경고 중 추가 스폰 없음');
+}
+
+{
   assert(BALANCE.launchCooldown >= 1.7, `발사 쿨 ${BALANCE.launchCooldown}`);
   assert(BALANCE.mergeComboCdRefund <= 0.3, `콤보 쿨감 ${BALANCE.mergeComboCdRefund}`);
   assert((BALANCE.airMergeMaxTier ?? 5) <= 5, '공중 합성은 T5까지');
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  const m = occupyCol(game, 'goblin', 0);
+  game.lineFreezeT = 1;
+  game._knockbackEnemy(m, 20);
+  assert(game.lineY === 400, `정지 중 스킬 넉백은 라인 고정 (lineY=${game.lineY})`);
+  game.lineFreezeT = 0;
+  game._knockbackEnemy(m, 20);
+  assert(game.lineY === 380, `정지 후 넉백 20px (lineY=${game.lineY})`);
+}
+
+{
+  const game = makeGame();
+  game.lineY = 400;
+  occupyCol(game, 'goblin', 0);
+  const shock = { dmg: 0, radius: 40, knockback: 24, knockbackChance: 1, minResultTier: 6, healPct: 0 };
+  game._fx = { mergeShock: shock };
+  game._applyMergeShock(game._slotX(0), 400, { tier: 5, dead: false });
+  assert(game.lineY === 400, `T5 합성은 머지 충격 없음 (lineY=${game.lineY})`);
+  shock.knockbackChance = 0;
+  game._applyMergeShock(game._slotX(0), 400, { tier: 6, dead: false, hp: 1, maxHp: 1 });
+  assert(game.lineY === 400, `T6 합성이어도 0%면 라인 고정 (lineY=${game.lineY})`);
+  shock.knockbackChance = 1;
+  game._applyMergeShock(game._slotX(0), 400, { tier: 6, dead: false, hp: 1, maxHp: 1 });
+  assert(game.lineY === 376, `T6 합성 100%면 24px (lineY=${game.lineY})`);
+  game.lineY = 400;
+  game._applyMergeShock(game._slotX(0), 400, { tier: 10, dead: false, hp: 1, maxHp: 1 });
+  assert(game.lineY === 376, `영웅 합성도 T6+ 충격 (lineY=${game.lineY})`);
 }
 
 if (failed) {

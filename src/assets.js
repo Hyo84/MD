@@ -1085,28 +1085,12 @@ function bakeMonster(key) {
   return canvas;
 }
 
-function bakeEvoBar(unitCanvases) {
+function bakeEvoBar() {
   const w = CANVAS_W * BG_SCALE;
   const h = 36 * BG_SCALE;
   const { canvas, ctx } = makeCanvas(w, h);
   ctx.scale(BG_SCALE, BG_SCALE);
   paintWoodPanel(ctx, CANVAS_W, 36, true);
-  const slot = 40;
-  const startX = (CANVAS_W - slot * 10) / 2;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  for (let t = 1; t <= 10; t++) {
-    const img = unitCanvases.get(`unit_${t}`);
-    const x = startX + (t - 1) * slot;
-    if (img) ctx.drawImage(img, x + 6, 2, 28, 28);
-    ctx.font = "bold 9px 'Malgun Gothic', sans-serif";
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = INK;
-    ctx.fillStyle = '#fff8e8';
-    ctx.strokeText(String(t), x + 20, 28);
-    ctx.fillText(String(t), x + 20, 28);
-  }
   return canvas;
 }
 
@@ -1180,7 +1164,7 @@ class AssetManager {
         if (phase === 'load') this._report(8 + ((i + 1) / n) * 62, '이미지 불러오는 중');
         else this._report(70 + ((i + 1) / n) * 18, '스프라이트 다듬는 중');
       });
-      raw.set('evo_bar', bakeEvoBar(raw));
+      raw.set('evo_bar', bakeEvoBar());
       this._report(90, '마무리 중');
       await yieldFrame();
 

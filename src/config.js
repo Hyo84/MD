@@ -22,6 +22,8 @@ export const BALANCE = {
   baseLineSpeed: 9.5,   // 웨이브라인 기본 전진 속도 (px/초). 무투자 3칸이 빈 열을 못 막으면 샘
   // 착지한 보스(_enemyOccupiesLine)가 있을 때 netSpeed 하한. joining 캠프 행군에는 적용 안 함.
   bossMinAdvance: 9,
+  // 전열에 적이 붙어 있으면 netSpeed 하한 (px/초). 0이면 없음. 어드민에서 즉시 반영.
+  lineMinAdvance: 3,
   spawnInterval: 4.1,   // 1웨이브 적 스폰 간격 (초). 웨이브 1.5 / 리스폰 0.5 템포에 맞춤
   spawnIntervalAccel: 0.22, // interval = base / (1 + (wave-1)*accel)
   spawnIntervalFloor: 0.96,  // 웨이브 곡선 최단 스폰 간격 (초). 캠프 러시는 spawnCampRushFloor
@@ -59,6 +61,8 @@ export const BALANCE = {
   hurdleFactor: 2.15,   // 5의 배수 웨이브에서 곱셈 스파이크 (이후 바닥으로 유지)
   bossHurdleExtra: 1.28, // 허들 보스만 HP/ATK 추가 배율. 쓰레기 곡선과 분리
   hurdleKillBonus: 8,   // 허들 웨이브 처치 할당 추가
+  // 처치 N 전까지 잡몹은 계속 리필. 필드 상한 = 칸 수 × trashFieldPerCol (주차 포함).
+  trashFieldPerCol: 3,
 
   // 뒷열 스택: ATK/HP는 그대로, 그 열 전열 진격만 1 + perRear*뒷열 수 (상한 cap). 보스는 제외.
   stackAdvancePerRear: 0.5,
@@ -326,7 +330,8 @@ export const PROGRESSION = {
   wallDmgPerHit: 1,
   wallBaseKnockback: 70,  // px
 
-  // 궁수: 벽 위에 서서 사거리 안의 웨이브라인 적을 사격. 웨이브 솔로 불가.
+  // 궁수: 벽 위에 서서 사거리 안의 적을 사격(합류 포함).
+  // 우선순위: 웨이브라인 착지 > 보스 > 강한 적 > 그 외. 웨이브 솔로 불가.
   // 탄약은 웨이브당 지급, 보스 처치(웨이브 증가) 및 런 시작 시 재충전. 소진 시 다음 웨이브까지 정지.
   // 인원 상한은 전장 칸(3/5/7). archerMax는 절대 상한.
   archerMax: 7,
@@ -539,6 +544,8 @@ export const SKILLS = [
     dmgPerRank: 18,
     radiusBase: 30,
     radiusPerRank: 6,
+    minResultTier: 6, // T6+ 합성 결과에만 충격. T5 이하는 피해·라인 넉백 없음.
+    knockbackChance: 0.05, // 합성마다 라인 넉백. 피해·힐은 항상(T6+).
     knockbackPerRank: 6,
     healPctPerRank: 0.04,
   },

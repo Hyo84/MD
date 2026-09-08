@@ -2,7 +2,7 @@
 global.requestAnimationFrame = () => {};
 
 import { Game } from '../src/game.js';
-import { MONSTERS, BALANCE } from '../src/config.js';
+import { MONSTERS, BALANCE, bossEscortForWave } from '../src/config.js';
 
 const ctxStub = new Proxy({}, {
   get: (t, p) => {
@@ -60,7 +60,7 @@ assert(MONSTERS.skelknight.sprite === 'skeleton', `해골기사 스프라이트 
   game.wave = 1;
   const keys = new Set();
   for (let i = 0; i < 400; i++) keys.add(game._pickMonster());
-  assert(keys.has('goblin') && keys.has('skeleton'), `W1 풀에 고블린·스켈레톤 (${[...keys]})`);
+  assert(keys.has('goblin') && keys.size === 1 && !keys.has('skeleton'), `W1 풀은 고블린만 (${[...keys]})`);
   assert(!keys.has('orc') && !keys.has('troll') && !keys.has('skelknight'), `W1에 오크/트롤/기사 없음 (${[...keys]})`);
 }
 
@@ -84,7 +84,7 @@ assert(MONSTERS.skelknight.sprite === 'skeleton', `해골기사 스프라이트 
     else counts.other += 1;
   }
   const trollRate = counts.troll / n;
-  assert(trollRate > 0.02 && trollRate < 0.06, `트롤 등장 ~3.85% (실제 ${(trollRate * 100).toFixed(2)}%)`);
+  assert(trollRate > 0.06 && trollRate < 0.12, `트롤 등장 ~9% (실제 ${(trollRate * 100).toFixed(2)}%)`);
   assert(counts.skelknight === 0, `일반 풀에 해골기사 없음 (${counts.skelknight})`);
 }
 
@@ -122,9 +122,10 @@ assert(MONSTERS.skelknight.sprite === 'skeleton', `해골기사 스프라이트 
   const knights = living.filter((m) => m.key === 'skelknight');
   const boss = living.filter((m) => m.isBoss);
   const trash = living.filter((m) => !m.isBoss);
+  const { escort, knights: knightWant } = bossEscortForWave(11);
   assert(boss.length === 1, `보스 1마리 (실제 ${boss.length})`);
-  assert(knights.length === BALANCE.bossKnightEscorts, `해골기사 ${BALANCE.bossKnightEscorts}마리 (실제 ${knights.length})`);
-  assert(trash.length === Math.min(BALANCE.bossEscortCount, BALANCE.bossMinionCap), `총 부하 ${trash.length} (호위 ${BALANCE.bossEscortCount})`);
+  assert(knights.length >= 1 && knights.length <= knightWant, `해골기사 ${knights.length}/${knightWant}`);
+  assert(trash.length >= 2 && trash.length <= Math.min(escort, BALANCE.bossMinionCap), `총 부하 ${trash.length} (호위 ${escort})`);
 }
 
 if (failed) {

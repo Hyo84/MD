@@ -127,10 +127,10 @@ function assert(cond, msg) {
   assert(!game._enemyOccupiesLine(stacked), 'row 2 착지 적은 전열 접촉이 아님');
   const t0 = game.lineY;
   sim(game, 1);
-  const expectFront = t0 + goblinPush(game) * 1;
+  const expectFront = t0 + BALANCE.baseLineSpeed + MONSTERS.goblin.speed * game.liveMult * game._stackAdvanceMult(front);
   assert(
     Math.abs(game.lineY - expectFront) < 0.8,
-    `row 2에 떠 있는 적은 푸시하면 안 됨 (lineY=${game.lineY.toFixed(2)} 기대 ${expectFront.toFixed(2)})`,
+    `row 2 뒷열은 전열 접촉 없이 진격만 가산 (lineY=${game.lineY.toFixed(2)} 기대 ${expectFront.toFixed(2)})`,
   );
 
   game._damageEnemy(front, front.hp + 1);

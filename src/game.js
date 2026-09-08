@@ -89,6 +89,7 @@ export class Game {
     this.autoFire = false;
     try { this.autoFire = localStorage.getItem(AUTO_FIRE_STORAGE_KEY) === '1'; } catch { /* ignore */ }
     this.holdingFire = false;
+    this._capturedPointerId = null;
     this.onLiveMultChange = null;
     this.onSpawnRateChange = null;
     this.onRegenChange = null;
@@ -667,6 +668,7 @@ export class Game {
   }
 
   start() {
+    audio.unlock();
     const needIntro = this._needTutorialIntro();
     const lockAuto = this._needAutoLock();
     const panel = typeof document !== 'undefined' ? document.getElementById('skillPanel') : null;
@@ -698,7 +700,7 @@ export class Game {
     if (this._runSettled) return this.runSettlement;
     this._runSettled = true;
     const gold = Math.max(0, Math.floor(this.gold || 0));
-    const rate = Number.isFinite(BALANCE.goldXpRate) ? Math.max(0, BALANCE.goldXpRate) : 1;
+    const rate = Number.isFinite(BALANCE.goldXpRate) ? Math.max(0, BALANCE.goldXpRate) : 0.2;
     const goldXp = Math.floor(gold * rate);
     const scoreXp = Math.max(0, Math.floor(this.score || 0));
     const bossXp = Math.max(0, Math.floor(this.runXpBoss || 0));
@@ -725,7 +727,10 @@ export class Game {
 
   _showResultOverlay(victory) {
     const s = this._settleRun(victory);
-    const title = this.ui.resultTitle || this.ui.gameoverOverlay?.querySelector('h1');
+    const title = this.ui.resultTitle
+      || (typeof this.ui.gameoverOverlay?.querySelector === 'function'
+        ? this.ui.gameoverOverlay.querySelector('h1')
+        : null);
     if (title) title.textContent = victory ? '완전 클리어!' : '패배';
     if (this.ui.finalScore) {
       this.ui.finalScore.textContent =
@@ -784,6 +789,13 @@ export class Game {
   }
 
   // ---------- 입력: 가로 위치 선택 + 수직 발사 ----------
+  _releasePointer(id) {
+    const pid = id ?? this._capturedPointerId;
+    this._capturedPointerId = null;
+    if (pid == null) return;
+    try { this.canvas.releasePointerCapture?.(pid); } catch { /* already released */ }
+  }
+
   _setupInput() {
     const toCanvas = (e) => {
       const rect = this.canvas.getBoundingClientRect();
@@ -825,7 +837,8 @@ export class Game {
       this.dragging = true;
       this.holdingFire = true;
       this.aimX = this._clampAimX(p.x);
-      this.canvas.setPointerCapture(e.pointerId);
+      try { this.canvas.setPointerCapture(e.pointerId); } catch { /* tests / already captured */ }
+      this._capturedPointerId = e.pointerId;
       this._tickAutoFire();
     }, { passive: false });
     this.canvas.addEventListener('pointermove', (e) => {
@@ -842,12 +855,14 @@ export class Game {
       this.aimX = this._clampAimX(p.x);
     });
     this.canvas.addEventListener('pointerup', (e) => {
+      this._releasePointer(e.pointerId);
       if (!this.dragging) return;
       this.dragging = false;
       this.holdingFire = false;
       this.aimX = this._clampAimX(toCanvas(e).x);
     });
-    this.canvas.addEventListener('pointercancel', () => {
+    this.canvas.addEventListener('pointercancel', (e) => {
+      this._releasePointer(e.pointerId);
       this.dragging = false;
       this.holdingFire = false;
     });
@@ -1060,6 +1075,20 @@ export class Game {
     return (left + right) / 2;
   }
 
+  _campParkX(exclude = null) {
+    const cols = this.slotCols || BASE_SLOT_COLS;
+    const parked = this.enemies.filter((m) =>
+      m !== exclude && !m.dead && !m.isBoss && (Number(m.col) || 0) < 0);
+    const free = [];
+    const center = this._playfieldCenterX();
+    for (let c = 0; c < cols; c++) {
+      if (this._hasLivingBoss() && Math.abs(this._slotX(c) - center) < 1) continue;
+      free.push(c);
+    }
+    const pick = free.length > 0 ? free : [...Array(cols).keys()];
+    return this._slotX(pick[parked.length % pick.length]);
+  }
+
   /** 하단 티어표: 구매 후 발사대(currentTier)에 장전. 클릭은 항상 소비(발사 없음). */
   _tryShopBar(p) {
     const bar = this._evoBarRect || evoBarMetrics();
@@ -1215,11 +1244,7 @@ export class Game {
             break;
           }
         }
-        if (col < 0) {
-          row = 0;
-          col = 0;
-          x = this._slotX(0) + (Math.random() * 14 - 7);
-        }
+        if (col < 0) return null;
       }
       this.occupiedSlots.add(`${row}:${col}`);
     }
@@ -1269,7 +1294,7 @@ export class Game {
         other.col = -1;
         other.joining = true;
         other.y = ENEMY_SPAWN_Y;
-        other.x = this._slotX(0);
+        other.x = this._campParkX(other);
       } else {
         other.row = Math.max((Number(other.row) || 0) + 1, 1);
         if (!other.joining) other.y = this._enemySlotY(other);
@@ -1302,7 +1327,7 @@ export class Game {
       m.col = -1;
       m.joining = true;
       m.y = ENEMY_SPAWN_Y;
-      m.x = this._slotX(0);
+      m.x = this._campParkX(m);
       return;
     }
     this.occupiedSlots.add(`${m.row}:${m.col}`);
@@ -1382,7 +1407,7 @@ export class Game {
         m.col = -1;
         m.joining = true;
         m.y = ENEMY_SPAWN_Y;
-        m.x = this._slotX(0);
+        m.x = this._campParkX(m);
       };
       const tryCol = (m, col) => {
         if (used.has(col) || col < 0 || col >= cols) return false;
@@ -1631,7 +1656,7 @@ export class Game {
     }
     if ((p.deathLineFreezeChance || 0) > 0 && this._unitNearFront(u)
       && Math.random() < p.deathLineFreezeChance) {
-      this.lineFreezeT = Math.max(this.lineFreezeT || 0, p.deathLineFreezeDur || 3);
+      this.lineFreezeT = Math.max(this.lineFreezeT || 0, p.deathLineFreezeDur || 1);
       this.effects.floatText(CANVAS_W / 2, this.lineY, '결사항전!', '#c9b48a', 16, 0.8);
     }
     if (p.miracleOnDeath && this._miracleWave !== this.wave) {
@@ -1708,8 +1733,14 @@ export class Game {
     Body.setPosition(best.body, kp);
   }
 
+  _lineFrozen() {
+    return (this.lineFreezeT || 0) > 0;
+  }
+
   _knockbackEnemy(m, px) {
     if (!m || m.dead || !(px > 0)) return;
+    // 결사항전·드래곤피어 정지 중엔 스킬 넉백/밀림으로 라인을 안 움직임.
+    if (this._lineFrozen()) return;
     if (this._enemyOccupiesLine(m)) {
       this.lineY = Math.max(LINE_START_Y, this.lineY - px);
       this._syncEnemyY(0);
@@ -1841,6 +1872,9 @@ export class Game {
   _applyMergeShock(x, y, unit) {
     const shock = this._effects().mergeShock;
     if (!shock) return;
+    // 공중 합성은 T5가 상한이라 여기 안 옴. 콤보 쿨감·팽창 블라스트와 무관.
+    const minTier = Math.max(1, Math.round(shock.minResultTier ?? 6));
+    if (!unit || unit.dead || (unit.tier || 0) < minTier) return;
     this.effects.burst(x, y, '#ffcc66', 14, 3.6, 3);
     for (const m of [...this.enemies]) {
       if (m.dead) continue;
@@ -1848,9 +1882,12 @@ export class Game {
         this._damageEnemy(m, shock.dmg);
       }
     }
-    if (shock.knockback > 0) {
-      this.lineY = Math.max(LINE_START_Y, this.lineY - shock.knockback);
-      this._syncEnemyY(0);
+    if (shock.knockback > 0 && !this._lineFrozen()) {
+      const ch = Number(shock.knockbackChance);
+      if (!Number.isFinite(ch) || ch >= 1 || Math.random() < ch) {
+        this.lineY = Math.max(LINE_START_Y, this.lineY - shock.knockback);
+        this._syncEnemyY(0);
+      }
     }
     if (unit && !unit.dead && shock.healPct > 0) {
       unit.hp = Math.min(unit.maxHp, unit.hp + unit.maxHp * shock.healPct);
@@ -1966,10 +2003,16 @@ export class Game {
     return n;
   }
 
-  _waveQuotaFull() {
-    const need = killsNeeded(this.wave);
-    if ((this.waveTrashSpawned || 0) >= need) return true;
-    return this.kills + this._livingTrashEnemies() >= need;
+  _trashFieldCap() {
+    const cols = Math.max(1, this.slotCols || BASE_SLOT_COLS);
+    const per = Number(BALANCE.trashFieldPerCol);
+    const n = Number.isFinite(per) ? per : 3;
+    if (n <= 0) return Number.POSITIVE_INFINITY;
+    return Math.max(1, Math.round(n) * cols);
+  }
+
+  _trashFieldFull() {
+    return this._livingTrashEnemies() >= this._trashFieldCap();
   }
 
   _updateSpawning(dt) {
@@ -1992,13 +2035,13 @@ export class Game {
       return;
     }
 
-    if (this._waveQuotaFull()) return;
+    if (this._trashFieldFull()) return;
 
     this.spawnTimer -= dt * this._spawnTimerSpeed();
     if (this.spawnTimer > 0) return;
     const jitter = 0.82 + Math.random() * 0.36;
     this.spawnTimer = this._waveSpawnInterval() * jitter;
-    if (this._waveQuotaFull()) return;
+    if (this._trashFieldFull()) return;
     this._spawnEnemy(this._pickMonster());
   }
 
@@ -2162,33 +2205,6 @@ export class Game {
     return false;
   }
 
-  // 슬롯 착지 지점 기준으로, 그 열을 막을 전열 아군이 있는지.
-  _allyWouldHoldAt(u, x, y, enemyR) {
-    if (!u || u.dead || !u.settled) return false;
-    const range = this._unitStat(u).range;
-    const { x: ux, y: uy } = u.body.position;
-    return this._meleeGap(ux, uy, u.r, x, y, enemyR) <= range;
-  }
-
-  // 착지 전/빈 전열인데 아군이 안 막는 적이 있으면 빈 라인 후퇴를 하지 않음.
-  _incomingLaneUncovered() {
-    for (const m of this.enemies) {
-      if (m.dead) continue;
-      const destX = m.isBoss ? this._playfieldCenterX() : m.x;
-      const destY = this._enemySlotY(m);
-      const er = MONSTERS[m.key].r;
-      let held = false;
-      for (const u of this.units) {
-        if (this._allyWouldHoldAt(u, destX, destY, er)) {
-          held = true;
-          break;
-        }
-      }
-      if (!held) return true;
-    }
-    return false;
-  }
-
   // 프레임당 1회 교전 여부 계산 (라인 속도 계산과 전진 로직이 공유)
   _computeEngagement() {
     const joined = this.joinedEnemies();
@@ -2202,6 +2218,36 @@ export class Game {
     if (u.dead || !u.settled) return false;
     const holdY = this.lineY + 20 + u.r;
     return u.body.position.y <= holdY + BALANCE.emptyLinePushSlack;
+  }
+
+  _unitFrontageCol(u) {
+    const cols = Math.max(1, this.slotCols || BASE_SLOT_COLS);
+    const x = u?.body?.position?.x;
+    if (!Number.isFinite(x)) return 0;
+    let best = 0;
+    let bestD = Infinity;
+    for (let c = 0; c < cols; c++) {
+      const d = Math.abs(x - this._slotX(c));
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  // 열당 라인에 가장 가까운 전열 1기만 저지력에 넣음. 뒷줄 스팸은 HP·딜만.
+  _frontStopUnits() {
+    const cols = Math.max(1, this.slotCols || BASE_SLOT_COLS);
+    const best = new Array(cols).fill(null);
+    for (const u of this.units) {
+      if (!this._unitCanPushEmptyLine(u)) continue;
+      const col = this._unitFrontageCol(u);
+      const prev = best[col];
+      const y = u.body.position.y;
+      if (!prev || y < prev.body.position.y) best[col] = u;
+    }
+    return best.filter(Boolean);
   }
 
   // 같은 열 뒷열(착지, 합류 아님). 보스는 열 스택에서 빼 진격 가산을 받지 않음.
@@ -2242,17 +2288,12 @@ export class Game {
       return;
     }
     const joined = this.joinedEnemies();
-    // 착지한 적이 없으면 전진하지 않음. 막힌 열만 있으면 전열 저지력으로 밀어올림.
-    // 아군이 안 막는 열로 합류 중이면 후퇴하지 않고 착지를 기다림.
+    // 라인에 착지한 적이 없으면 내려가지 않음. 전열 아군 저지력으로 시작 위치까지 밀어올림.
+    // 캠프 합류·주차 적은 아직 전열이 아니므로 빈 라인 후퇴를 막지 않음.
     if (joined.length === 0) {
-      if (this._incomingLaneUncovered()) {
-        this.netSpeed = 0;
-        this._syncEnemyY(dt);
-        return;
-      }
       let stopping = 0;
-      for (const u of this.units) {
-        if (this._unitCanPushEmptyLine(u)) stopping += this._unitStop(u);
+      for (const u of this._frontStopUnits()) {
+        stopping += this._unitStop(u);
       }
       stopping *= BALANCE.emptyLinePushScale;
       this.netSpeed = -stopping;
@@ -2277,14 +2318,21 @@ export class Game {
         advance += this._occupierPushSpeed(m);
       }
       let stopping = 0;
-      for (const u of this.units) {
+      for (const u of this._frontStopUnits()) {
         if (u.engaged) stopping += this._unitStop(u);
       }
       this.netSpeed = advance - stopping;
     }
-    // 착지한 보스만. joining 중이면 occupied가 아니라 여기 안 옴(빈 라인 분기로 감).
-    if (joined.some((m) => m.isBoss) && !this._villageAura?.bossMinAdvanceZero) {
-      this.netSpeed = Math.max(this.netSpeed, BALANCE.bossMinAdvance);
+    // 착지한 적이 있으면 약한 하한. 보스는 더 높은 플로어.
+    // joining 중이면 occupied가 아니라 여기 안 옴(빈 라인 분기로 감).
+    if (joined.length > 0) {
+      const lineFloor = Number(BALANCE.lineMinAdvance);
+      if (Number.isFinite(lineFloor) && lineFloor > 0) {
+        this.netSpeed = Math.max(this.netSpeed, lineFloor);
+      }
+      if (joined.some((m) => m.isBoss) && !this._villageAura?.bossMinAdvanceZero) {
+        this.netSpeed = Math.max(this.netSpeed, BALANCE.bossMinAdvance);
+      }
     }
     this.lineY += this.netSpeed * dt;
     if (this.lineY < LINE_START_Y) this.lineY = LINE_START_Y;
@@ -2694,6 +2742,43 @@ export class Game {
     }
   }
 
+  // 궁수 우선: 웨이브라인 착지 > 보스 > 강한 적(등급·체력) > 가까운 적.
+  // 합류·주차 포함, 사거리 안이면 모두 후보.
+  _archerThreat(m) {
+    if (!m) return 0;
+    const stat = MONSTERS[m.key];
+    const grade = m.isBoss ? 100 : (Number(stat?.grade) || 0);
+    return grade * 1e6 + (Number(m.maxHp) || 0) + (stat?.atk || 0) * 0.01;
+  }
+
+  _pickArcherTarget(ax, ay, range) {
+    const r = Number(range) || 0;
+    let target = null;
+    let bestOnLine = 2;
+    let bestBoss = 2;
+    let bestThreat = -Infinity;
+    let bestDist = Infinity;
+    for (const m of this.enemies) {
+      if (!m || m.dead) continue;
+      const dist = Math.hypot(m.x - ax, m.y - ay);
+      if (dist > r) continue;
+      const onLine = this._enemyOccupiesLine(m) ? 0 : 1;
+      const boss = m.isBoss ? 0 : 1;
+      const threat = this._archerThreat(m);
+      const better = onLine < bestOnLine
+        || (onLine === bestOnLine && boss < bestBoss)
+        || (onLine === bestOnLine && boss === bestBoss && threat > bestThreat)
+        || (onLine === bestOnLine && boss === bestBoss && threat === bestThreat && dist < bestDist);
+      if (!better) continue;
+      target = m;
+      bestOnLine = onLine;
+      bestBoss = boss;
+      bestThreat = threat;
+      bestDist = dist;
+    }
+    return target;
+  }
+
   _updateArchers(dt) {
     for (const shot of this.archerShots) shot.life -= dt;
     this.archerShots = this.archerShots.filter((s) => s.life > 0);
@@ -2704,16 +2789,7 @@ export class Game {
       a.flashT = Math.max(0, a.flashT - dt);
       a.attackCd -= dt;
       if (a.ammo <= 0 || a.attackCd > 0) continue;
-      let target = null;
-      let best = Infinity;
-      for (const m of this.enemies) {
-        if (m.dead) continue;
-        const d = Math.hypot(m.x - a.x, m.y - a.y);
-        if (d <= fx.archerRange && d < best) {
-          best = d;
-          target = m;
-        }
-      }
+      const target = this._pickArcherTarget(a.x, a.y, fx.archerRange);
       if (!target) continue;
       a.attackCd = PROGRESSION.archerInterval;
       a.ammo -= 1;

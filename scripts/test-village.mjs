@@ -49,7 +49,7 @@ function assert(cond, msg) {
 {
   const units = Array.from({ length: 8 }, () => ({ tier: 1, dead: false }));
   const auras = collectGlobalAuras(units, () => 9);
-  assert(auras.militiaAdvance === 0.30, `민병대 진격 오라 1회 +30% (실제 ${auras.militiaAdvance})`);
+  assert(auras.militiaAdvance === 0.30, `민병대 진격 오라 중첩 안 됨 +30% (실제 ${auras.militiaAdvance})`);
 }
 
 {
@@ -81,6 +81,18 @@ function assert(cond, msg) {
   assert(auras.militiaAdvance === 0.30, '다른 오라는 종류별로 따로 1회');
   assert(auras.armyMove === 0.25, '전군진격 1회');
   assert(auras.heroArmyAtk === 0.25, '영웅 광휘 1회');
+}
+
+{
+  const t4 = villageResolve(4, 10);
+  assert(t4.deathLineFreezeChance === 0.03, `결사항전 확률 3% (실제 ${t4.deathLineFreezeChance})`);
+  assert(t4.deathLineFreezeDur === 1, `결사항전 1초 (실제 ${t4.deathLineFreezeDur})`);
+  const t5i = villageResolve(5, 3);
+  const t5ii = villageResolve(5, 6);
+  const t5iii = villageResolve(5, 9);
+  assert(t5i.knockbackChance === 0.01, `넉백 I 1% (실제 ${t5i.knockbackChance})`);
+  assert(t5ii.knockbackChance === 0.01, `넉백 II 1% (실제 ${t5ii.knockbackChance})`);
+  assert(t5iii.knockbackChance === 0.02, `넉백 III 2% (실제 ${t5iii.knockbackChance})`);
 }
 
 if (failed) {

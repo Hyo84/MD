@@ -83,8 +83,10 @@ function effectLine(skill, rank, meta) {
       const d = (r) => r * skill.dmgPerRank;
       const rad = (r) => r > 0 ? skill.radiusBase + r * skill.radiusPerRank : 0;
       const kb = (r) => r * skill.knockbackPerRank;
-      return `합성 충격 피해 ${d(rank)} / 반경 ${rad(rank)}px / 라인 ${kb(rank)}px` +
-        (rank < skill.maxRank ? ` → ${d(rank + 1)} / ${rad(rank + 1)}px / ${kb(rank + 1)}px` : '');
+      const ch = Math.round((skill.knockbackChance || 0) * 100);
+      const minT = Math.max(1, Math.round(skill.minResultTier ?? 6));
+      return `T${minT}+ 합성 시 충격 피해 ${d(rank)} / 반경 ${rad(rank)}px / 라인 ${ch}% ${kb(rank)}px` +
+        (rank < skill.maxRank ? ` → ${d(rank + 1)} / ${rad(rank + 1)}px / ${ch}% ${kb(rank + 1)}px` : '');
     }
     case 'wall':
       return rank >= 1

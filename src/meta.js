@@ -76,6 +76,7 @@ export class Meta {
   constructor() {
     this.data = load();
     this.listeners = new Set();
+    this._save();
   }
 
   onChange(fn) {
@@ -377,6 +378,8 @@ export class Meta {
         dmg: msh * ms.dmgPerRank,
         radius: ms.radiusBase + msh * ms.radiusPerRank,
         knockback: msh * ms.knockbackPerRank,
+        knockbackChance: Number.isFinite(ms.knockbackChance) ? ms.knockbackChance : 1,
+        minResultTier: Math.max(1, Math.round(ms.minResultTier ?? 6)),
         healPct: msh * ms.healPctPerRank,
       },
       hasWall,
